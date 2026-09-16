@@ -1,0 +1,52 @@
+Cardio AI Clinical Copilot - Project Report
+
+Overview
+This project is a full-stack clinical decision-support environment combining realtime voice transcription, symptom extraction, AI-guided questioning, body-region pain mapping, report-image analysis, and final PDF report generation.
+
+Core Workflow
+1. Doctor starts consultation workflow.
+2. Patient speech or manual transcript is captured.
+3. Input language is selected; transcript is normalized to English for downstream reasoning.
+4. Symptoms are extracted and mapped to risk and body regions.
+5. AI recommendations update in realtime: doctor questions, tests, diagnosis direction, and next steps.
+6. Doctor can upload report images for AI analysis.
+7. Disease-focused notes are accumulated.
+8. System generates and exports a consultation PDF.
+
+How Agents Work Together
+- nlp_symptom_agent: symptom extraction (English + Urdu/Roman Urdu support).
+- feature_mapper_agent: symptom-to-feature mapping.
+- prediction_agent: model inference and probability.
+- explainability_agent: SHAP-based reasoning.
+- doctor_copilot_agent: deterministic fallback question/test guidance.
+- pain_mapper_agent + body map logic: pain localization.
+- heart_region_agent: cardiac-region hypotheses.
+- uncertainty_agent: confidence bucket and score.
+- causal_inference_agent: counterfactual hypotheses.
+- multimodal_fusion_agent: transcript + report + risk fusion.
+- guidelines_agent: protocol-aligned guidance.
+- knowledge_graph_agent: clinical entity linking.
+- evidence_retrieval_agent: concise evidence snippets.
+- fairness_bias_agent: fairness-evaluation snapshot.
+- robustness_agent: input quality checks.
+- human_feedback_agent: feedback capture stub.
+- evaluation_agent: validation/readiness snapshot.
+
+Backend APIs
+- POST /diagnose
+- POST /ai-insights
+- POST /analyze-report-image
+- POST /final-report
+- GET /research-agents
+- WS  /ws/consultation
+
+Frontend
+- /workflow/start
+- /workflow/session
+- Home / Diagnose / History
+
+Current Status
+The app operates as a workflow-first clinical copilot with realtime AI guidance, multilingual input support, body pain visualization, report-image analysis, and end-consultation PDF output.
+
+Safety Note
+This system provides decision support only and does not replace licensed clinical judgment.
