@@ -1,0 +1,11 @@
+# Core API server
+fastapi>=0.116
+uvicorn[standard]>=0.35
+
+# Data / ML
+pandas>=2.2
+scikit-learn>=1.5
+
+# Explainability + NLP
+shap>=0.46
+spacy>=3.8

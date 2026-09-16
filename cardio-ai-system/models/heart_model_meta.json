@@ -1,0 +1,30 @@
+{
+  "name": "PulseIQ heart-disease screening model",
+  "algorithm": "RandomForestClassifier(n_estimators=300, random_state=42)",
+  "trained_at": "2026-09-16 17:58:39",
+  "sklearn_version": "1.9.1",
+  "dataset": "data/heart.csv (public heart dataset, 1025 rows)",
+  "target_encoding": "1 = disease, 0 = healthy (source labels were inverted and flipped)",
+  "features": [
+    "age",
+    "sex",
+    "cp",
+    "trestbps",
+    "chol",
+    "fbs",
+    "restecg",
+    "thalach",
+    "exang",
+    "oldpeak",
+    "slope",
+    "ca",
+    "thal"
+  ],
+  "metrics": {
+    "accuracy": 0.971,
+    "precision": 0.943,
+    "recall": 1.0,
+    "f1": 0.971,
+    "roc_auc": 1.0
+  }
+}
