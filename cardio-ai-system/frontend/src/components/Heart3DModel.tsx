@@ -41,7 +41,7 @@ function HeartMesh() {
   return (
     <mesh rotation={[Math.PI, 0, Math.PI]} position={[0, 0.2, 0]}>
       <extrudeGeometry args={[heartShape, extrudeSettings]} />
-      <meshStandardMaterial color="#c80f3b" roughness={0.35} metalness={0.15} />
+      <meshStandardMaterial color="#B4123A" roughness={0.42} metalness={0.1} />
     </mesh>
   );
 }
@@ -56,7 +56,9 @@ function PainMarkers({ painPoints }: { painPoints: PainPoint[] }) {
             <meshStandardMaterial emissive="#ffd34d" emissiveIntensity={1.7} color="#ff9f00" />
           </mesh>
           <Html distanceFactor={8} position={[0.08, 0.08, 0]}>
-            <div className="rounded bg-black/70 px-2 py-1 text-xs text-white">{point.label}</div>
+            <div className="rounded border border-line bg-elev/95 px-2 py-1 text-2xs text-fg">
+              {point.label}
+            </div>
           </Html>
         </group>
       ))}
@@ -82,7 +84,9 @@ function RegionMarkers({
             <meshStandardMaterial color={entry.likelihood === "high" ? "#ef4444" : entry.likelihood === "moderate" ? "#f59e0b" : "#10b981"} />
           </mesh>
           <Html distanceFactor={8} position={[0.1, 0.1, 0]}>
-            <div className="rounded bg-slate-900/80 px-2 py-1 text-xs text-white">{entry.region}</div>
+            <div className="rounded border border-line bg-elev/95 px-2 py-1 text-2xs text-fg">
+              {entry.region}
+            </div>
           </Html>
         </group>
       ))}
@@ -102,7 +106,7 @@ export function Heart3DModel({
   }[];
 }) {
   return (
-    <div className="h-[380px] w-full rounded-xl border bg-gradient-to-b from-rose-50 via-slate-100 to-slate-200">
+    <div className="h-[380px] w-full overflow-hidden rounded-lg border border-line bg-inset">
       <Canvas camera={{ position: [0, 0.55, 2.1], fov: 42 }}>
         <ambientLight intensity={0.85} />
         <directionalLight position={[1.4, 2.2, 1.3]} intensity={1.2} />
