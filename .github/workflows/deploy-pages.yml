@@ -1,9 +1,14 @@
-name: Deploy project page to GitHub Pages
+name: Publish project page
+
+# The project page lives at the repository root (index.html), which is also what
+# the default branch-based Pages deployment serves. This workflow is the
+# alternative path: if Pages is switched to "GitHub Actions" as its source, it
+# publishes the same page from an assembled artifact. It never fails the build
+# when branch-based publishing is in use — it reports and exits cleanly.
 
 on:
   push:
     branches: [main]
-    paths: ["cardio-ai-system/docs/**"]
   workflow_dispatch:
 
 permissions:
@@ -16,16 +21,45 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  deploy:
+  publish:
+    runs-on: ubuntu-latest
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
-    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      - name: Read the configured Pages source
+        id: source
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          build_type=$(curl -sS -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${{ github.repository }}/pages" \
+            | jq -r '.build_type // "legacy"')
+          echo "build_type=$build_type" >> "$GITHUB_OUTPUT"
+          echo "Pages build type: $build_type"
+
+      - name: Note when the page is published from the branch
+        if: steps.source.outputs.build_type != 'workflow'
+        run: |
+          echo "::notice title=Published from the branch::index.html at the repository root is served by the branch-based Pages deployment. Set Settings → Pages → Source to 'GitHub Actions' to publish from this workflow instead."
+
+      - name: Assemble the site
+        if: steps.source.outputs.build_type == 'workflow'
+        run: |
+          mkdir -p _site/cardio-ai-system
+          cp index.html _site/index.html
+          cp -r cardio-ai-system/docs _site/cardio-ai-system/docs
+          touch _site/.nojekyll
+
       - uses: actions/configure-pages@v5
+        if: steps.source.outputs.build_type == 'workflow'
       - uses: actions/upload-pages-artifact@v3
+        if: steps.source.outputs.build_type == 'workflow'
         with:
-          path: cardio-ai-system/docs
+          path: _site
       - id: deployment
+        if: steps.source.outputs.build_type == 'workflow'
         uses: actions/deploy-pages@v4

@@ -1,70 +1,64 @@
 <div align="center">
 
-# 🫀 PulseIQ
+# PulseIQ
 
-**AI Heart Health Intelligence — free, local, and private.**
+**Cardiac screening and consultation workspace.** Symptom narrative in, explained risk estimate out,
+with live encounter capture, regional pain mapping and structured report export.
 
-Symptom screening with an explainable ML model · live consultation copilot · body pain mapping · clinical PDF reports.
-**Zero API keys. Zero paid services. Zero configuration.**
+Runs locally. No accounts, no API keys, no paid services.
 
-[![Python](https://img.shields.io/badge/python-3.12%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
-[![FastAPI](https://img.shields.io/badge/FastAPI-0.116%2B-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
+[![License](https://img.shields.io/badge/license-MIT-35d1ba)](LICENSE)
+[![Python](https://img.shields.io/badge/python-3.10%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 [![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=black)](https://react.dev/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.6-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
-[![License](https://img.shields.io/badge/license-MIT-2dd4bf)](LICENSE)
 
-[Project page](https://aabyyss.github.io/Agentic-Cardio-Assistant/) · [Demo video](docs/demo/pulseiq-demo.mp4) · [Screenshots](docs/screenshots)
+[Project page](https://aabyyss.github.io/PulseIQ-/) · [Walkthrough](docs/demo/pulseiq-demo.mp4) · [Screenshots](docs/screenshots)
 
-![PulseIQ home](docs/screenshots/01-home.png)
+![PulseIQ overview](docs/screenshots/01-overview.png)
 
 </div>
 
 ---
 
-## Why PulseIQ
+## What it is
 
-Most medical AI demos quietly require a paid LLM key. **PulseIQ was built to need nothing:**
-a built-in clinical language engine does all AI work offline, an optional free local LLM
-([Ollama](https://ollama.com)) upgrades the experience automatically, and your data never
-leaves the machine.
+Most clinical AI demos quietly depend on a hosted model key. PulseIQ is built to need nothing: a
+built-in rule engine performs the language work offline, a local model can be used if one happens to
+be running, and a hosted model is optional rather than a prerequisite.
 
-## ✨ Features
+The workspace covers one pathway end to end — screening, live capture, mapping, review and export —
+and shows its reasoning at every step rather than returning a bare score.
 
-| | Feature | What it does |
+## Capabilities
+
+| Feature | What it does |
+|---|---|
+| **Symptom screening** | Free-text narrative is normalised to clinical concepts, resolved to 13 model inputs, and scored with an explanation of what moved the result |
+| **Live copilot** | Realtime speech-to-text with speaker attribution, suggested questions, recommended investigations and escalation notes |
+| **Body pain mapping** | Reported pain locations plot onto a front and back diagram as the encounter runs |
+| **Consultation reports** | Structured visit capture with one-click PDF export of summary, advice, plan and red flags |
+| **Multilingual capture** | Urdu, Hindi, Arabic, French, Spanish, German and Chinese input, normalised to English |
+| **Report reading** | Lab report and scan images are parsed for key findings (requires a vision model) |
+| **Screening history** | The last 20 screenings, held locally, with band distribution and mean probability |
+| **Agent registry** | Each capability is an isolated, rule-grounded module with a stated responsibility |
+
+## Reasoning tiers
+
+| Tier | What it provides | Setup |
 |---|---|---|
-| 🫀 | **Smart Screening** | Plain-language symptoms → explainable ML risk score with per-feature SHAP contributions |
-| 🎙️ | **Live Copilot** | Realtime speech-to-text consultations with doctor prompts, test suggestions, and urgency flags |
-| 🧍 | **Body Pain Map** | Interactive front/back body diagram highlights pain regions as the patient speaks |
-| 📄 | **Consultation Reports** | Structured visit capture → one-click professional PDF export |
-| 🌍 | **Multilingual** | Speak in Urdu, Hindi, Arabic, French, Spanish, German, or Chinese; transcripts normalized to English |
-| 🖼️ | **Report Reading** | Upload lab reports/scans for AI-assisted key-finding extraction (needs a vision model) |
-| 🕘 | **History & Trends** | Locally stored screening history with risk statistics |
-| 🧪 | **17 Research Agents** | Guidelines, uncertainty, causality, fairness, robustness, explainability, and more |
+| **1 · Always on** | Built-in clinical language engine — insights, copilot plans, reports, fully offline | None. This is the default |
+| **2 · Optional** | A local LLM through [Ollama](https://ollama.com), auto-detected when running | `ollama pull llama3.2` |
+| **3 · Optional** | A hosted model, used automatically if a key is already present | `GEMINI_API_KEY` environment variable |
 
-## 🆓 The free AI model (three tiers)
+## Quickstart
 
-| Tier | What | Setup |
-|---|---|---|
-| **1 · Always on** | Built-in rule-based clinical engine — insights, copilot plans, reports, fully offline | Nothing. It's the default |
-| **2 · Optional** | [Ollama](https://ollama.com) local LLM — richer AI text, still free & local, auto-detected | `ollama pull llama3.2` |
-| **3 · Optional** | Gemini free tier — used automatically if you already have a key | Set `GEMINI_API_KEY` env var |
-
-## 🚀 Quickstart
-
-**Windows** (or double-click `Start-PulseIQ.cmd`):
+**Windows** — or double-click `Start-PulseIQ.cmd`:
 
 ```powershell
-# 1. one-time setup
 Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
-.\setup.ps1
-
-# 2. start backend
-.\run-backend.ps1
-
-# 3. start frontend (second terminal)
-.\run-frontend.ps1
-
-# 4. open http://localhost:5173
+.\setup.ps1          # one-time: virtualenv, dependencies, spacy model
+.\run-backend.ps1    # terminal 1
+.\run-frontend.ps1   # terminal 2  →  http://localhost:5173
 ```
 
 <details>
@@ -74,77 +68,87 @@ Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 python -m spacy download en_core_web_sm
+
 uvicorn backend.api_server:app --port 8000        # terminal 1
 
 cd frontend && npm install && npm run dev         # terminal 2
-# open http://localhost:5173
 ```
 </details>
 
-## 🧠 Model card
+## Model card
 
-PulseIQ screens with a Random Forest on the public UCI-style heart dataset (1,025 rows, 13 features).
+A Random Forest over the public heart dataset (1,025 rows, 13 features).
 
-> **⚠️ Label fix note:** the widely-circulated `heart.csv` ships with an **inverted target
-> column** (class 1 = healthy). PulseIQ detects and flips this during training — the
-> training script asserts textbook disease/healthy profiles score correctly, so this
-> regression can never silently return. See `backend/train_model.py`.
+> **Inverted target note.** The widely circulated `heart.csv` ships with `target=1` meaning
+> *healthy*. PulseIQ flips the label at training time, and `backend/train_model.py` asserts that
+> textbook disease and healthy profiles score in the expected direction. This inversion is a real
+> defect in the source data, not a description of the pipeline — the assertion prevents it from
+> returning silently.
 
 | Metric | Value |
 |---|---|
 | Accuracy | 0.971 |
 | Precision | 0.943 |
 | Recall | 1.000 |
+| F1 | 0.971 |
 | ROC-AUC | 1.000 |
-| 5-fold CV | 0.98 – 1.00 |
+| 5-fold CV accuracy | 0.98 – 1.00 |
+| Sanity profiles | disease-like 0.84 · healthy-like 0.09 |
 
-*Screening output is decision support, not diagnosis.*
+Screening output is decision support, not diagnosis.
 
-## 🏗️ Architecture
+## Architecture
 
 ```
-frontend (React 18 + Vite + TS + Tailwind)
-  ├── /diagnose   → POST /diagnose, /ai-insights
-  ├── /live       → WS /ws/consultation (realtime copilot)
-  ├── /workflow   → structured visit → POST /final-report → PDF
-  └── /history    → local browser storage
+frontend  React 18 · Vite · TypeScript · Tailwind
+  ├── /               overview and pipeline
+  ├── /diagnose       POST /diagnose, /ai-insights, /analyze-report-image
+  ├── /live           WS  /ws/consultation
+  ├── /workflow/*     structured visit → POST /final-report → PDF
+  ├── /history        local browser storage
+  └── /agents         GET /research-agents
 
-backend (FastAPI)
-  ├── orchestrator.py        symptom extraction → features → model → risk band
-  ├── ai_assistant.py        3-tier free AI (local engine / Ollama / Gemini)
-  ├── realtime_service.py    17 clinical agents fused per transcript line
-  └── agents/                guidelines, uncertainty, causal, fairness, SHAP…
-models/heart_model.pkl        retrained RandomForest (label-flip fixed)
+backend  FastAPI
+  ├── api_server.py       routes, CORS, /health
+  ├── orchestrator.py     extraction → feature mapping → model → band
+  ├── ai_assistant.py     three-tier reasoning, none of it required
+  ├── realtime_service.py per-line fusion across the clinical agents
+  └── …
+agents/                   rule-grounded clinical modules
+models/                   trained model + metadata
+data/                     heart.csv
+docs/                     screenshots and walkthrough media
+scripts/                  screenshot capture helper
 ```
 
-## 📁 Repository layout
+## Repository layout
 
 ```
 cardio-ai-system/
-├── backend/          FastAPI server + pipeline scripts
-├── agents/           17 rule-based clinical AI agents
-├── frontend/         React app (this is the UI)
-├── models/           trained model + metadata
-├── data/             heart.csv dataset
-├── docs/             GitHub Pages site, screenshots, demo video
-├── scripts/          screenshot capture helper
-├── notebooks/        analysis notebooks
-└── setup.ps1 / run-*.ps1 / Start-PulseIQ.cmd
+├── backend/     FastAPI server, training script, pipeline checks
+├── agents/      rule-grounded clinical modules
+├── frontend/    React application
+├── models/      trained model and metadata
+├── data/        dataset
+├── docs/        screenshots and demo media
+├── scripts/     capture-screenshots.cjs
+└── setup.ps1, run-*.ps1, Start-PulseIQ.cmd
 ```
 
-## 🖼️ Screenshots
+## Screens
 
-| Screen | |
+| | |
 |---|---|
-| ![Screening](docs/screenshots/02-diagnose-result.png) | ![Live copilot](docs/screenshots/04-live-copilot.png) |
-| ![Workflow](docs/screenshots/05-workflow.png) | ![History](docs/screenshots/06-history.png) |
+| ![Screening](docs/screenshots/03-screening-result.png) | ![Live copilot](docs/screenshots/04-live-copilot.png) |
+| ![Session](docs/screenshots/06-consultation-session.png) | ![History](docs/screenshots/07-screening-history.png) |
 
-## ⚠️ Disclaimer
+## Scope
 
-PulseIQ is an **educational decision-support tool**. It does not diagnose disease and does
-not replace professional medical care. Always consult a qualified clinician. In an
-emergency, call your local emergency number.
+PulseIQ is a screening and documentation aid. It does not diagnose, and its output must be reviewed
+by a qualified clinician before informing care. Any presentation suggesting acute coronary syndrome —
+ongoing chest pain, syncope or respiratory distress — must be escalated on clinical grounds alone,
+irrespective of what this software reports.
 
-## 📄 License
+## License
 
 MIT — see [LICENSE](LICENSE).

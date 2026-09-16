@@ -1,0 +1,380 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>PulseIQ — Cardiac screening and consultation workspace</title>
+<meta name="description" content="PulseIQ turns a patient's own words into an explained cardiac risk estimate, runs live consultation capture, maps reported pain, and exports structured reports. Runs locally with no accounts and no API keys." />
+<meta name="theme-color" content="#0B0C0F" />
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='9' fill='%230B0C0F'/%3E%3Cpath d='M4.8 17.4h4.3l2.2-5.6 3.3 11.4 2.8-7.5 1.9 4.3h6.9' fill='none' stroke='%2335D1BA' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300..700&family=JetBrains+Mono:wght@400..600&display=swap" />
+<style>
+  :root {
+    --canvas: #0b0c0f;
+    --panel: #121418;
+    --elev: #191c22;
+    --inset: #0e1014;
+    --line: #24282f;
+    --line2: #31363f;
+    --fg: #ebedf0;
+    --muted: #99a1ab;
+    --faint: #6b7280;
+    --accent: #35d1ba;
+    --warn: #e9a23b;
+    --danger: #f2555a;
+    --ok: #44c186;
+    --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    background: var(--canvas);
+    color: var(--fg);
+    font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    font-size: 15px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+    background-image:
+      radial-gradient(760px circle at 8% -8%, rgba(53,209,186,0.055), transparent 62%),
+      radial-gradient(680px circle at 104% 2%, rgba(90,169,245,0.04), transparent 58%);
+    background-repeat: no-repeat;
+  }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; text-underline-offset: 3px; }
+  .wrap { width: 100%; max-width: 1120px; margin: 0 auto; padding: 0 24px; }
+  .eyebrow {
+    font-family: var(--mono); font-size: 11px; font-weight: 500;
+    letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint);
+  }
+  h1 { font-size: clamp(2.1rem, 5.2vw, 3.4rem); line-height: 1.08; letter-spacing: -0.03em; font-weight: 600; }
+  h2 { font-size: clamp(1.4rem, 2.6vw, 1.85rem); letter-spacing: -0.02em; font-weight: 600; }
+  h3 { font-size: 0.95rem; font-weight: 600; letter-spacing: -0.01em; }
+  p { color: var(--muted); }
+
+  /* ---------- nav ---------- */
+  nav {
+    position: sticky; top: 0; z-index: 20;
+    border-bottom: 1px solid var(--line);
+    background: rgba(11,12,15,0.86);
+    backdrop-filter: blur(14px);
+  }
+  nav .wrap { display: flex; align-items: center; gap: 14px; height: 60px; }
+  .brand { display: flex; align-items: center; gap: 10px; color: var(--fg); }
+  .brand:hover { text-decoration: none; }
+  .mark {
+    width: 32px; height: 32px; border-radius: 9px; display: grid; place-items: center;
+    border: 1px solid var(--line2); background: var(--elev);
+  }
+  .wordmark { font-size: 15px; font-weight: 600; letter-spacing: -0.02em; line-height: 1; }
+  .brand .sub { display: block; margin-top: 3px; font-family: var(--mono); font-size: 9.5px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--faint); }
+  nav .links { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+  nav .links a {
+    font-size: 13px; color: var(--muted); padding: 7px 12px; border-radius: 8px;
+    border: 1px solid transparent;
+  }
+  nav .links a:hover { color: var(--fg); background: var(--elev); text-decoration: none; }
+  nav .links a.solid { border-color: var(--line); color: var(--fg); }
+  nav .links a.solid:hover { border-color: var(--line2); }
+
+  /* ---------- hero ---------- */
+  header { padding: 76px 0 60px; border-bottom: 1px solid var(--line); position: relative; overflow: hidden; }
+  .veil {
+    position: absolute; inset: 0;
+    background-image:
+      linear-gradient(rgba(255,255,255,0.028) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,0.028) 1px, transparent 1px);
+    background-size: 34px 34px;
+    -webkit-mask-image: radial-gradient(circle at 40% 30%, #000 20%, transparent 72%);
+    mask-image: radial-gradient(circle at 40% 30%, #000 20%, transparent 72%);
+    pointer-events: none;
+  }
+  header .wrap { position: relative; }
+  .dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); margin-right: 8px; vertical-align: middle; }
+  header h1 { margin: 18px 0 0; max-width: 20ch; }
+  .lede { max-width: 62ch; margin-top: 18px; font-size: 1.02rem; }
+  .cta { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 30px; }
+  .btn {
+    display: inline-flex; align-items: center; gap: 8px; padding: 12px 22px; border-radius: 10px;
+    font-size: 14px; font-weight: 500; border: 1px solid transparent; transition: 150ms;
+  }
+  .btn:hover { text-decoration: none; transform: translateY(-1px); }
+  .btn.primary { background: var(--accent); color: #04211d; font-weight: 600; box-shadow: inset 0 1px 0 rgba(255,255,255,0.22); }
+  .btn.primary:hover { background: #5fe3ce; }
+  .btn.ghost { border-color: var(--line2); background: rgba(25,28,34,0.7); color: var(--fg); }
+  .btn.ghost:hover { background: var(--elev); }
+
+  .metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1px; margin-top: 46px; background: var(--line); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+  .metrics div { background: var(--panel); padding: 18px 20px; }
+  .metrics strong { display: block; font-family: var(--mono); font-size: 1.5rem; font-weight: 500; color: var(--fg); letter-spacing: -0.02em; }
+  .metrics span { font-size: 12px; color: var(--faint); }
+
+  /* ---------- sections ---------- */
+  section { padding: 62px 0; border-bottom: 1px solid var(--line); }
+  section .head { max-width: 64ch; margin-bottom: 30px; }
+  section .head h2 { margin-top: 10px; }
+  section .head p { margin-top: 12px; }
+
+  .grid { display: grid; gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+  .grid.g3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .grid.g2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .cell { background: var(--panel); padding: 22px; }
+  .cell h3 { margin-bottom: 7px; }
+  .cell p { font-size: 13.5px; }
+  .cell .num { font-family: var(--mono); font-size: 11px; color: var(--faint); display: block; margin-bottom: 12px; }
+  .ico { width: 30px; height: 30px; border-radius: 8px; border: 1px solid var(--line); background: var(--elev); display: grid; place-items: center; margin-bottom: 14px; }
+
+  /* pipeline */
+  .pipeline { border: 1px solid var(--line); border-radius: 12px; background: var(--panel); padding: 24px; }
+  .step { display: flex; gap: 14px; position: relative; padding-bottom: 18px; }
+  .step:last-child { padding-bottom: 0; }
+  .step:not(:last-child)::before { content: ""; position: absolute; left: 13px; top: 30px; bottom: 6px; width: 1px; background: var(--line); }
+  .step .idx {
+    flex: none; width: 27px; height: 27px; border-radius: 50%; display: grid; place-items: center;
+    border: 1px solid var(--line); background: var(--elev);
+    font-family: var(--mono); font-size: 10.5px; color: var(--muted); position: relative; z-index: 1;
+  }
+  .step b { display: block; font-size: 13.5px; font-weight: 600; }
+  .step small { display: block; color: var(--faint); font-size: 12.5px; margin-top: 2px; }
+
+  /* notes */
+  .note-list { display: grid; gap: 12px; }
+  .note-item { border: 1px solid var(--line); border-left: 2px solid var(--accent); border-radius: 0 10px 10px 0; background: var(--panel); padding: 16px 18px; }
+  .note-item.warn { border-left-color: var(--warn); }
+  .note-item b { display: block; font-size: 13.5px; margin-bottom: 5px; }
+  .note-item p { font-size: 13px; }
+
+  /* media */
+  video { width: 100%; display: block; border-radius: 12px; border: 1px solid var(--line); background: #000; }
+  .shots { display: grid; gap: 18px; }
+  .shot { margin: 0; }
+  .shot img { width: 100%; display: block; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); }
+  .shot figcaption { margin-top: 9px; font-family: var(--mono); font-size: 11px; letter-spacing: 0.06em; color: var(--faint); }
+  .shot.wide { grid-column: 1 / -1; }
+
+  pre {
+    background: var(--inset); border: 1px solid var(--line); border-radius: 12px;
+    padding: 18px 20px; overflow-x: auto;
+    font-family: var(--mono); font-size: 13px; line-height: 1.75; color: var(--muted);
+  }
+  pre b { color: var(--fg); font-weight: 500; }
+  .scope { border: 1px solid var(--line); border-radius: 12px; background: rgba(25,28,34,0.4); padding: 20px 22px; }
+  .scope p { font-size: 13.5px; }
+  .scope p + p { margin-top: 10px; }
+
+  footer { padding: 34px 0 48px; }
+  footer .wrap { display: flex; flex-wrap: wrap; gap: 12px; justify-content: space-between; align-items: center; }
+  footer p { font-size: 12.5px; color: var(--faint); }
+  footer .fl { display: flex; gap: 18px; font-size: 13px; }
+
+  @media (max-width: 900px) {
+    .grid.g3, .grid.g2 { grid-template-columns: 1fr; }
+    .metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    header { padding: 54px 0 44px; }
+    section { padding: 48px 0; }
+    nav .links a.opt { display: none; }
+  }
+  @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } .btn:hover { transform: none; } }
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="wrap">
+    <a class="brand" href="#top">
+      <span class="mark" aria-hidden="true">
+        <svg width="20" height="20" viewBox="0 0 32 32"><path d="M3.6 17.2h4.6l2.3-5.9 3.5 12 3-7.9 2 4.4h9.4" fill="none" stroke="#35D1BA" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </span>
+      <span>PulseIQ<small class="sub">Clinical workspace</small></span>
+    </a>
+    <span class="links">
+      <a class="opt" href="#screens">Screens</a>
+      <a class="opt" href="#internals">Internals</a>
+      <a class="opt" href="#quickstart">Quickstart</a>
+      <a class="solid" href="https://github.com/Aabyyss/PulseIQ-">Source on GitHub</a>
+    </span>
+  </div>
+</nav>
+
+<header id="top">
+  <div class="veil"></div>
+  <div class="wrap">
+    <span class="eyebrow"><span class="dot"></span>Open source · local-first</span>
+    <h1>Cardiac screening that explains itself.</h1>
+    <p class="lede">
+      PulseIQ takes a patient's own words, resolves them against a curated cardiac vocabulary, and
+      returns an explained risk estimate with the follow-up questions and investigations a clinician
+      would reach for next — then carries the encounter through to a structured report.
+    </p>
+    <div class="cta">
+      <a class="btn primary" href="https://github.com/Aabyyss/PulseIQ-#-quickstart">Get started</a>
+      <a class="btn ghost" href="#walkthrough">Watch the walkthrough</a>
+    </div>
+    <div class="metrics">
+      <div><strong>13</strong><span>model inputs</span></div>
+      <div><strong>8</strong><span>capture languages</span></div>
+      <div><strong>7</strong><span>workspace screens</span></div>
+      <div><strong>0</strong><span>API keys required</span></div>
+    </div>
+  </div>
+</header>
+
+<section>
+  <div class="wrap">
+    <div class="head">
+      <span class="eyebrow">Capabilities</span>
+      <h2>One workspace, the whole pathway</h2>
+      <p>Screening, live capture, mapping and reporting share a single local reasoning engine.</p>
+    </div>
+    <div class="grid g3">
+      <div class="cell">
+        <span class="ico" aria-hidden="true"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#35D1BA" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg></span>
+        <h3>Symptom screening</h3>
+        <p>Free-text narrative in, explained probability out, with every detected concept and mapped model input shown alongside the score.</p>
+      </div>
+      <div class="cell">
+        <span class="ico" aria-hidden="true"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#35D1BA" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2M12 19v3"/></svg></span>
+        <h3>Live copilot</h3>
+        <p>Speech is transcribed as the encounter runs. Guidance panels refresh on every pass, including suggested questions and red flags.</p>
+      </div>
+      <div class="cell">
+        <span class="ico" aria-hidden="true"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#35D1BA" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg></span>
+        <h3>Body pain mapping</h3>
+        <p>Described pain locations are plotted onto a front and back diagram, so regional patterns are visible at a glance.</p>
+      </div>
+      <div class="cell">
+        <span class="ico" aria-hidden="true"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#35D1BA" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6M9 13h6M9 17h4"/></svg></span>
+        <h3>Structured reports</h3>
+        <p>Close an encounter and export a formatted PDF carrying the summary, advice, plan and escalation notes.</p>
+      </div>
+      <div class="cell">
+        <span class="ico" aria-hidden="true"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#35D1BA" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M7 14l3-4 3 3 4-6"/></svg></span>
+        <h3>History and review</h3>
+        <p>The last twenty screenings are kept on the device with band distribution and mean probability, so drift is easy to spot.</p>
+      </div>
+      <div class="cell">
+        <span class="ico" aria-hidden="true"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#35D1BA" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg></span>
+        <h3>Modular agents</h3>
+        <p>Each capability is an isolated, rule-grounded module with an explicit responsibility, replaceable without disturbing the pipeline.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="internals">
+  <div class="wrap">
+    <div class="head">
+      <span class="eyebrow">How it works</span>
+      <h2>From a sentence to a defensible score</h2>
+      <p>Five deterministic stages. Nothing is hidden behind a single opaque model call.</p>
+    </div>
+    <div class="grid g2" style="align-items: start;">
+      <div class="cell">
+        <div class="pipeline">
+          <div class="step"><span class="idx">01</span><span><b>Narrative intake</b><small>Free text or dictated symptoms, in eight languages</small></span></div>
+          <div class="step"><span class="idx">02</span><span><b>Symptom extraction</b><small>Lay phrasing normalised to clinical concepts</small></span></div>
+          <div class="step"><span class="idx">03</span><span><b>Feature mapping</b><small>Concepts resolved to the 13 model inputs, with explicit ranges</small></span></div>
+          <div class="step"><span class="idx">04</span><span><b>Risk estimation</b><small>Gradient-boosted forest, stratified cross-validated</small></span></div>
+          <div class="step"><span class="idx">05</span><span><b>Attribution and guidance</b><small>Feature trace, band, questions, tests and escalation notes</small></span></div>
+        </div>
+      </div>
+      <div class="note-list">
+        <div class="note-item warn">
+          <b>Corrected an inverted target column</b>
+          <p>The widely circulated <code>heart.csv</code> ships with <code>target=1</code> meaning <em>healthy</em>. Screening labels are flipped at training time, and the script now asserts on textbook disease and healthy profiles so the inversion cannot return silently.</p>
+        </div>
+        <div class="note-item">
+          <b>Symptom mapping calibrated against the model</b>
+          <p>Feature tiers were measured empirically rather than guessed, so a clear exertional presentation scores high and an unrelated complaint stays low, instead of both drifting to the same band.</p>
+        </div>
+        <div class="note-item">
+          <b>Three tiers of reasoning, none of them required</b>
+          <p>A built-in rule engine answers immediately. If a local model is present it is used instead. A hosted model is optional, never a prerequisite — there is no key to configure.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="walkthrough">
+  <div class="wrap">
+    <div class="head">
+      <span class="eyebrow">Walkthrough</span>
+      <h2>Ninety seconds through the workspace</h2>
+      <p>Screening, live capture, mapping, history and the agent registry, recorded against the running app.</p>
+    </div>
+    <video controls preload="metadata" playsinline src="cardio-ai-system/docs/demo/pulseiq-demo.mp4">
+      Your browser cannot play this video. The screenshots below cover the same ground.
+    </video>
+  </div>
+</section>
+
+<section id="screens">
+  <div class="wrap">
+    <div class="head">
+      <span class="eyebrow">Screens</span>
+      <h2>The workspace, as it runs</h2>
+      <p>Captured from the live application, not a design file.</p>
+    </div>
+    <div class="shots">
+      <figure class="shot wide"><img src="cardio-ai-system/docs/screenshots/01-overview.png" alt="Overview screen with the screening pipeline and entry points" loading="lazy" /><figcaption>01 / Overview</figcaption></figure>
+      <figure class="shot"><img src="cardio-ai-system/docs/screenshots/02-screening-intake.png" alt="Symptom screening intake with the clinical narrative field" loading="lazy" /><figcaption>02 / Screening intake</figcaption></figure>
+      <figure class="shot"><img src="cardio-ai-system/docs/screenshots/03-screening-result.png" alt="Screening result with risk estimate, band and model inputs" loading="lazy" /><figcaption>03 / Explained result</figcaption></figure>
+      <figure class="shot"><img src="cardio-ai-system/docs/screenshots/04-live-copilot.png" alt="Live copilot with transcript, guidance panels and body map" loading="lazy" /><figcaption>04 / Live copilot</figcaption></figure>
+      <figure class="shot"><img src="cardio-ai-system/docs/screenshots/05-consultation-start.png" alt="Consultation workflow stages" loading="lazy" /><figcaption>05 / Consultation entry</figcaption></figure>
+      <figure class="shot"><img src="cardio-ai-system/docs/screenshots/06-consultation-session.png" alt="Consultation session with visit details and capture controls" loading="lazy" /><figcaption>06 / Session capture</figcaption></figure>
+      <figure class="shot"><img src="cardio-ai-system/docs/screenshots/07-screening-history.png" alt="Screening history with band distribution" loading="lazy" /><figcaption>07 / History</figcaption></figure>
+      <figure class="shot"><img src="cardio-ai-system/docs/screenshots/08-agent-registry.png" alt="Module registry listing each agent and its responsibility" loading="lazy" /><figcaption>08 / Agent registry</figcaption></figure>
+      <figure class="shot"><img src="cardio-ai-system/docs/screenshots/09-mobile-overview.png" alt="Overview on a narrow viewport with the mobile tab bar" loading="lazy" /><figcaption>09 / Narrow viewport</figcaption></figure>
+    </div>
+  </div>
+</section>
+
+<section id="quickstart">
+  <div class="wrap">
+    <div class="head">
+      <span class="eyebrow">Quickstart</span>
+      <h2>Two terminals, no configuration</h2>
+      <p>Python 3.10+ and Node 18+. Nothing is sent anywhere.</p>
+    </div>
+    <pre><b># backend</b>
+cd cardio-ai-system
+python -m venv .venv
+.venv/Scripts/python -m pip install -r requirements.txt   <b># Windows</b>
+.venv/Scripts/python -m uvicorn backend.api_server:app --port 8000
+
+<b># frontend, in a second terminal</b>
+cd cardio-ai-system/frontend
+npm install
+npm run dev            <b># http://localhost:5173</b></pre>
+    <p style="margin-top:14px;font-size:13px;color:var(--faint)">
+      On Windows the bundled <code>Start-PulseIQ.cmd</code> performs both steps.
+    </p>
+  </div>
+</section>
+
+<section style="border-bottom:none">
+  <div class="wrap">
+    <div class="scope">
+      <span class="eyebrow" style="display:block;margin-bottom:10px">Clinical scope</span>
+      <p>PulseIQ is a screening and documentation aid. It does not diagnose, and its output must be reviewed by a qualified clinician before informing care.</p>
+      <p>Any presentation suggesting acute coronary syndrome — ongoing chest pain, syncope or respiratory distress — must be escalated on clinical grounds alone, irrespective of what this software reports.</p>
+      <p>Records are held in local browser storage. Use anonymised data unless you have a lawful basis for holding identifiable patient information on the device.</p>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <p>MIT licensed · Built as an open clinical decision-support reference implementation.</p>
+    <span class="fl">
+      <a href="https://github.com/Aabyyss/PulseIQ-">GitHub</a>
+      <a href="https://github.com/Aabyyss/PulseIQ-#-quickstart">Quickstart</a>
+      <a href="#top">Back to top</a>
+    </span>
+  </div>
+</footer>
+
+</body>
+</html>
