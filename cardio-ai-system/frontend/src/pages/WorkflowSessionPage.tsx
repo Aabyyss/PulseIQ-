@@ -1,5 +1,24 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
-import { Download, ImageUp, Mic, MicOff, Send, Sparkles, Stethoscope, User } from "lucide-react";
+import {
+  AlertCircle,
+  CheckCircle2,
+  Download,
+  FileText,
+  HeartPulse,
+  ImageUp,
+  ListChecks,
+  LoaderCircle,
+  Mic,
+  MicOff,
+  Radio,
+  ScanLine,
+  Send,
+  Stethoscope,
+  User
+} from "lucide-react";
+import { PageHeader } from "@/components/app/page-header";
+import { EmptyState } from "@/components/app/empty-state";
+import { RiskPill, type RiskLevel } from "@/components/app/risk-pill";
 import { BodyPainDiagram } from "@/components/BodyPainDiagram";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -11,6 +30,7 @@ import { deriveLocalClinicalGuidance, inferBodyPainInsights, type BodyPainInsigh
 import { exportConsultationPdf } from "@/lib/pdfReport";
 import { getConsultationSocketCandidates } from "@/lib/realtime";
 import type { RealtimeConsultationEvent, ReportImageAnalysis } from "@/lib/types";
+import { cn } from "@/lib/utils";
 
 const DISEASE_TERMS = [
   "chest pain",
@@ -21,7 +41,7 @@ const DISEASE_TERMS = [
   "left arm pain",
   "back pain",
   "troponin",
-  "st elevation",
+  "st elevation"
 ];
 
 const LANGUAGE_OPTIONS = [
@@ -32,11 +52,28 @@ const LANGUAGE_OPTIONS = [
   { label: "French", code: "fr-FR" },
   { label: "Spanish", code: "es-ES" },
   { label: "German", code: "de-DE" },
-  { label: "Chinese (Mandarin)", code: "zh-CN" },
+  { label: "Chinese (Mandarin)", code: "zh-CN" }
 ];
 
 const inputClass =
-  "w-full rounded-md border border-slate-700 bg-slate-950/60 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-600";
+  "h-9 w-full rounded-lg border border-line bg-inset px-3 text-sm text-fg shadow-[inset_0_1px_2px_rgba(0,0,0,0.35)] transition-colors placeholder:text-faint hover:border-line2 focus:border-accent/45";
+
+function Field({
+  label,
+  className,
+  children
+}: {
+  label: string;
+  className?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <label className={cn("block", className)}>
+      <span className="label mb-1.5 block">{label}</span>
+      {children}
+    </label>
+  );
+}
 
 export function WorkflowSessionPage() {
   const [speaker, setSpeaker] = useState<"doctor" | "patient">("patient");
@@ -53,8 +90,9 @@ export function WorkflowSessionPage() {
   const [nextSteps, setNextSteps] = useState<string[]>([]);
   const [bodyInsights, setBodyInsights] = useState<BodyPainInsight[]>([]);
   const [symptomNotes, setSymptomNotes] = useState<string[]>([]);
-  const [riskLevel, setRiskLevel] = useState<"Low" | "Medium" | "High">("Low");
+  const [riskLevel, setRiskLevel] = useState<RiskLevel>("Low");
   const [generatingPdf, setGeneratingPdf] = useState(false);
+  const [awaitingCopilot, setAwaitingCopilot] = useState(false);
   const [reportImageFile, setReportImageFile] = useState<File | null>(null);
   const [reportImageAnalysis, setReportImageAnalysis] = useState<ReportImageAnalysis | null>(null);
   const [analyzingImage, setAnalyzingImage] = useState(false);
@@ -82,6 +120,7 @@ export function WorkflowSessionPage() {
       } catch {
         return;
       }
+      setAwaitingCopilot(false);
       if (payload.error) {
         setError(payload.error);
         return;
@@ -168,12 +207,10 @@ export function WorkflowSessionPage() {
       setError("Realtime engine offline — local guidance is active.");
       return;
     }
-    setAiStreamingTrue();
-    wsRef.current.send(JSON.stringify({ speaker, text: trimmed, report_text: reportText, language_code: selectedLanguage }));
-  }
-
-  function setAiStreamingTrue() {
-    // placeholder for streaming indicator state; kept simple for reliability
+    setAwaitingCopilot(true);
+    wsRef.current.send(
+      JSON.stringify({ speaker, text: trimmed, report_text: reportText, language_code: selectedLanguage })
+    );
   }
 
   function startListening() {
@@ -275,7 +312,7 @@ export function WorkflowSessionPage() {
 
   async function onGenerateReport() {
     if (!patientName.trim() || !patientAge.trim() || !doctorName.trim()) {
-      setError("Please fill Patient Name, Age, and Doctor Name before generating the final report.");
+      setError("Fill in patient name, age and doctor name before generating the final report.");
       return;
     }
     setGeneratingPdf(true);
@@ -294,7 +331,7 @@ export function WorkflowSessionPage() {
         doctor_questions: doctorQuestions,
         recommended_tests: recommendedTests,
         diagnostic_impression: diagnosticImpression,
-        next_steps: nextSteps,
+        next_steps: nextSteps
       });
       exportConsultationPdf(report, {
         patientName,
@@ -302,7 +339,7 @@ export function WorkflowSessionPage() {
         patientGender,
         visitDate,
         doctorName,
-        chiefComplaint,
+        chiefComplaint
       });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to generate report.");
@@ -311,255 +348,377 @@ export function WorkflowSessionPage() {
     }
   }
 
-  const riskVariant = riskLevel === "High" ? "destructive" : riskLevel === "Medium" ? "secondary" : "default";
+  const guidanceSections = [
+    { title: "Follow-up questions", icon: Stethoscope, items: doctorQuestions, empty: "Start voice or submit a transcript." },
+    { title: "Recommended tests", icon: ListChecks, items: recommendedTests, empty: "No tests suggested yet." },
+    { title: "Diagnostic direction", icon: HeartPulse, items: diagnosticImpression, empty: "No direction recorded yet." },
+    { title: "Next steps", icon: CheckCircle2, items: nextSteps, empty: "No next steps yet." }
+  ];
 
   return (
-    <div className="space-y-5">
-      {/* Visit details */}
-      <Card className="card-animate border-slate-800 bg-slate-900/50">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-white">
-            <User className="h-5 w-5 text-teal-400" />
-            Visit details
-          </CardTitle>
-          <CardDescription>Required for the final PDF report header.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="grid gap-2.5 md:grid-cols-3 lg:grid-cols-6">
-            <input value={patientName} onChange={(e) => setPatientName(e.target.value)} placeholder="Patient name" className={inputClass} />
-            <input value={patientAge} onChange={(e) => setPatientAge(e.target.value)} placeholder="Age" className={inputClass} />
-            <input value={patientGender} onChange={(e) => setPatientGender(e.target.value)} placeholder="Gender" className={inputClass} />
-            <input type="date" value={visitDate} onChange={(e) => setVisitDate(e.target.value)} className={inputClass} />
-            <input value={doctorName} onChange={(e) => setDoctorName(e.target.value)} placeholder="Doctor name" className={`${inputClass} md:col-span-2`} />
-            <input value={chiefComplaint} onChange={(e) => setChiefComplaint(e.target.value)} placeholder="Chief complaint" className={`${inputClass} md:col-span-3 lg:col-span-6`} />
-          </div>
-        </CardContent>
-      </Card>
+    <div>
+      <PageHeader
+        eyebrow="Records"
+        icon={Stethoscope}
+        title="Consultation session"
+        description="Capture the encounter, let the copilot structure it, then export a finished visit record."
+        actions={
+          <>
+            <Badge variant={socketConnected ? "ok" : "destructive"} dot>
+              {socketConnected ? "Realtime connected" : "Offline"}
+            </Badge>
+            <RiskPill level={riskLevel} />
+          </>
+        }
+      />
 
-      <div className="grid gap-5 xl:grid-cols-2">
-        {/* LEFT column */}
-        <div className="space-y-5">
-          <Card className="card-animate border-slate-800 bg-slate-900/50">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-white">
-                <Sparkles className="h-5 w-5 text-teal-400" />
-                Consultation controls
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex flex-wrap items-center gap-2">
-                <div className="flex rounded-lg border border-slate-700 bg-slate-950/60 p-1">
-                  {(["patient", "doctor"] as const).map((role) => (
-                    <button
-                      key={role}
-                      onClick={() => setSpeaker(role)}
-                      className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium capitalize transition-colors ${
-                        speaker === role ? "bg-teal-500/20 text-teal-300" : "text-slate-400 hover:text-slate-200"
-                      }`}
-                    >
-                      {role === "patient" ? <User className="h-3.5 w-3.5" /> : <Stethoscope className="h-3.5 w-3.5" />}
-                      {role}
-                    </button>
-                  ))}
-                </div>
-                <Badge variant={socketConnected ? "default" : "destructive"} className={socketConnected ? "bg-teal-500/15 text-teal-300" : ""}>
-                  {socketConnected ? "Realtime" : "Offline"}
-                </Badge>
-                <Badge variant={riskVariant}>Risk: {riskLevel}</Badge>
-              </div>
-
-              <div className="space-y-1">
-                <p className="text-xs text-slate-500">Input language (output normalized to English)</p>
-                <select value={selectedLanguage} onChange={(e) => setSelectedLanguage(e.target.value)} className={inputClass}>
-                  {LANGUAGE_OPTIONS.map((opt) => (
-                    <option key={opt.code} value={opt.code}>
-                      {opt.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="flex gap-2">
-                {!isListening ? (
-                  <Button onClick={startListening} className="flex-1 bg-gradient-to-r from-teal-500 to-sky-500 text-slate-950 hover:from-teal-400 hover:to-sky-400">
-                    <Mic className="mr-2 h-4 w-4" />
-                    Start voice
-                  </Button>
-                ) : (
-                  <Button onClick={stopListening} variant="destructive" className="flex-1">
-                    <MicOff className="mr-2 h-4 w-4" />
-                    Stop voice
-                  </Button>
-                )}
-              </div>
-
-              {lastHeardText ? <p className="text-xs text-slate-500">Last heard: “{lastHeardText}”</p> : null}
-
-              <form className="space-y-2" onSubmit={onManualSubmit}>
-                <Textarea
-                  value={draftText}
-                  onChange={(e) => setDraftText(e.target.value)}
-                  rows={2}
-                  placeholder="Manual transcript input…"
-                  className="border-slate-700 bg-slate-950/60 text-slate-100 placeholder:text-slate-600"
+      <div className="space-y-5">
+        {/* Visit details */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Visit details</CardTitle>
+            <CardDescription>Used to head the exported report.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              <Field label="Patient name">
+                <input
+                  value={patientName}
+                  onChange={(e) => setPatientName(e.target.value)}
+                  placeholder="Full name or initials"
+                  className={inputClass}
                 />
-                <Button type="submit" variant="outline" className="w-full border-slate-700 bg-slate-950/40 hover:bg-slate-800">
-                  <Send className="mr-2 h-4 w-4" />
-                  Submit transcript
-                </Button>
-              </form>
-
-              <div className="space-y-1 border-t border-slate-800 pt-3">
-                <p className="text-xs text-slate-500">Test/report context</p>
-                <Textarea
-                  value={reportText}
-                  onChange={(e) => setReportText(e.target.value)}
-                  rows={3}
-                  placeholder='e.g. "troponin elevated, anterior ST elevation"'
-                  className="border-slate-700 bg-slate-950/60 text-slate-100 placeholder:text-slate-600"
+              </Field>
+              <Field label="Age">
+                <input
+                  value={patientAge}
+                  onChange={(e) => setPatientAge(e.target.value)}
+                  placeholder="Years"
+                  className={inputClass}
                 />
-              </div>
+              </Field>
+              <Field label="Gender">
+                <input
+                  value={patientGender}
+                  onChange={(e) => setPatientGender(e.target.value)}
+                  placeholder="Optional"
+                  className={inputClass}
+                />
+              </Field>
+              <Field label="Visit date">
+                <input
+                  type="date"
+                  value={visitDate}
+                  onChange={(e) => setVisitDate(e.target.value)}
+                  className={inputClass}
+                />
+              </Field>
+              <Field label="Clinician">
+                <input
+                  value={doctorName}
+                  onChange={(e) => setDoctorName(e.target.value)}
+                  placeholder="Name of reviewing clinician"
+                  className={inputClass}
+                />
+              </Field>
+              <Field label="Chief complaint">
+                <input
+                  value={chiefComplaint}
+                  onChange={(e) => setChiefComplaint(e.target.value)}
+                  placeholder="Presenting problem in a few words"
+                  className={inputClass}
+                />
+              </Field>
+            </div>
+          </CardContent>
+        </Card>
 
-              {error ? (
-                <Alert variant="destructive">
-                  <AlertTitle>Workflow status</AlertTitle>
-                  <AlertDescription>{error}</AlertDescription>
-                </Alert>
-              ) : null}
-            </CardContent>
-          </Card>
-
-          <Card className="card-animate border-slate-800 bg-slate-900/50">
-            <CardHeader>
-              <CardTitle className="text-white">AI questions & recommendations</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3 text-sm">
-              <div>
-                <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-teal-400">Doctor questions</p>
-                {doctorQuestions.length === 0 ? <p className="text-xs text-slate-500">Start voice or submit transcript.</p> : null}
-                {doctorQuestions.map((q) => (
-                  <p key={q} className="text-slate-300">• {q}</p>
-                ))}
-              </div>
-              <div>
-                <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-sky-400">Recommended tests</p>
-                {recommendedTests.length === 0 ? <p className="text-xs text-slate-500">No tests suggested yet.</p> : null}
-                {recommendedTests.map((t) => (
-                  <p key={t} className="text-slate-300">• {t}</p>
-                ))}
-              </div>
-              <div>
-                <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-violet-400">Diagnosis direction</p>
-                {diagnosticImpression.length === 0 ? <p className="text-xs text-slate-500">No diagnosis direction yet.</p> : null}
-                {diagnosticImpression.map((d) => (
-                  <p key={d} className="text-slate-300">• {d}</p>
-                ))}
-              </div>
-              <div>
-                <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-amber-400">Next steps</p>
-                {nextSteps.length === 0 ? <p className="text-xs text-slate-500">No next steps yet.</p> : null}
-                {nextSteps.map((s) => (
-                  <p key={s} className="text-slate-300">• {s}</p>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* RIGHT column */}
-        <div className="space-y-5">
-          <Card className="card-animate border-slate-800 bg-slate-900/50">
-            <CardHeader>
-              <CardTitle className="text-white">Body pain map</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <BodyPainDiagram insights={bodyInsights} />
-            </CardContent>
-          </Card>
-
-          <Card className="card-animate border-slate-800 bg-slate-900/50">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm text-white">Detected pain regions</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2 text-sm">
-              {bodyInsights.length === 0 ? <p className="text-xs text-slate-500">No regions detected from speech/transcript yet.</p> : null}
-              {bodyInsights.map((item) => (
-                <div key={item.region} className="rounded-lg border border-slate-800 bg-slate-950/60 p-2.5">
-                  <div className="mb-1 flex items-center gap-2">
-                    <span className="font-medium text-white">{item.label}</span>
-                    <Badge variant={item.urgency === "high" ? "destructive" : item.urgency === "moderate" ? "secondary" : "default"}>
-                      {item.urgency}
-                    </Badge>
-                  </div>
-                  {item.possibleFactors.slice(0, 2).map((factor) => (
-                    <p key={factor} className="text-xs text-slate-400">• {factor}</p>
-                  ))}
-                </div>
-              ))}
-            </CardContent>
-          </Card>
-
-          <Card className="card-animate border-slate-800 bg-slate-900/50">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-white">
-                <ImageUp className="h-5 w-5 text-teal-400" />
-                Report image analysis
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3 text-sm">
-              <input
-                type="file"
-                accept="image/png,image/jpeg,image/jpg,image/webp"
-                onChange={(e) => setReportImageFile(e.target.files?.[0] ?? null)}
-                className="block w-full cursor-pointer rounded-md border border-slate-700 bg-slate-950/60 px-3 py-2 text-sm text-slate-300 file:mr-3 file:rounded-md file:border-0 file:bg-teal-500/20 file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-teal-300"
-              />
-              <Button onClick={onAnalyzeReportImage} disabled={analyzingImage} variant="outline" className="border-slate-700 bg-slate-950/40 hover:bg-slate-800">
-                {analyzingImage ? "Analyzing…" : "Analyze uploaded report"}
-              </Button>
-              {reportImageAnalysis ? (
-                <div className="space-y-2 rounded-lg border border-slate-800 bg-slate-950/60 p-3">
-                  <p className="font-medium text-white">Summary</p>
-                  <p className="text-slate-300">{reportImageAnalysis.summary}</p>
-                  {reportImageAnalysis.key_findings.length > 0 ? (
-                    <>
-                      <p className="font-medium text-white">Key findings</p>
-                      {reportImageAnalysis.key_findings.map((item) => (
-                        <p key={item} className="text-slate-300">• {item}</p>
+        <div className="grid gap-5 xl:grid-cols-2">
+          {/* Capture + guidance */}
+          <div className="space-y-5">
+            <Card>
+              <CardHeader className="border-b border-line pb-4">
+                <CardTitle>Capture</CardTitle>
+                <CardDescription className="mt-1">
+                  Dictate the encounter or enter lines by hand. Every line refreshes the guidance.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4 pt-5">
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div>
+                    <span className="label mb-1.5 block">Speaker</span>
+                    <div className="flex rounded-lg border border-line bg-inset p-1">
+                      {(["patient", "doctor"] as const).map((role) => (
+                        <button
+                          key={role}
+                          type="button"
+                          onClick={() => setSpeaker(role)}
+                          className={cn(
+                            "flex flex-1 items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium capitalize transition-colors duration-150",
+                            speaker === role ? "bg-elev text-fg" : "text-muted hover:text-fg"
+                          )}
+                        >
+                          {role === "patient" ? (
+                            <User className="h-3.5 w-3.5" strokeWidth={1.75} />
+                          ) : (
+                            <Stethoscope className="h-3.5 w-3.5" strokeWidth={1.75} />
+                          )}
+                          {role}
+                        </button>
                       ))}
-                    </>
+                    </div>
+                  </div>
+                  <div>
+                    <label className="label mb-1.5 block" htmlFor="workflow-language">
+                      Input language
+                    </label>
+                    <select
+                      id="workflow-language"
+                      value={selectedLanguage}
+                      onChange={(e) => setSelectedLanguage(e.target.value)}
+                      className={inputClass}
+                    >
+                      {LANGUAGE_OPTIONS.map((opt) => (
+                        <option key={opt.code} value={opt.code}>
+                          {opt.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                <Button
+                  onClick={isListening ? stopListening : startListening}
+                  variant={isListening ? "destructive" : "default"}
+                  size="lg"
+                  className={cn("w-full", isListening && "animate-ring-pulse")}
+                >
+                  {isListening ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
+                  {isListening ? "Stop voice capture" : "Start voice capture"}
+                </Button>
+
+                {isListening ? (
+                  <p className="flex items-center gap-2 text-2xs text-danger-strong">
+                    <Radio className="h-3 w-3 animate-pulse-soft" strokeWidth={2} />
+                    Capturing audio
+                  </p>
+                ) : null}
+
+                {lastHeardText ? (
+                  <div className="rounded-lg border border-line bg-inset px-3 py-2.5">
+                    <p className="label">Last captured</p>
+                    <p className="mt-1 line-clamp-3 text-xs leading-relaxed text-muted">{lastHeardText}</p>
+                  </div>
+                ) : null}
+
+                <form className="space-y-2 border-t border-line pt-4" onSubmit={onManualSubmit}>
+                  <span className="label block">Manual transcript</span>
+                  <Textarea
+                    value={draftText}
+                    onChange={(e) => setDraftText(e.target.value)}
+                    rows={2}
+                    placeholder="Type a line of the encounter…"
+                    className="min-h-[68px]"
+                  />
+                  <Button type="submit" variant="outline" className="w-full">
+                    <Send className="h-4 w-4" strokeWidth={1.9} />
+                    Submit transcript
+                  </Button>
+                </form>
+
+                <div className="space-y-2 border-t border-line pt-4">
+                  <label className="label flex items-center gap-1.5">
+                    <FileText className="h-3 w-3" strokeWidth={1.75} />
+                    Test / report context
+                  </label>
+                  <Textarea
+                    value={reportText}
+                    onChange={(e) => setReportText(e.target.value)}
+                    rows={3}
+                    placeholder="e.g. troponin elevated, anterior ST elevation"
+                    className="min-h-[80px]"
+                  />
+                </div>
+
+                {error ? (
+                  <Alert variant="destructive">
+                    <AlertCircle />
+                    <AlertTitle>Session status</AlertTitle>
+                    <AlertDescription>{error}</AlertDescription>
+                  </Alert>
+                ) : null}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="border-b border-line pb-4">
+                <div className="flex items-center justify-between gap-3">
+                  <CardTitle>Copilot output</CardTitle>
+                  {awaitingCopilot ? (
+                    <span className="flex items-center gap-1.5 text-2xs text-faint">
+                      <LoaderCircle className="h-3 w-3 animate-spin" />
+                      Reasoning…
+                    </span>
                   ) : null}
                 </div>
-              ) : null}
-            </CardContent>
-          </Card>
+              </CardHeader>
+              <CardContent className="divide-y divide-line pt-0">
+                {guidanceSections.map((section) => (
+                  <section key={section.title} className="py-4 first:pt-5 last:pb-5">
+                    <h3 className="flex items-center gap-2 text-xs font-semibold text-fg">
+                      <section.icon className="h-3.5 w-3.5 text-accent" strokeWidth={1.75} />
+                      {section.title}
+                    </h3>
+                    {section.items.length === 0 ? (
+                      <p className="mt-2 text-2xs text-faint">{section.empty}</p>
+                    ) : (
+                      <ul className="mt-2.5 space-y-1.5">
+                        {section.items.map((item) => (
+                          <li key={item} className="flex gap-2 text-xs leading-relaxed text-muted">
+                            <span className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-line2" />
+                            {item}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </section>
+                ))}
+              </CardContent>
+            </Card>
+          </div>
 
-          <Card className="card-animate border-slate-800 bg-slate-900/50">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm text-white">Disease symptom notes</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2 text-sm">
-              <div className="flex flex-wrap gap-2">
-                {symptomNotes.length === 0 ? (
-                  <p className="text-xs text-slate-500">No disease-specific symptoms captured yet.</p>
+          {/* Mapping + export */}
+          <div className="space-y-5">
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle>Body pain map</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <BodyPainDiagram insights={bodyInsights} />
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm">Detected regions</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {bodyInsights.length === 0 ? (
+                  <EmptyState
+                    icon={HeartPulse}
+                    title="No regions detected"
+                    description="Region highlights appear once pain locations are described in the transcript."
+                    className="py-7"
+                  />
                 ) : (
-                  symptomNotes.map((s) => (
-                    <Badge key={s} variant="secondary" className="bg-teal-500/10 text-teal-300">
-                      {s}
-                    </Badge>
-                  ))
+                  <div className="space-y-2">
+                    {bodyInsights.map((item) => (
+                      <div key={item.region} className="rounded-lg border border-line bg-inset p-3">
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="text-xs font-medium text-fg">{item.label}</p>
+                          <Badge
+                            variant={
+                              item.urgency === "high" ? "destructive" : item.urgency === "moderate" ? "warn" : "ok"
+                            }
+                            dot
+                          >
+                            {item.urgency}
+                          </Badge>
+                        </div>
+                        {item.possibleFactors.slice(0, 2).map((factor) => (
+                          <p key={factor} className="mt-1.5 flex gap-2 text-2xs leading-relaxed text-faint">
+                            <span className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-line2" />
+                            {factor}
+                          </p>
+                        ))}
+                      </div>
+                    ))}
+                  </div>
                 )}
-              </div>
-              <Button
-                onClick={onGenerateReport}
-                disabled={generatingPdf}
-                size="lg"
-                className="w-full bg-gradient-to-r from-teal-500 to-sky-500 text-slate-950 hover:from-teal-400 hover:to-sky-400"
-              >
-                <Download className="mr-2 h-4 w-4" />
-                {generatingPdf ? "Generating PDF…" : "End consultation & download PDF"}
-              </Button>
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="flex items-center gap-2 text-sm">
+                  <ImageUp className="h-3.5 w-3.5 text-accent" strokeWidth={1.75} />
+                  Report image
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <input
+                  type="file"
+                  accept="image/png,image/jpeg,image/jpg,image/webp"
+                  onChange={(e) => setReportImageFile(e.target.files?.[0] ?? null)}
+                  className="block w-full cursor-pointer rounded-lg border border-line bg-inset px-3 py-2 text-xs text-muted file:mr-3 file:rounded-md file:border-0 file:bg-elev file:px-3 file:py-1.5 file:text-xs file:font-medium file:text-fg hover:border-line2"
+                />
+                <Button onClick={onAnalyzeReportImage} disabled={analyzingImage} variant="outline" className="w-full">
+                  {analyzingImage ? (
+                    <LoaderCircle className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <ScanLine className="h-4 w-4" strokeWidth={1.9} />
+                  )}
+                  {analyzingImage ? "Analyzing…" : "Analyze upload"}
+                </Button>
+
+                {reportImageAnalysis ? (
+                  <div className="animate-fade-up space-y-3 rounded-lg border border-line bg-inset p-3.5">
+                    <div>
+                      <p className="label">Summary</p>
+                      <p className="mt-1.5 text-xs leading-relaxed text-muted">{reportImageAnalysis.summary}</p>
+                    </div>
+                    {reportImageAnalysis.key_findings.length > 0 ? (
+                      <div>
+                        <p className="label">Key findings</p>
+                        <ul className="mt-1.5 space-y-1">
+                          {reportImageAnalysis.key_findings.map((item) => (
+                            <li key={item} className="flex gap-2 text-xs leading-relaxed text-muted">
+                              <span className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-line2" />
+                              {item}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm">Captured symptom terms</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {symptomNotes.length === 0 ? (
+                  <p className="text-2xs text-faint">No disease-specific terms captured yet.</p>
+                ) : (
+                  <div className="flex flex-wrap gap-1.5">
+                    {symptomNotes.map((note) => (
+                      <Badge key={note} variant="secondary">
+                        {note}
+                      </Badge>
+                    ))}
+                  </div>
+                )}
+
+                <div className="border-t border-line pt-4">
+                  <Button onClick={onGenerateReport} disabled={generatingPdf} size="lg" className="w-full">
+                    {generatingPdf ? (
+                      <LoaderCircle className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Download className="h-4 w-4" strokeWidth={1.9} />
+                    )}
+                    {generatingPdf ? "Generating report…" : "End encounter & export PDF"}
+                  </Button>
+                  <p className="mt-2.5 text-2xs leading-relaxed text-faint">
+                    Requires patient name, age and clinician. The report is assembled on-device and saved
+                    directly from the browser.
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
         </div>
       </div>
     </div>
