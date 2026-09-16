@@ -42,3 +42,6 @@ vite.config.js
 
 # --- Tool workspaces ---
 .freebuff/
+
+# --- TypeScript incremental build cache ---
+*.tsbuildinfo
