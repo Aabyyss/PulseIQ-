@@ -1,0 +1,40 @@
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.venv*/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# spaCy model (installed via setup, not committed)
+en_core_web_sm*/
+
+# --- Node / frontend ---
+node_modules/
+dist/
+.vite/
+*.local
+
+# --- Env & secrets ---
+.env
+.env.*
+!.env.example
+*.key
+
+# --- IDE / OS ---
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# --- Logs / temp ---
+*.log
+/tmp/
+*.tmp
+
+# --- Notebooks checkpoints ---
+.ipynb_checkpoints/
