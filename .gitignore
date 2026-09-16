@@ -39,3 +39,6 @@ desktop.ini
 # --- Notebooks checkpoints ---
 .ipynb_checkpoints/
 vite.config.js
+
+# --- Tool workspaces ---
+.freebuff/
