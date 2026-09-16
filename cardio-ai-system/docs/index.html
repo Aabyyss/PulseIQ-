@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>PulseIQ — AI Heart Health Intelligence</title>
+<meta name="description" content="Free, local, private AI heart-health screening. Symptom screening with an explainable ML model, live consultation copilot, body pain mapping, and clinical PDF reports. Zero API keys." />
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%232dd4bf' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z'/%3E%3Cpath d='M3.22 13H9.5l.5-1 2 4.5 2-7 1.5 3.5h5.27'/%3E%3C/svg%3E" />
+<style>
+  :root { --teal: #2dd4bf; --sky: #38bdf8; --ink: #e2e8f0; --dim: #94a3b8; }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #060b16; color: var(--ink);
+    font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    line-height: 1.6;
+  }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 0 20px; }
+  nav {
+    position: sticky; top: 0; z-index: 10;
+    background: rgba(6,11,22,0.85); backdrop-filter: blur(12px);
+    border-bottom: 1px solid #1e293b;
+  }
+  nav .wrap { display: flex; align-items: center; justify-content: space-between; padding: 14px 20px; }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 1.1rem; color: #fff; text-decoration: none; }
+  .brand .mark {
+    width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center;
+    background: linear-gradient(135deg, #2dd4bf, #0284c7); color: #041016; font-size: 18px;
+  }
+  .brand small { display: block; font-size: 10px; letter-spacing: 2px; color: var(--teal); font-weight: 600; }
+  nav a.gh {
+    color: #cbd5e1; text-decoration: none; font-size: 14px; border: 1px solid #334155;
+    padding: 8px 14px; border-radius: 999px; transition: 0.2s;
+  }
+  nav a.gh:hover { border-color: var(--teal); color: var(--teal); }
+  header { padding: 84px 0 56px; position: relative; overflow: hidden; }
+  header::before, header::after {
+    content: ""; position: absolute; border-radius: 50%; filter: blur(90px); pointer-events: none;
+  }
+  header::before { width: 480px; height: 480px; background: rgba(45,212,191,0.09); top: -180px; right: -120px; }
+  header::after { width: 420px; height: 420px; background: rgba(56,189,248,0.08); bottom: -220px; left: -140px; }
+  .pill {
+    display: inline-flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600;
+    color: var(--teal); border: 1px solid rgba(45,212,191,0.35); background: rgba(45,212,191,0.08);
+    padding: 6px 14px; border-radius: 999px; margin-bottom: 22px;
+  }
+  h1 { font-size: clamp(2.1rem, 5vw, 3.4rem); line-height: 1.15; color: #fff; max-width: 760px; }
+  h1 .grad { background: linear-gradient(90deg, var(--teal), var(--sky)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .sub { color: var(--dim); font-size: 1.05rem; max-width: 640px; margin: 20px 0 32px; }
+  .cta { display: flex; gap: 14px; flex-wrap: wrap; }
+  .btn {
+    display: inline-flex; align-items: center; gap: 8px; padding: 13px 26px; border-radius: 12px;
+    font-weight: 600; font-size: 15px; text-decoration: none; transition: 0.2s;
+  }
+  .btn.primary { background: linear-gradient(90deg, #14b8a6, #0ea5e9); color: #041016; }
+  .btn.primary:hover { filter: brightness(1.12); transform: translateY(-1px); }
+  .btn.ghost { border: 1px solid #334155; color: #e2e8f0; }
+  .btn.ghost:hover { border-color: var(--teal); color: var(--teal); }
+  .stats { display: flex; gap: 34px; margin-top: 48px; flex-wrap: wrap; }
+  .stats div strong { display: block; font-size: 1.7rem; color: #fff; }
+  .stats div span { font-size: 13px; color: var(--dim); }
+  section { padding: 54px 0; }
+  h2 { font-size: 1.8rem; color: #fff; margin-bottom: 8px; }
+  .lead { color: var(--dim); margin-bottom: 34px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; }
+  .card {
+    background: #0b1322; border: 1px solid #1c2740; border-radius: 16px; padding: 22px;
+    transition: 0.2s;
+  }
+  .card:hover { border-color: rgba(45,212,191,0.45); transform: translateY(-2px); }
+  .card .ico { font-size: 24px; margin-bottom: 10px; }
+  .card h3 { color: #fff; font-size: 1.02rem; margin-bottom: 6px; }
+  .card p { color: var(--dim); font-size: 14px; }
+  .tier { border-left: 3px solid var(--teal); padding: 14px 18px; background: #0b1322; border-radius: 0 12px 12px 0; margin-bottom: 12px; }
+  .tier b { color: #fff; }
+  .tier .tag { font-size: 11px; font-weight: 700; letter-spacing: 1px; color: var(--teal); margin-right: 8px; }
+  .shot { width: 100%; border-radius: 14px; border: 1px solid #1c2740; display: block; margin-bottom: 26px; }
+  video { width: 100%; border-radius: 16px; border: 1px solid #1c2740; background: #000; }
+  pre {
+    background: #0b1322; border: 1px solid #1c2740; border-radius: 12px; padding: 18px 20px;
+    overflow-x: auto; font-size: 13.5px; color: #bae6fd; line-height: 1.7;
+  }
+  .note { font-size: 13px; color: #64748b; margin-top: 10px; }
+  footer { border-top: 1px solid #1e293b; padding: 30px 0 40px; color: #64748b; font-size: 13px; }
+  footer .wrap { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+  a { color: var(--teal); }
+</style>
+</head>
+<body>
+<nav>
+  <div class="wrap">
+    <a class="brand" href="#">
+      <span class="mark">♥</span>
+      <span>PulseIQ<small>HEART HEALTH AI</small></span>
+    </a>
+    <a class="gh" href="https://github.com/Aabyyss/Agentic-Cardio-Assistant" target="_blank" rel="noopener">GitHub →</a>
+  </div>
+</nav>
+
+<header>
+  <div class="wrap">
+    <span class="pill">⚡ Free · Local · Private — no API keys, ever</span>
+    <h1>Your AI heart-health copilot, <span class="grad">completely free.</span></h1>
+    <p class="sub">
+      PulseIQ screens symptoms with an explainable ML model, runs live consultations with an AI
+      copilot, maps pain to body regions, and exports clinical PDF reports — all running on your
+      own machine, with zero configuration.
+    </p>
+    <div class="cta">
+      <a class="btn primary" href="https://github.com/Aabyyss/Agentic-Cardio-Assistant#-quickstart">Get started</a>
+      <a class="btn ghost" href="#demo">Watch the demo</a>
+    </div>
+    <div class="stats">
+      <div><strong>17</strong><span>clinical AI agents</span></div>
+      <div><strong>97%</strong><span>model accuracy (5-fold CV)</span></div>
+      <div><strong>$0</strong><span>cost, forever</span></div>
+      <div><strong>8</strong><span>languages supported live</span></div>
+    </div>
+  </div>
+</header>
+
+<section id="features">
+  <div class="wrap">
+    <h2>What's inside</h2>
+    <p class="lead">A complete clinical decision-support workspace — not a toy demo.</p>
+    <div class="grid">
+      <div class="card"><div class="ico">🫀</div><h3>Smart Screening</h3><p>Describe symptoms in plain language and get an instant, explainable ML risk score with the factors behind it.</p></div>
+      <div class="card"><div class="ico">🎙️</div><h3>Live Copilot</h3><p>Realtime speech-to-text consultations with doctor prompts, patient guidance, and cardiac-region hypotheses.</p></div>
+      <div class="card"><div class="ico">🧍</div><h3>Body Pain Map</h3><p>An interactive front/back body diagram highlights reported pain regions as the patient speaks.</p></div>
+      <div class="card"><div class="ico">📄</div><h3>Consultation Reports</h3><p>Structured visit capture with one-click professional PDF export for the patient chart.</p></div>
+      <div class="card"><div class="ico">🌍</div><h3>Multilingual</h3><p>Speak in Urdu, Hindi, Arabic, French, Spanish, German, or Chinese — transcripts are normalized to English.</p></div>
+      <div class="card"><div class="ico">🔒</div><h3>Private by design</h3><p>Everything runs locally. History lives in your browser. No accounts, no telemetry, no cloud dependency.</p></div>
+    </div>
+  </div>
+</section>
+
+<section id="ai">
+  <div class="wrap">
+    <h2>Free AI, three tiers</h2>
+    <p class="lead">Works out of the box; upgrade when you want — never pay.</p>
+    <div class="tier"><span class="tag">TIER 1 · ALWAYS ON</span><br /><b>Built-in clinical engine.</b> A rule-based medical language engine generates insights, copilot plans, and reports fully offline. Zero setup.</div>
+    <div class="tier"><span class="tag">TIER 2 · OPTIONAL</span><br /><b>Ollama (free, local LLM).</b> Install Ollama and run <code>ollama pull llama3.2</code> — PulseIQ auto-detects it and upgrades all AI text.</div>
+    <div class="tier"><span class="tag">TIER 3 · OPTIONAL</span><br /><b>Gemini free tier.</b> Already have a key? Set <code>GEMINI_API_KEY</code> and it's used automatically. Never required.</div>
+  </div>
+</section>
+
+<section id="screenshots">
+  <div class="wrap">
+    <h2>Screenshots</h2>
+    <p class="lead">Captured directly from the running app.</p>
+    <img class="shot" src="screenshots/01-home.png" alt="PulseIQ home dashboard" loading="lazy" />
+    <img class="shot" src="screenshots/02-diagnose-result.png" alt="Symptom screening with risk gauge" loading="lazy" />
+    <img class="shot" src="screenshots/04-live-copilot.png" alt="Live consultation copilot" loading="lazy" />
+    <img class="shot" src="screenshots/05-workflow.png" alt="Consultation workflow with PDF export" loading="lazy" />
+  </div>
+</section>
+
+<section id="demo">
+  <div class="wrap">
+    <h2>Demo video</h2>
+    <p class="lead">44-second walkthrough of every major screen.</p>
+    <video controls preload="metadata" src="demo/pulseiq-demo.mp4"></video>
+  </div>
+</section>
+
+<section id="quickstart">
+  <div class="wrap">
+    <h2>Quickstart</h2>
+    <p class="lead">Windows one-time setup, then launch. No keys, no accounts.</p>
+    <pre># 1. one-time setup (PowerShell, from project root)
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+.\setup.ps1
+
+# 2. start backend + frontend
+.\run-backend.ps1
+.\run-frontend.ps1
+
+# 3. open http://localhost:5173</pre>
+    <p class="note">macOS / Linux instructions and the full feature list live in the <a href="https://github.com/Aabyyss/Agentic-Cardio-Assistant">GitHub README</a>.</p>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <span>PulseIQ — AI Heart Health Intelligence</span>
+    <span>Educational decision-support only · not a medical device · always consult a clinician</span>
+  </div>
+</footer>
+</body>
+</html>
