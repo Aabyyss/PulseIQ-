@@ -1,10 +1,15 @@
-import spacy
-
 try:
-    nlp = spacy.load("en_core_web_sm")
-except OSError:
-    # Fallback keeps server booting even if model isn't installed yet.
-    nlp = spacy.blank("en")
+    import spacy
+
+    try:
+        nlp = spacy.load("en_core_web_sm")
+    except (OSError, ImportError):
+        # Fallback keeps server booting even if model isn't installed yet.
+        nlp = spacy.blank("en")
+except ImportError:
+    # spaCy itself unavailable (e.g. blocked DLLs): the dictionary matcher
+    # below does the real work, so degrade to a no-op tokenizer.
+    nlp = None
 
 symptom_dictionary = {
     "chest pain": [
@@ -30,7 +35,8 @@ symptom_dictionary = {
 }
 
 def extract_symptoms_from_text(text):
-    _ = nlp(text.lower())
+    if nlp is not None:
+        _ = nlp(text.lower())
 
     detected = []
 
