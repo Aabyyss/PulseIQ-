@@ -147,6 +147,10 @@
 
   /* media */
   video { width: 100%; display: block; border-radius: 12px; border: 1px solid var(--line); background: #000; }
+  .demo-grid { display: grid; grid-template-columns: minmax(0, 1.65fr) minmax(0, 1fr); gap: 20px; align-items: start; }
+  .demo { margin: 0; }
+  .demo.vertical video { max-width: 300px; margin: 0 auto; }
+  .demo figcaption { margin-top: 9px; font-family: var(--mono); font-size: 11px; letter-spacing: 0.06em; color: var(--faint); }
   .shots { display: grid; gap: 18px; }
   .shot { margin: 0; }
   .shot img { width: 100%; display: block; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); }
@@ -170,6 +174,8 @@
 
   @media (max-width: 900px) {
     .grid.g3, .grid.g2 { grid-template-columns: 1fr; }
+    .demo-grid { grid-template-columns: 1fr; }
+    .demo.vertical video { width: auto; max-width: 100%; max-height: 72vh; margin: 0 auto; }
     .metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     header { padding: 54px 0 44px; }
     section { padding: 48px 0; }
@@ -301,12 +307,23 @@
   <div class="wrap">
     <div class="head">
       <span class="eyebrow">Walkthrough</span>
-      <h2>Ninety seconds through the workspace</h2>
-      <p>Screening, live capture, mapping, history and the agent registry, recorded against the running app.</p>
+      <h2>The workspace in motion</h2>
+      <p>A full landscape walkthrough and a vertical cut built for the feed — both recorded against the running app.</p>
     </div>
-    <video controls preload="metadata" playsinline src="cardio-ai-system/docs/demo/pulseiq-demo.mp4">
-      Your browser cannot play this video. The screenshots below cover the same ground.
-    </video>
+    <div class="demo-grid">
+      <figure class="demo">
+        <video controls preload="metadata" playsinline src="cardio-ai-system/docs/demo/pulseiq-demo.mp4">
+          Your browser cannot play this video. The screenshots below cover the same ground.
+        </video>
+        <figcaption>full walkthrough · landscape · 0:26</figcaption>
+      </figure>
+      <figure class="demo vertical">
+        <video controls preload="metadata" playsinline src="cardio-ai-system/docs/demo/pulseiq-linkedin.mp4">
+          Your browser cannot play this video. The screenshots below cover the same ground.
+        </video>
+        <figcaption>linkedin cut · vertical · 0:45</figcaption>
+      </figure>
+    </div>
   </div>
 </section>
 
