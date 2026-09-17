@@ -147,7 +147,7 @@ function Topbar({ title }: { title: string }) {
 
       <div className="hidden min-w-0 items-center gap-2 lg:flex">
         <span className="text-2xs font-medium uppercase tracking-[0.14em] text-faint">PulseIQ</span>
-        <span className="text-faint/60">/</span>
+        <span aria-hidden="true" className="text-faint/60">/</span>
         <span className="truncate text-xs font-medium text-fg">{title}</span>
       </div>
 

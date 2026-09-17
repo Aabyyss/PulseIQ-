@@ -24,7 +24,8 @@ export default {
         line2: "#31363F",
         fg: "#EBEDF0",
         muted: "#99A1AB",
-        faint: "#6B7280",
+        /* AA-checked: ≥5.1:1 on panel/elev/canvas so small labels never fail. */
+        faint: "#878E99",
         accent: {
           DEFAULT: "#35D1BA",
           strong: "#5FE3CE",
