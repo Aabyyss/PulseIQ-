@@ -86,3 +86,35 @@ jobs:
 
       - name: Production build
         run: npm run build
+
+  ui-audit:
+    name: UI contrast & layout audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: cardio-ai-system/frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: cardio-ai-system/frontend
+        run: npm ci
+
+      # Builds the production bundle, serves it with vite preview, then sweeps
+      # every route at multiple viewports: WCAG AA contrast of every text node
+      # against its real rendered background, horizontal overflow, clipped
+      # text, and undersized tap targets. Exits nonzero on any violation.
+      - name: Run UI audit
+        working-directory: cardio-ai-system/frontend
+        run: node ../scripts/ui-audit.cjs
+
+      - name: Upload audit report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-audit-report
+          path: cardio-ai-system/scripts/ui-audit-report.json
+          if-no-files-found: ignore
