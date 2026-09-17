@@ -11,6 +11,8 @@ risk estimate — then carries the encounter through to a structured report.**
 
 Runs locally. No accounts. No API keys. No data leaves the device.
 
+[![Test suite](https://github.com/Aabyyss/PulseIQ-/actions/workflows/tests.yml/badge.svg)](https://github.com/Aabyyss/PulseIQ-/actions/workflows/tests.yml)
+[![Publish project page](https://github.com/Aabyyss/PulseIQ-/actions/workflows/deploy-pages.yml/badge.svg)](https://github.com/Aabyyss/PulseIQ-/actions/workflows/deploy-pages.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-35d1ba?style=flat-square)](LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?style=flat-square&logo=python&logoColor=white)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.116%2B-009688?style=flat-square&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
