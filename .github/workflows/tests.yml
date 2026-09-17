@@ -1,0 +1,88 @@
+name: Test suite
+
+# Runs the backend pipeline checks and the frontend typecheck/build on every
+# push and pull request.
+#
+# Coverage notes:
+# - backend/test_orchestrator.py carries the clinical assertions (symptom text
+#   → expected risk band) and exits nonzero on failure. It exercises the NLP,
+#   mapper, prediction and explainability agents end-to-end.
+# - The remaining backend/test_*.py scripts are smoke checks: they fail the
+#   job when the code raises (broken imports, missing model, bad data) via
+#   their exit code.
+# - The spaCy model install is best-effort: when unavailable the symptom
+#   agent falls back to its dictionary matcher and the suite still runs.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend pipeline
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: cardio-ai-system
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: cardio-ai-system/requirements.txt
+
+      - name: Install backend dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Install spaCy model (best effort)
+        run: |
+          pip install https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl \
+            || echo "::warning::spaCy model unavailable; tests will run on the dictionary fallback"
+
+      - name: Run backend tests
+        run: |
+          set -e
+          failed=0
+          for test in test_orchestrator test_nlp_agent test_feature_mapper test_prediction_agent test_explainability_agent test_full_pipeline; do
+            echo "::group::$test"
+            python "backend/$test.py" || failed=1
+            echo "::endgroup::"
+          done
+          exit $failed
+
+  frontend:
+    name: Frontend typecheck & build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: cardio-ai-system/frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: cardio-ai-system/frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npx tsc -b
+
+      - name: Production build
+        run: npm run build
