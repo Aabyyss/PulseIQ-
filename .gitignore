@@ -40,6 +40,9 @@ desktop.ini
 .ipynb_checkpoints/
 vite.config.js
 
+# --- UI audit report artifact ---
+cardio-ai-system/scripts/ui-audit-report.json
+
 # --- Tool workspaces ---
 .freebuff/
 
