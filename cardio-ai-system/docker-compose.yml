@@ -1,0 +1,47 @@
+# PulseIQ — optional container parity environment (ADR-008).
+#
+# Why this exists: the primary deployment posture is *local device* (PowerShell
+# launchers, no containers). This compose file is the escape hatch for machines
+# where Windows Application Control blocks sklearn/spaCy native DLLs — inside
+# Linux containers the Windows loader policy does not apply, so the model loads.
+#
+# It also demonstrates the "public deployment" shape: restricted CORS via
+# BACKEND_CORS_ORIGINS, healthcheck, and no secrets baked in. The frontend is
+# NOT containerised — keep developing against the Vite dev server and point it
+# at the containerised backend with:
+#   VITE_API_PROXY=http://localhost:8000 (default proxy target already matches)
+#
+# Requires Docker Desktop (not installed on this machine yet):
+#   docker compose up --build      # backend on http://localhost:8000
+#
+# Optional richer-AI sidecar (uncomment to auto-enable the Ollama tier):
+#   ollama:
+#     image: ollama/ollama:latest
+#     ports: ["11434:11434"]
+#     volumes: [ollama:/root/.ollama]
+
+services:
+  backend:
+    build:
+      context: ..
+      dockerfile: cardio-ai-system/Dockerfile
+    image: pulseiq-backend:latest
+    container_name: pulseiq-backend
+    ports:
+      - "8000:8000"
+    environment:
+      # Dev posture is ["*"]; container shape demonstrates the tightened form.
+      BACKEND_CORS_ORIGINS: "http://localhost:5173"
+      # GEMINI_API_KEY: set in your shell if you want the Gemini tier — never bake it here.
+      OLLAMA_BASE_URL: "http://host.docker.internal:11434"
+    volumes:
+      # Reuse the trained artifact instead of baking it into the image.
+      - ./models:/app/models:ro
+      - ./data:/app/data:ro
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    restart: unless-stopped

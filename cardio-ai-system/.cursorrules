@@ -1,0 +1,58 @@
+# .cursorrules — PulseIQ (mirror of CLAUDE.md; keep both in sync)
+
+You are working on PulseIQ, a local-first cardiac screening workspace:
+FastAPI (backend/, port 8000) + React 18/Vite/TS (frontend/, port 5173).
+No database, no auth, no API keys required. 17 rule-grounded agents.
+
+## Hard rules
+
+- Never require an API key, account, or network. Every LLM path keeps a
+  `_local_*` rule-based fallback in backend/ai_assistant.py (three tiers:
+  local → Ollama → Gemini; any failure degrades to local).
+- Never make symptom extraction depend on spaCy: the curated dictionary in
+  agents/nlp_symptom_agent.py is the contract; spaCy is optional.
+- Route handlers (backend/api_server.py) must go through
+  backend/orchestrator.py — never import clinical agents directly from
+  routes. Risk banding (>0.75 High / >0.45 Medium) lives only in the
+  orchestrator.
+- Agents never import sibling agents; only orchestrator / realtime_service /
+  api_server import them.
+- data/heart.csv target labels are INVERTED upstream (1 = healthy);
+  backend/train_model.py flips and asserts them. Do not "correct" that.
+- No new server-side persistence. History = browser localStorage (max 20).
+- Domain errors return HTTP 200 with {"error": "..."} — see
+  docs/API_SPEC.md conventions. Do not introduce HTTP error codes ad hoc.
+- Contract or version changes must update docs/ (API_SPEC.md, TECH_STACK.md)
+  in the same change; reversals of decisions need a docs/ADR.md entry.
+
+## Layout map
+
+- backend/: api_server.py (routes) · orchestrator.py (pipeline) ·
+  ai_assistant.py (LLM tiers) · realtime_service.py (WS fusion)
+- agents/: 17 isolated rule-grounded modules, one concern each
+- models/: heart_model.pkl + heart_model_meta.json (never hand-edit)
+- frontend/src/: pages/ (routes), components/ (app, BodyPainDiagram,
+  Heart3DModel, ui/ shadcn kit), @/ path alias
+- docs/: ARCHITECTURE · DATA_FLOW · API_SPEC · ADR · TECH_STACK ·
+  COMPATIBILITY · CONVENTIONS · SECURITY
+
+## Verify before done
+
+- Backend: .venv/Scripts/python -m pytest backend -q (Windows venv)
+- Frontend: cd frontend && npm run typecheck && npm run build
+- UI: npm run ui-audit (contrast, overflow, tap targets)
+
+## Style
+
+- Python: stdlib-first, no new heavy deps without an ADR entry.
+- React: functional components + hooks; reuse components/ui; Tailwind for
+  layout; lucide-react icons.
+
+## Known device quirk
+
+This laptop's Windows Application Control blocks sklearn _liblinear and
+spacy levenshtein (.pyd). A venv-local shim
+(.venv/Lib/site-packages/sitecustomize.py) stubs the blocked module so the
+model loads and the API serves (recreate it if the venv is rebuilt); spacy
+degrades to the dictionary matcher. Don't remove sklearn/shap over it; see
+docs/COMPATIBILITY.md.
