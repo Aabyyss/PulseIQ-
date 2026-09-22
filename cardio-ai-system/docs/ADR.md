@@ -113,3 +113,50 @@ TECH_STACK, style must match CONVENTIONS. AI workspace rules live in
 
 **Consequences:** Documentation updates are part of "done" for any contract
 change; a PR that edits routes without editing API_SPEC is incomplete.
+
+## ADR-010 · Multi-user accounts with server-side, owner-scoped history
+**Status:** Accepted (2026-09-23) — supersedes ADR-006
+
+The product now serves multiple cardiologists on one machine. Each clinician
+gets an account; screenings and consultations are stored server-side in
+SQLite (`backend/data/pulseiq.db`) and are visible **only** to the account
+that created them. This replaces the single-user localStorage history model.
+
+**Why SQLite, not Postgres:** zero-install, file-based, matches the
+device-local deployment posture (ADR-008), and the concurrency profile (a
+handful of clinicians, one server) is trivial. The store is stdlib `sqlite3`
+behind a lock with WAL mode — no ORM, no new dependencies.
+
+**Why bearer tokens, not cookies:** the SPA already speaks `fetch` with
+headers; tokens keep `allow_credentials=False` correct with the wide CORS
+posture (ADR-005); WebSockets authenticate via `?token=`. Tokens are stored
+hashed (SHA-256) so the DB file alone grants no sessions. Passwords are
+PBKDF2-SHA256 (200k iters, per-user salt).
+
+**Invariants (enforced by `backend/test_auth.py`):** every history query
+filters by `owner_id` from the token-resolved user; cross-account reads and
+deletes are structurally impossible (delete → 404); `/health` stays public;
+the WS closes with 4401 without a valid token.
+
+**Consequences:** ADR-006's "no server-side database" stance is retired; the
+DB file becomes PHI-bearing once real records exist (see `SECURITY.md`). Any
+new user-data endpoint must take `Depends(get_current_user)` and pass the id
+into `auth_store` — never accept an owner id from the client.
+
+## ADR-011 · Reliability hardening for the multi-user server
+**Status:** Accepted (2026-09-23)
+
+With accounts now holding irreplaceable clinical records, four cheap guards
+were added: (1) **login rate limiting** — in-memory fixed-window counters,
+5 failures ⇒ 15-minute lockout per (IP, email), 429 responses; resets on
+restart by design since the threat is on-device credential stuffing.
+(2) **Startup DB backups** — SQLite backup API + WAL checkpoint on every
+server start, last 10 kept in `backend/data/backups/`; a failed backup never
+blocks startup. (3) **8 MB request cap** via middleware — 413 above it.
+(4) **Frontend resilience** — 15 s fetch timeout with one automatic retry
+for transient network errors, and a top-level React error boundary so a
+render crash shows a recovery screen instead of a white page.
+
+**Consequences:** Restore procedure = stop server, copy a backup over
+`pulseiq.db`, restart. CI now runs the auth suite (`test_auth.py`, 24
+checks) so isolation and lockout regressions fail the build.

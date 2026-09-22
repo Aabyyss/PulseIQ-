@@ -5,20 +5,51 @@
 
 ## Threat model in one line
 
-A local-first clinical screening aid with **no accounts, no auth, and no
-server-side storage** — the primary risks are data leakage off the device
-and scope-creep into a deployed service without revisiting this file.
+A local-first, **multi-user** clinical screening aid: several clinician
+accounts share one machine-level server, so the primary risks are
+**cross-account data leakage** and data egress off the device. Everything
+below follows from those two.
+
+## Authentication (multi-user, added 2026-09-23)
+
+- Accounts are per-clinician: email + password, stored in SQLite at
+  `backend/data/pulseiq.db` (override with `PULSEIQ_DB`).
+- Passwords: PBKDF2-HMAC-SHA256, 200k iterations, per-user 16-byte random
+  salt. Verification uses constant-time comparison; unknown accounts burn a
+  comparable hash to avoid user enumeration by timing.
+- Sessions: 32-byte URL-safe bearer tokens. **Only the SHA-256 hash of a
+  token is stored** — a DB leak does not leak usable sessions. Tokens expire
+  after 30 days; `POST /auth/logout` revokes immediately.
+- The WebSocket (`/ws/consultation`) requires a valid token as the
+  `?token=` query parameter and closes with code 4401 otherwise.
+- **Brute-force protection (ADR-011):** 5 failed logins per (IP, email)
+  trigger a 15-minute lockout returning 429. Counters are in-memory and
+  reset on restart — acceptable because the deployment is device-local.
+- **Request cap:** bodies above 8 MB are rejected with 413 before routing.
+- `/health` and `/` stay public for the frontend engine probe.
+
+## Data isolation rules (highest priority)
+
+1. **Every history read/write must be owner-scoped at the SQL level.**
+   `auth_store` filters all screenings/consultations by `owner_id`. Never
+   add a query that selects or mutates history rows without the owner
+   predicate, and never accept a user-supplied owner id — it always comes
+   from the resolved token.
+2. **New per-user data must live behind `get_current_user`.** Any endpoint
+   that reads or writes user content and lacks the dependency is a bug.
+3. **Cross-account delete is a 404, not a 403** (do not confirm existence
+   of another user's resources). `backend/test_auth.py` enforces this.
+4. Consultation records may contain patient names/ages — they are owner-
+   scoped like screenings and never logged.
 
 ## Data handling rules
 
-1. **No patient identifiers server-side.** The backend is stateless per
-   request: nothing from `/diagnose`, `/ai-insights`, `/final-report`, or
-   the WebSocket loop is written to disk. Do not add logging of narrative
-   text, transcripts, or report payloads.
-2. **Client persistence is bounded.** Screening history lives in browser
-   localStorage, capped at 20 entries, containing the narrative the user
-   typed. Clearing site data must clear it. Never persist full report
-   payloads or images.
+1. **No logging of narrative text, transcripts, or report payloads.** The
+   screening request/response cycle persists only into the owner-scoped
+   history tables — never to log files or console.
+2. **Client persistence is bounded.** localStorage holds only the session
+   token and cached user profile (cleared on sign-out/401). History no
+   longer lives in the browser — it is server-side per account.
 3. **The only network egress is optional and explicit:**
    - Ollama at `http://localhost:11434` (loopback, user-installed), or
    - Gemini API when `GEMINI_API_KEY` is set by the user.
@@ -32,23 +63,30 @@ and scope-creep into a deployed service without revisiting this file.
 allow_origins=["*"], allow_credentials=False, allow_methods=["*"], allow_headers=["*"]
 ```
 
-- Acceptable **because the server binds localhost for local use** and holds
-  no state or secrets.
-- `allow_credentials` must stay `False` while origins are `*`.
-- **Before any public/deployed use:** restrict origins to the serving origin,
-  add authn/authz, put a reverse proxy with TLS in front, and re-derive this
-  file + ADR-008. The `/final-report` and image routes especially must not
-  be internet-exposed as-is.
+- Acceptable **because the server binds localhost** for local use. Bearer
+  tokens are not cookies, so `allow_credentials=False` stays correct with
+  origins `*`; but any non-loopback deployment must restrict origins.
+- **Before any public/deployed use:** restrict origins to the serving
+  origin, put a reverse proxy with TLS in front (tokens must not travel
+  plain over a LAN), rotate the token TTL down, and re-derive this file +
+  ADR-008. The `/final-report` and image routes especially must not be
+  internet-exposed as-is.
 
 ## Secrets
 
 - No secrets belong in the repo. `GEMINI_API_KEY` is read from the process
-  environment only. `.env` files are gitignored (see `.gitignore`) — never
-  commit one with a real key.
+  environment only. `.env` files are gitignored — never commit one with a
+  real key.
 - The model artifact and dataset are public-data derived; no PHI is embedded.
+- The SQLite database file is gitignored-class data: treat it as PHI-bearing
+  once real accounts exist. It lives under `backend/data/` and must never be
+  committed or synced off the machine.
 
 ## Input validation posture
 
+- Auth payloads are Pydantic models: email pattern + password length bounds;
+  store layer re-validates (defense in depth) and raises `ValueError` on
+  duplicate emails (surfaced as HTTP 400).
 - Route handlers validate required fields (`text`, `image_base64`) and
   return `{"error": …}` on failure; WS frames validate `speaker`/
   `language_code` types. Numeric model inputs come from the mapper's fixed
@@ -58,24 +96,15 @@ allow_origins=["*"], allow_credentials=False, allow_methods=["*"], allow_headers
   tolerates malformed output and every consumer falls back to the local
   engine on parse failure.
 
-## Medical scope (product-level safety)
+## Verification commands
 
-- PulseIQ is decision **support**, not diagnosis. UI copy, reports, and the
-  copilot `safety_note` must keep the "confirm with a qualified clinician"
-  framing. Red-flag escalation copy must never be weakened.
-- Don't remove the inverted-target assertion in `train_model.py` — it is a
-  patient-safety control (ADR-002), not housekeeping.
-
-## Dependency hygiene
-
-- New Python deps: pin floors in `requirements.txt`, document in
-  `docs/TECH_STACK.md`. Prefer wheels you can audit; this codebase runs on
-  machines with strict Application Control (see `docs/COMPATIBILITY.md`).
-- Frontend: `npm ci` in CI; don't commit lockfile drift from other
-  package managers (`bun.lock` is legacy here).
-
-## Reporting
-
-This is an open-source reference implementation with no bug bounty. Report
-issues via the repository issue tracker; do not open issues containing real
-patient data.
+```bash
+# Auth + isolation + lockout suite (24 checks, incl. cross-account denial):
+.venv/Scripts/python.exe backend/test_auth.py
+# Full regression (all suites):
+for t in test_orchestrator test_nlp_agent test_feature_mapper \
+         test_prediction_agent test_full_pipeline \
+         test_explainability_agent test_auth; do
+  .venv/Scripts/python.exe backend/$t.py || echo "FAIL: $t"
+done
+```

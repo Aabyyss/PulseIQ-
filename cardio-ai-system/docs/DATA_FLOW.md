@@ -28,6 +28,8 @@ Narrative text  "chest pain going to my left arm since morning, sweating"
    ▼
 [5] JSON response
    { text, symptoms[], features{}, prediction, probability, risk_level }
+   + auth_store.add_screening(user_id, …) → persisted to the caller's
+     owner-scoped history before the response is returned
 ```
 
 Every intermediate is returned to the client — the UI renders all five stages,
