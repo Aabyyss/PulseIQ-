@@ -46,5 +46,8 @@ cardio-ai-system/scripts/ui-audit-report.json
 # --- Tool workspaces ---
 .freebuff/
 
+# --- PulseIQ live database (PHI-bearing; never commit or sync) ---
+cardio-ai-system/backend/data/
+
 # --- TypeScript incremental build cache ---
 *.tsbuildinfo
