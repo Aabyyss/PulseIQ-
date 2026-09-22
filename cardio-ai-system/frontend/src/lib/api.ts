@@ -1,14 +1,15 @@
+import { authFetch } from "@/lib/auth";
 import type { AiInsightsResponse, DiagnosisResponse, FinalReport, ReportImageAnalysis, ResearchAgent } from "@/lib/types";
 
 export async function diagnoseText(text: string): Promise<DiagnosisResponse> {
-  const response = await fetch("/api/diagnose", {
+  const response = await authFetch("/api/diagnose", {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json"
-    },
     body: JSON.stringify({ text })
   });
 
+  if (response.status === 401) {
+    throw new Error("Your session has expired. Please sign in again.");
+  }
   if (!response.ok) {
     throw new Error("Diagnosis request failed.");
   }
@@ -17,11 +18,8 @@ export async function diagnoseText(text: string): Promise<DiagnosisResponse> {
 }
 
 export async function fetchAiInsights(text: string): Promise<AiInsightsResponse> {
-  const response = await fetch("/api/ai-insights", {
+  const response = await authFetch("/api/ai-insights", {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json"
-    },
     body: JSON.stringify({ text })
   });
 
@@ -33,7 +31,7 @@ export async function fetchAiInsights(text: string): Promise<AiInsightsResponse>
 }
 
 export async function fetchResearchAgents(): Promise<ResearchAgent[]> {
-  const response = await fetch("/api/research-agents");
+  const response = await authFetch("/api/research-agents");
   if (!response.ok) {
     throw new Error("Failed to fetch research agents.");
   }
@@ -42,9 +40,8 @@ export async function fetchResearchAgents(): Promise<ResearchAgent[]> {
 }
 
 export async function generateFinalReport(payload: Record<string, unknown>): Promise<FinalReport> {
-  const response = await fetch("/api/final-report", {
+  const response = await authFetch("/api/final-report", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
   });
   if (!response.ok) {
@@ -58,9 +55,8 @@ export async function generateFinalReport(payload: Record<string, unknown>): Pro
 }
 
 export async function analyzeReportImage(imageBase64: string, mimeType: string): Promise<ReportImageAnalysis> {
-  const response = await fetch("/api/analyze-report-image", {
+  const response = await authFetch("/api/analyze-report-image", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ image_base64: imageBase64, mime_type: mimeType }),
   });
   if (!response.ok) {

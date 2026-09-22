@@ -8,6 +8,7 @@ export type DiagnosisResponse = {
 };
 
 export type DiagnosisHistoryItem = DiagnosisResponse & {
+  id?: number;
   createdAt: string;
 };
 
