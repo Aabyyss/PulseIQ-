@@ -56,7 +56,7 @@ jobs:
         run: |
           set -e
           failed=0
-          for test in test_orchestrator test_nlp_agent test_feature_mapper test_prediction_agent test_explainability_agent test_full_pipeline; do
+          for test in test_orchestrator test_nlp_agent test_feature_mapper test_prediction_agent test_explainability_agent test_full_pipeline test_auth; do
             echo "::group::$test"
             python "backend/$test.py" || failed=1
             echo "::endgroup::"
