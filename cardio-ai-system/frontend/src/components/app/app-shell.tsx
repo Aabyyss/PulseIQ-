@@ -8,9 +8,10 @@ import {
   ShieldCheck,
   type LucideIcon
 } from "lucide-react";
-import { Link, NavLink, useLocation } from "react-router-dom";
+import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
 import { EcgTrace } from "@/components/app/ecg-trace";
 import { LogoMark, Wordmark } from "@/components/app/logo";
+import { initialsOf, useAuth } from "@/lib/auth";
 import { providerLabel, useEngineStatus } from "@/lib/engine";
 import { cn } from "@/lib/utils";
 
@@ -113,6 +114,63 @@ function SidebarNav() {
   );
 }
 
+function SidebarFooter() {
+  const { user, signOut } = useAuth();
+  const navigate = useNavigate();
+  const { status, provider } = useEngineStatus();
+
+  const copy =
+    status === "checking" ? "Connecting" : status === "online" ? "Engine ready" : "Engine offline";
+  const dot = status === "online" ? "bg-ok" : status === "offline" ? "bg-danger" : "bg-warn";
+
+  async function handleSignOut() {
+    await signOut();
+    navigate("/login", { replace: true });
+  }
+
+  return (
+    <div className="shrink-0 space-y-3 border-t border-line p-3">
+      <div className="flex items-center gap-2 rounded-lg border border-line bg-inset px-2.5 py-1.5">
+        <span className={cn("h-1.5 w-1.5 rounded-full", dot, status === "online" ? "animate-pulse-soft" : "")} />
+        <span className="text-2xs font-medium text-muted">{copy}</span>
+        {status === "online" ? (
+          <span className="ml-auto truncate rounded border border-line bg-elev px-1.5 py-px text-[10px] font-medium text-faint">
+            {providerLabel(provider)}
+          </span>
+        ) : null}
+      </div>
+
+      <div className="relative overflow-hidden rounded-lg border border-line bg-inset px-3 pt-1">
+        <EcgTrace className="-mx-1 h-9 opacity-70" speed="7s" />
+        <p className="flex items-center gap-1.5 pb-2.5 pt-0.5 text-2xs text-faint">
+          <ShieldCheck className="h-3 w-3" strokeWidth={1.75} />
+          On-device · Private per account
+        </p>
+      </div>
+
+      {user ? (
+        <div className="flex items-center gap-2.5 rounded-lg border border-line bg-elev/60 px-2.5 py-2">
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent/15 text-xs font-semibold text-accent">
+            {initialsOf(user)}
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-xs font-medium text-fg">{user.name || user.email}</p>
+            {user.name ? <p className="truncate text-2xs text-faint">{user.email}</p> : null}
+          </div>
+          <button
+            type="button"
+            onClick={handleSignOut}
+            title="Sign out"
+            className="shrink-0 rounded-md border border-line px-2 py-1 text-2xs font-medium text-muted transition-colors hover:border-danger/40 hover:text-danger"
+          >
+            Sign out
+          </button>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function Sidebar() {
   return (
     <aside className="sticky top-0 hidden h-screen w-[248px] shrink-0 flex-col border-r border-line bg-canvas/70 lg:flex">
@@ -123,16 +181,7 @@ function Sidebar() {
 
       <SidebarNav />
 
-      <div className="shrink-0 space-y-3 border-t border-line p-3">
-        <EngineStatus />
-        <div className="relative overflow-hidden rounded-lg border border-line bg-inset px-3 pt-1">
-          <EcgTrace className="-mx-1 h-9 opacity-70" speed="7s" />
-          <p className="flex items-center gap-1.5 pb-2.5 pt-0.5 text-2xs text-faint">
-            <ShieldCheck className="h-3 w-3" strokeWidth={1.75} />
-            On-device · No accounts or keys
-          </p>
-        </div>
-      </div>
+      <SidebarFooter />
     </aside>
   );
 }

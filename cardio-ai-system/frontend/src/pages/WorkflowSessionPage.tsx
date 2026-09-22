@@ -26,9 +26,11 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { analyzeReportImage, generateFinalReport } from "@/lib/api";
+import { getToken } from "@/lib/auth";
 import { deriveLocalClinicalGuidance, inferBodyPainInsights, type BodyPainInsight } from "@/lib/bodyPain";
 import { exportConsultationPdf } from "@/lib/pdfReport";
 import { getConsultationSocketCandidates } from "@/lib/realtime";
+import { saveConsultation } from "@/lib/history";
 import type { RealtimeConsultationEvent, ReportImageAnalysis } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -142,7 +144,8 @@ export function WorkflowSessionPage() {
         return;
       }
 
-      const nextUrl = candidates[0];
+      const token = getToken();
+      const nextUrl = candidates[0] + (token ? `?token=${encodeURIComponent(token)}` : "");
       const ws = new WebSocket(nextUrl);
       let opened = false;
 
@@ -340,6 +343,20 @@ export function WorkflowSessionPage() {
         visitDate,
         doctorName,
         chiefComplaint
+      });
+
+      // Persist the visit record to the signed-in clinician's account.
+      await saveConsultation({
+        patient_name: patientName,
+        patient_age: patientAge,
+        patient_gender: patientGender,
+        visit_date: visitDate,
+        doctor_name: doctorName,
+        chief_complaint: chiefComplaint,
+        risk_level: riskLevel,
+        symptom_notes: symptomNotes,
+        report,
+        created_at: new Date().toISOString()
       });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to generate report.");

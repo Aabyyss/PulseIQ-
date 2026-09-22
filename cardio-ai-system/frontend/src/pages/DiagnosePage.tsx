@@ -9,7 +9,6 @@ import {
   Wand2
 } from "lucide-react";
 import { analyzeReportImage, diagnoseText, fetchAiInsights } from "@/lib/api";
-import { addHistoryItem } from "@/lib/history";
 import type { DiagnosisResponse, ReportImageAnalysis } from "@/lib/types";
 import { PageHeader } from "@/components/app/page-header";
 import { RiskPill, type RiskLevel } from "@/components/app/risk-pill";
@@ -104,7 +103,6 @@ export function DiagnosePage() {
     try {
       const diagnosis = await diagnoseText(trimmed);
       setResult(diagnosis);
-      addHistoryItem(diagnosis);
     } catch {
       setRequestError(
         "The screening engine did not respond. Confirm the PulseIQ backend is listening on localhost:8000."

@@ -23,6 +23,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Textarea } from "@/components/ui/textarea";
 import { BodyPainDiagram } from "@/components/BodyPainDiagram";
 import { getConsultationSocketUrl } from "@/lib/realtime";
+import { getToken } from "@/lib/auth";
 import { deriveLocalClinicalGuidance, inferBodyPainInsights, type BodyPainInsight } from "@/lib/bodyPain";
 import type { RealtimeConsultationEvent } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -116,7 +117,10 @@ export function LiveConsultationPage() {
   );
 
   useEffect(() => {
-    const ws = new WebSocket(getConsultationSocketUrl());
+    const token = getToken();
+    const ws = new WebSocket(
+      getConsultationSocketUrl() + (token ? `?token=${encodeURIComponent(token)}` : "")
+    );
 
     ws.onopen = () => setSocketConnected(true);
     ws.onclose = () => setSocketConnected(false);

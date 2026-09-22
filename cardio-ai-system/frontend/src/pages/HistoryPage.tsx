@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { Activity, Clock, Database, ShieldCheck, Trash2, TrendingUp } from "lucide-react";
 import { PageHeader } from "@/components/app/page-header";
@@ -8,7 +8,9 @@ import { StatTile } from "@/components/app/stat-tile";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { loadHistory, saveHistory } from "@/lib/history";
+import { Skeleton } from "@/components/ui/skeleton";
+import { clearHistory, deleteHistoryItem, loadHistory } from "@/lib/history";
+import type { DiagnosisHistoryItem } from "@/lib/types";
 
 const BANDS: { level: RiskLevel; bar: string }[] = [
   { level: "Low", bar: "bg-ok" },
@@ -25,7 +27,19 @@ function formatStamp(iso: string) {
 }
 
 export function HistoryPage() {
-  const [history, setHistory] = useState(() => loadHistory());
+  const [history, setHistory] = useState<DiagnosisHistoryItem[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const refresh = useCallback(async () => {
+    setLoading(true);
+    const items = await loadHistory();
+    setHistory(items);
+    setLoading(false);
+  }, []);
+
+  useEffect(() => {
+    void refresh();
+  }, [refresh]);
 
   const summary = useMemo(() => {
     if (history.length === 0) return null;
@@ -38,9 +52,15 @@ export function HistoryPage() {
     return { counts, average, total: history.length };
   }, [history]);
 
-  function clearHistory() {
-    saveHistory([]);
+  async function handleClear() {
+    await clearHistory();
     setHistory([]);
+  }
+
+  async function handleDelete(id: number | undefined) {
+    if (id === undefined) return;
+    const ok = await deleteHistoryItem(id);
+    if (ok) setHistory((prev) => prev.filter((item) => item.id !== id));
   }
 
   return (
@@ -49,10 +69,10 @@ export function HistoryPage() {
         eyebrow="Records"
         icon={Clock}
         title="Screening history"
-        description="The most recent screenings recorded on this device, newest first. Entries are held in local browser storage and are never uploaded."
+        description="Every screening you run is saved to your account on the local server and shown here, newest first. Other accounts on this machine can never see your records."
         actions={
           history.length > 0 ? (
-            <Button variant="ghost" size="sm" onClick={clearHistory} className="hover:text-danger-strong">
+            <Button variant="ghost" size="sm" onClick={handleClear} className="hover:text-danger-strong">
               <Trash2 className="h-3.5 w-3.5" strokeWidth={1.75} />
               Clear history
             </Button>
@@ -80,7 +100,7 @@ export function HistoryPage() {
               />
               <StatTile
                 label="Retention"
-                value="20"
+                value="200"
                 unit="entries"
                 icon={Database}
                 hint="Oldest entries roll off"
@@ -125,7 +145,13 @@ export function HistoryPage() {
             <CardTitle>Log</CardTitle>
           </CardHeader>
           <CardContent className="pt-4">
-            {history.length === 0 ? (
+            {loading ? (
+              <div className="space-y-2">
+                <Skeleton className="h-20 w-full" />
+                <Skeleton className="h-20 w-full" />
+                <Skeleton className="h-20 w-full" />
+              </div>
+            ) : history.length === 0 ? (
               <EmptyState
                 icon={Activity}
                 title="No screenings recorded yet"
@@ -153,9 +179,19 @@ export function HistoryPage() {
                             {stamp.date} · {stamp.time}
                           </span>
                         </div>
-                        <span className="num rounded border border-line bg-elev px-2 py-0.5 text-2xs font-medium text-muted">
-                          {(item.probability * 100).toFixed(1)}%
-                        </span>
+                        <div className="flex items-center gap-2">
+                          <span className="num rounded border border-line bg-elev px-2 py-0.5 text-2xs font-medium text-muted">
+                            {(item.probability * 100).toFixed(1)}%
+                          </span>
+                          <button
+                            type="button"
+                            title="Delete entry"
+                            onClick={() => void handleDelete(item.id)}
+                            className="rounded border border-line p-1 text-faint transition-colors hover:border-danger/40 hover:text-danger"
+                          >
+                            <Trash2 className="h-3 w-3" strokeWidth={1.75} />
+                          </button>
+                        </div>
                       </div>
 
                       <p className="mt-3 line-clamp-2 text-sm leading-relaxed text-muted">{item.text}</p>

@@ -51,13 +51,13 @@ const CAPABILITIES = [
     icon: ServerCog,
     title: "Runs on your machine",
     detail:
-      "No accounts, no keys, no round trips. The reasoning engine ships with the app and answers locally."
+      "The reasoning engine ships with the app and answers locally — no cloud, no round trips."
   },
   {
     icon: ShieldCheck,
-    title: "Nothing leaves the device",
+    title: "Private to your account",
     detail:
-      "Screening history is held in local browser storage. Nothing is transmitted to a third party."
+      "Every clinician signs in to their own workspace. Screening and consultation history is stored per account and never shared between them."
   },
   {
     icon: Stethoscope,
@@ -101,7 +101,7 @@ export function HomePage() {
             </div>
 
             <div className="mt-8 flex flex-wrap items-center gap-x-6 gap-y-2 text-2xs text-faint">
-              {["No API keys", "No sign-in", "Works offline after setup"].map((item) => (
+              {["No API keys", "Per-clinician accounts", "Works offline after setup"].map((item) => (
                 <span key={item} className="flex items-center gap-1.5">
                   <span className="h-1 w-1 rounded-full bg-line2" />
                   {item}
