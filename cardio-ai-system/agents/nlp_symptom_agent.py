@@ -125,6 +125,22 @@ symptom_dictionary = {
         "breaking out in a sweat", "covered in sweat",
         "pasina", "pasine", "pasina aa", "pasina chal",
         "پسینہ", "پسینے", "پسینہ آ"
+    ],
+    "leg swelling": [
+        "leg swelling", "swollen legs", "swollen leg",
+        "swollen ankles", "swollen ankle", "swollen feet", "swollen foot",
+        "ankle swelling", "feet swelling", "leg edema", "ankle edema",
+        "pitting edema", "fluid retention in legs",
+        "legs are swollen", "ankles are swollen", "feet are swollen",
+        "pairon mein sujan", "pair mein sujan", "tangon mein sujan",
+        "pair suj", "tang suj", "waram",
+        "ٹانگوں میں سوجن", "پاؤں میں سوجن", "پیروں میں سوجن"
+    ],
+    "cough": [
+        "cough", "coughing", "persistent cough", "dry cough",
+        "productive cough", "coughing at night", "nocturnal cough",
+        "khansi", "khaansi", "khansi aa",
+        "کھانسی", "کھانسی آ"
     ]
 }
 

@@ -74,6 +74,14 @@ PHRASE_CASES = [
     ("dard jabre ki taraf ja raha hai", {"chest pain"}),
     ("my left arm hurts when i lift it", set()),
     ("i pulled a muscle in my back", set()),
+    # Heart-failure signals: dependent edema and cough.
+    ("swollen ankles and trouble breathing when lying flat", {"leg swelling", "shortness of breath"}),
+    ("pairon mein sujan hai", {"leg swelling"}),
+    ("ٹانگوں میں سوجن ہے", {"leg swelling"}),
+    ("پیٹ میں سوجن ہے", set()),
+    ("persistent cough worse at night", {"cough"}),
+    ("کھانسی ہو رہی ہے", {"cough"}),
+    ("no cough but swollen feet", {"leg swelling"}),
     # No false triggers on unrelated words
     ("hello doctor", set()),
     ("i have a headache and fever", set()),
