@@ -289,6 +289,29 @@ device), revoke one, or revoke every session except the caller's.
 The clinician's own audit trail (sign-ins, sign-outs, password changes,
 session revocations), newest first, capped at 100 entries.
 
+## POST /symptom-match *(auth)*
+
+Dictionary-tuning aid: what the NLP extractor finds in a narrative,
+without saving anything to history.
+
+**Request**
+```json
+{ "text": "seene mein dard hai aur pasina aa raha hai" }
+```
+
+**200**
+```json
+{
+  "text": "seene mein dard hai aur pasina aa raha hai",
+  "symptoms": ["chest pain", "sweating"],
+  "matched_phrases": { "chest pain": "seene mein dard", "sweating": "pasina" },
+  "count": 2
+}
+```
+
+Negation-aware: "no chest pain but severe dizziness" yields only
+`dizziness` — "but" terminates the negation window (ADR-013).
+
 ## Non-goals
 - No pagination or filtering; lists are capped (200 entries, newest first).
 - No batch endpoints; one narrative / one WS frame per call.

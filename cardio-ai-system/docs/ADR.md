@@ -182,3 +182,38 @@ cardiologist must be able to defend every number the workspace shows.
    revocation is per-session or "everyone else", and an append-only audit
    log records auth events for the account owner. The UI auto-locks after
    15 idle minutes.
+
+## ADR-013 · Patient-language symptom vocabulary
+
+Date: 2026-09-25. Status: accepted.
+
+The matcher only recognised clinical phrasings ("dizziness",
+"shortness of breath"), so narrated speech — "I feel dizzy and tired",
+"heart is racing", "saans lene mein taklif hai" — extracted nothing.
+Decisions:
+
+- The dictionary now covers **casual English, Roman Urdu and Urdu
+  script** for nine concepts: chest pain, shortness of breath,
+  dizziness, palpitations, fatigue, nausea, sweating, leg swelling and
+  cough. Matching stays lowercase substring, so entries double as
+  stems ("chakkar" catches "chakkar aa rahe hain").
+- Bare high-collision stems ("tired", "weak") match **whole words
+  only** via a small regex pass — bare "tired" would otherwise match
+  "retired". No other regex matching is introduced.
+- **"but" terminates the negation window** instead of bridging it:
+  polarity flips at contrast ("no chest pain but severe dizziness").
+- Referred-pain phrasings ("pain radiating to my jaw") map to the
+  chest-pain concept; isolated orthopedic complaints still match
+  nothing. Bare "سوجن" (swelling) is excluded so abdominal swelling
+  cannot trigger the cardiac edema concept.
+- New concepts are carried through the pipeline: calibrated feature
+  shifts (isolated edema lands Medium; isolated cough stays Low),
+  copilot follow-up questions with acute-cardiac priority, SNOMED/UMLS
+  links, pain-map points and cardiac-region inferences.
+- `POST /symptom-match` returns concepts plus matched surface phrases
+  without persisting, so vocabulary can be tuned against real
+  transcripts without code changes.
+
+Known limitation (unchanged from ADR-012): cue-after-subject negation
+("chest pain denied") still matches; the concepts list stays visible to
+the clinician for exactly this reason.
