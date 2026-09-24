@@ -1,5 +1,9 @@
 """Negation-aware symptom extraction tests.
 
+Also covers the expanded patient-phrase dictionary (casual English,
+Roman Urdu and Urdu script) added after the matcher only recognised
+clinical phrasings.
+
 Run directly (matching the CI style):
     python backend/test_negation.py
 """
@@ -24,7 +28,55 @@ CASES = [
     ("crushing chest pain radiating to left arm", {"chest pain"}),
     ("Denies chest pain. Reports an episode of faint last week.", {"dizziness"}),
     ("", set()),
+    # Roman-Urdu negation cues
+    ("nahi hai thakan", set()),
+    ("koi dard nahi", set()),
 ]
+
+# Patient-phrasing extraction: casual English, Roman Urdu, Urdu script.
+PHRASE_CASES = [
+    ("hello i have chest pain and dizziness", {"chest pain", "dizziness"}),
+    ("I feel dizzy and tired", {"dizziness", "fatigue"}),
+    ("heart is racing", {"palpitations"}),
+    ("feeling weak since morning", {"fatigue"}),
+    ("I am sweating and nauseous with chest discomfort", {"chest pain", "nausea", "sweating"}),
+    ("i can't breathe properly when i lie down", {"shortness of breath"}),
+    ("i passed out at the market yesterday", {"dizziness"}),
+    ("my chest feels heavy", {"chest pain"}),
+    ("having trouble breathing at night", {"shortness of breath"}),
+    ("heart pounding while resting", {"palpitations"}),
+    ("mujhe chakkar aa rahe hain", {"dizziness"}),
+    ("dil ki dharkan tez ho rahi hai", {"palpitations"}),
+    ("saans lene mein taklif hai", {"shortness of breath"}),
+    ("seene mein dard hai", {"chest pain"}),
+    ("thakan rehti hai din bhar", {"fatigue"}),
+    ("سینے میں درد ہے", {"chest pain"}),
+    ("مجھے سانس پھولنے کی تکلیف ہے", {"shortness of breath"}),
+    ("مجھے چکر آ رہے ہیں", {"dizziness"}),
+    ("دل کی دھڑکن تیز ہے", {"palpitations"}),
+    ("مجھے کمزوری محسوس ہوتی ہے", {"fatigue"}),
+    ("i feel nauseous and have been vomiting since morning", {"nausea"}),
+    ("matli si rahi hai aur ulti aayi bhi", {"nausea"}),
+    ("مجھے جی متلی ہو رہی ہے", {"nausea"}),
+    ("cold sweat with drenching night sweats", {"sweating"}),
+    ("pasina aa raha hai bohat", {"sweating"}),
+    ("پسینہ آ رہا ہے اور چکر بھی", {"sweating", "dizziness"}),
+    ("i feel great today", set()),
+    # No false triggers on unrelated words
+    ("hello doctor", set()),
+    ("i have a headache and fever", set()),
+    ("he is retired", set()),
+]
+
+
+def run_phrase_cases() -> int:
+    failures = 0
+    for text, expected in PHRASE_CASES:
+        got = set(extract_symptoms_from_text(text))
+        if got != expected:
+            failures += 1
+            print(f"FAIL: {text!r} -> {sorted(got)}, expected {sorted(expected)}")
+    return failures
 
 
 def main() -> int:
@@ -43,10 +95,12 @@ def main() -> int:
         failures += 1
         print(f"FAIL: details mode -> {symptoms}, {details}")
 
+    failures += run_phrase_cases()
+
     if failures:
-        print(f"{failures} negation test(s) failed")
+        print(f"{failures} negation/extraction test(s) failed")
         return 1
-    print("All negation tests passed")
+    print("All negation and extraction tests passed")
     return 0
 
 
