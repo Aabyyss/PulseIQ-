@@ -88,6 +88,23 @@ symptom_dictionary = {
         "thakan", "thakan rehti", "kamzori", "kamzor",
         "thak jata", "thak jati", "thak gaya", "thak gayi",
         "thaka hua", "thaki hui"
+    ],
+    "nausea": [
+        "nausea", "nauseous", "queasy", "queasiness",
+        "feel sick", "feeling sick", "felt sick",
+        "want to throw up", "vomiting", "vomited",
+        "throwing up", "threw up", "puking", "puked",
+        "urge to vomit", "sick to my stomach",
+        "matli", "ji matli", "matli si", "ulati", "ulti aayi",
+        "ultian", "qay", "qay aayi",
+        "متلی", "جی متلی", "الٹی", "الٹیاں", "قے"
+    ],
+    "sweating": [
+        "sweating", "sweaty", "diaphoresis", "diaphoretic",
+        "cold sweat", "night sweats", "drenched in sweat",
+        "breaking out in a sweat", "covered in sweat",
+        "pasina", "pasine", "pasina aa", "pasina chal",
+        "پسینہ", "پسینے", "پسینہ آ"
     ]
 }
 
