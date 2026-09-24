@@ -13,6 +13,7 @@ from backend.ai_assistant import (
     get_active_provider,
 )
 from backend.realtime_service import process_live_transcript_entry
+from agents.nlp_symptom_agent import extract_symptoms_from_text
 
 
 class NotesUpsert(BaseModel):
@@ -218,6 +219,27 @@ def diagnose(data: dict, user: dict = Depends(get_current_user)):
 @app.get("/history/screenings")
 def history_screenings(user: dict = Depends(get_current_user)):
     return {"items": auth_store.list_screenings(user["id"])}
+
+
+@app.post("/symptom-match")
+def symptom_match(data: dict, user: dict = Depends(get_current_user)):
+    """Inspect what the NLP extractor finds in a narrative, without saving it.
+
+    Debug aid for expanding the symptom dictionary: paste a patient's own
+    phrasing (any register) and see the concepts, the exact surface phrases
+    that matched, and nothing persisted to history.
+    """
+    text = (data or {}).get("text", "")
+    if not isinstance(text, str) or not text.strip():
+        return {"error": "text is required"}
+
+    symptoms, details = extract_symptoms_from_text(text, return_details=True)
+    return {
+        "text": text,
+        "symptoms": symptoms,
+        "matched_phrases": details,
+        "count": len(symptoms),
+    }
 
 
 # ---------------------------------------------------------------------------
