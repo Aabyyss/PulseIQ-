@@ -71,6 +71,37 @@ def map_symptoms_to_features(symptoms):
             features["restecg"] = 1
         features["thal"] = max(features["thal"], 2)
 
+    if "nausea" in s:
+        # Nausea/vomiting accompany ischemic episodes; shifts toward the
+        # atypical-presentation profile without dominating the encoding.
+        features["age"] = max(features["age"], 54)
+        features["chol"] = max(features["chol"], 225)
+
+    if "sweating" in s:
+        # Diaphoresis is an acute autonomic sign; pairs with angina
+        # features (raised pressure, reduced capacity, ST changes).
+        features["trestbps"] = max(features["trestbps"], 140)
+        features["thalach"] = min(features["thalach"], 132)
+        features["oldpeak"] = max(features["oldpeak"], 1.2)
+
+    if "leg swelling" in s:
+        # Dependent edema suggests elevated filling pressures / failing
+        # pump: reduced capacity, ST depression, vessel involvement.
+        # Calibrated so isolated edema lands in the Medium band (~0.71)
+        # while varicose-vein-only complaints still warrant workup.
+        features["age"] = max(features["age"], 58)
+        features["trestbps"] = max(features["trestbps"], 138)
+        features["chol"] = max(features["chol"], 235)
+        features["thalach"] = min(features["thalach"], 125)
+        features["oldpeak"] = max(features["oldpeak"], 1.6)
+        features["ca"] = max(features["ca"], 2)
+        features["thal"] = max(features["thal"], 3)
+
+    if "cough" in s:
+        # Nocturnal cough flags pulmonary congestion; mild feature shift
+        # so an isolated cough stays low-risk while adding to clusters.
+        features["thalach"] = min(features["thalach"], 145)
+
     if "exercise pain" in s:
         features["exang"] = 1
 
