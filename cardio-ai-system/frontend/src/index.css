@@ -34,12 +34,22 @@
     /* AA-checked on white: 7.4:1 for body text, 4.7:1 for small labels. */
     --scrollbar-thumb: #D8CFEB;
     --scrollbar-thumb-hover: #C9BCE3;
+    /* Surface tokens for component classes — literals here would be baked
+       into the compiled .panel rule and become unreachable in light mode. */
+    --surface-panel: #fcfbfe;
+    --surface-inset: #f7f5fc;
+    --surface-line: #e7e1f2;
+    --surface-shadow-panel: 0 1px 2px rgba(42, 36, 64, 0.05), 0 10px 26px -18px rgba(76, 29, 149, 0.28);
   }
   html.dark {
     --wash-a: rgba(53, 209, 186, 0.055);
     --wash-b: rgba(90, 169, 245, 0.04);
     --scrollbar-thumb: #2A2F37;
     --scrollbar-thumb-hover: #3A4049;
+    --surface-panel: #121418;
+    --surface-inset: #0E1014;
+    --surface-line: #24282f;
+    --surface-shadow-panel: 0 1px 1px rgba(0, 0, 0, 0.35), 0 12px 28px -18px rgba(0, 0, 0, 0.9);
   }
 
   h1,
@@ -103,9 +113,14 @@
 }
 
 @layer components {
-  /* Primary container: hairline border, faint top light, real elevation. */
+  /* Primary container: hairline border, faint top light, real elevation.
+     Background comes from --surface-panel (theme-switched) rather than a
+     Tailwind color literal, so light mode actually reaches this class. */
   .panel {
-    @apply relative rounded-xl border border-line bg-panel shadow-panel;
+    @apply relative rounded-xl border;
+    border-color: var(--surface-line);
+    box-shadow: var(--surface-shadow-panel);
+    background-color: var(--surface-panel);
     background-image: linear-gradient(180deg, var(--panel-top-light), transparent 88px);
   }
 
@@ -117,7 +132,9 @@
   }
 
   .panel-flat {
-    @apply rounded-lg border border-line bg-inset;
+    @apply rounded-lg border;
+    border-color: var(--surface-line);
+    background-color: var(--surface-inset);
   }
 
   /* Blueprint grid used behind hero content. */

@@ -34,6 +34,7 @@ html:not(.dark) .bg-elev\/30 { background-color: rgba(245, 242, 251, 0.3); }
 html:not(.dark) .bg-elev\/70 { background-color: rgba(245, 242, 251, 0.7); }
 html:not(.dark) .bg-inset { background-color: #f7f5fc; }
 html:not(.dark) .bg-inset\/70 { background-color: rgba(247, 245, 252, 0.7); }
+html:not(.dark) .bg-inset\/60 { background-color: rgba(247, 245, 252, 0.6); }
 
 html:not(.dark) .border-line { border-color: #e7e1f2; }
 html:not(.dark) .border-line2 { border-color: #d3c8ea; }
@@ -91,6 +92,11 @@ html:not(.dark) .bg-info\/20 { background-color: rgba(37, 99, 235, 0.12); }
 
 /* Solid / inverted surfaces keep their dark fill for depth */
 html:not(.dark) .bg-\[\#0B0C0F\] { background-color: #0b0c0f; }
+
+/* Hardcoded literals that must follow the theme: ui/button.tsx secondary
+   hover and the BodyPainDiagram "Unexamined" swatch. */
+html:not(.dark) .hover\:bg-\[\#1F242B\]:hover { background-color: #efeaf8; }
+html:not(.dark) .bg-\[\#3A404A\] { background-color: #c9c2dc; }
 html:not(.dark) .shadow-panel { box-shadow: 0 1px 2px rgba(42, 36, 64, 0.05), 0 10px 26px -18px rgba(76, 29, 149, 0.28); }
 html:not(.dark) .shadow-lift { box-shadow: 0 2px 6px rgba(42, 36, 64, 0.07), 0 18px 38px -22px rgba(76, 29, 149, 0.32); }
 html:not(.dark) .shadow-pop { box-shadow: 0 16px 44px -14px rgba(76, 29, 149, 0.3), 0 0 0 1px rgba(109, 40, 217, 0.08); }

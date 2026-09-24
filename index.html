@@ -5,7 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>PulseIQ — Cardiac screening and consultation workspace</title>
 <meta name="description" content="PulseIQ turns a patient's own words into an explained cardiac risk estimate, runs live consultation capture, maps reported pain, and exports structured reports. Runs locally with no accounts and no API keys." />
-<meta name="theme-color" content="#0B0C0F" />
+<meta name="theme-color" content="#0B0C0F" media="(prefers-color-scheme: dark)" />
+<meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='9' fill='%230B0C0F'/%3E%3Cpath d='M4.8 17.4h4.3l2.2-5.6 3.3 11.4 2.8-7.5 1.9 4.3h6.9' fill='none' stroke='%2335D1BA' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -26,6 +27,39 @@
     --danger: #f2555a;
     --ok: #44c186;
     --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    /* Composite surfaces as variables so light mode can retune them. */
+    --wash-a: rgba(53,209,186,0.055);
+    --wash-b: rgba(90,169,245,0.04);
+    --nav-bg: rgba(11,12,15,0.86);
+    --ghost-bg: rgba(25,28,34,0.7);
+    --scope-bg: rgba(25,28,34,0.4);
+    --accent-hover: #5fe3ce;
+    --on-accent: #04211d;
+  }
+  @media (prefers-color-scheme: light) {
+    :root {
+      /* Violet-on-white, matching the app's light theme. */
+      --canvas: #ffffff;
+      --panel: #fcfbfe;
+      --elev: #f5f2fb;
+      --inset: #f7f5fc;
+      --line: #e7e1f2;
+      --line2: #d3c8ea;
+      --fg: #2a2440;
+      --muted: #645c85;
+      --faint: #6e6690;
+      --accent: #7c3aed;
+      --warn: #b45309;
+      --danger: #dc2626;
+      --ok: #15803d;
+      --wash-a: rgba(109,40,217,0.06);
+      --wash-b: rgba(139,92,246,0.045);
+      --nav-bg: rgba(255,255,255,0.86);
+      --ghost-bg: rgba(245,242,251,0.7);
+      --scope-bg: rgba(245,242,251,0.4);
+      --accent-hover: #6d28d9;
+      --on-accent: #ffffff;
+    }
   }
   * { margin: 0; padding: 0; box-sizing: border-box; }
   html { scroll-behavior: smooth; }
@@ -37,8 +71,8 @@
     line-height: 1.6;
     -webkit-font-smoothing: antialiased;
     background-image:
-      radial-gradient(760px circle at 8% -8%, rgba(53,209,186,0.055), transparent 62%),
-      radial-gradient(680px circle at 104% 2%, rgba(90,169,245,0.04), transparent 58%);
+      radial-gradient(760px circle at 8% -8%, var(--wash-a), transparent 62%),
+      radial-gradient(680px circle at 104% 2%, var(--wash-b), transparent 58%);
     background-repeat: no-repeat;
   }
   a { color: var(--accent); text-decoration: none; }
@@ -57,7 +91,7 @@
   nav {
     position: sticky; top: 0; z-index: 20;
     border-bottom: 1px solid var(--line);
-    background: rgba(11,12,15,0.86);
+    background: var(--nav-bg);
     backdrop-filter: blur(14px);
   }
   nav .wrap { display: flex; align-items: center; gap: 14px; height: 60px; }
@@ -100,9 +134,9 @@
     font-size: 14px; font-weight: 500; border: 1px solid transparent; transition: 150ms;
   }
   .btn:hover { text-decoration: none; transform: translateY(-1px); }
-  .btn.primary { background: var(--accent); color: #04211d; font-weight: 600; box-shadow: inset 0 1px 0 rgba(255,255,255,0.22); }
-  .btn.primary:hover { background: #5fe3ce; }
-  .btn.ghost { border-color: var(--line2); background: rgba(25,28,34,0.7); color: var(--fg); }
+  .btn.primary { background: var(--accent); color: var(--on-accent); font-weight: 600; box-shadow: inset 0 1px 0 rgba(255,255,255,0.22); }
+  .btn.primary:hover { background: var(--accent-hover); }
+  .btn.ghost { border-color: var(--line2); background: var(--ghost-bg); color: var(--fg); }
   .btn.ghost:hover { background: var(--elev); }
 
   .metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1px; margin-top: 46px; background: var(--line); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
@@ -163,7 +197,7 @@
     font-family: var(--mono); font-size: 13px; line-height: 1.75; color: var(--muted);
   }
   pre b { color: var(--fg); font-weight: 500; }
-  .scope { border: 1px solid var(--line); border-radius: 12px; background: rgba(25,28,34,0.4); padding: 20px 22px; }
+  .scope { border: 1px solid var(--line); border-radius: 12px; background: var(--scope-bg); padding: 20px 22px; }
   .scope p { font-size: 13.5px; }
   .scope p + p { margin-top: 10px; }
 
