@@ -4,21 +4,26 @@ setlocal
 cd /d "%~dp0"
 
 echo ========================================
-echo    PulseIQ - AI Heart Health Intelligence
+echo    PulseIQ - Cardiac Screening Workspace
 echo ========================================
 echo.
-echo This will start backend and frontend in separate windows.
-echo No API keys required - everything runs free and local.
+echo Starting backend and frontend...
 echo.
 
-start "PulseIQ Backend" powershell -NoExit -ExecutionPolicy Bypass -File "%~dp0run-backend.ps1"
-
+start "PulseIQ Backend" /min powershell -NoExit -ExecutionPolicy Bypass -File "%~dp0run-backend.ps1"
 timeout /t 3 /nobreak >nul
-start "PulseIQ Frontend" powershell -NoExit -ExecutionPolicy Bypass -File "%~dp0run-frontend.ps1"
+start "PulseIQ Frontend" /min powershell -NoExit -ExecutionPolicy Bypass -File "%~dp0run-frontend.ps1"
+
+echo Waiting for the app to come up...
+timeout /t 8 /nobreak >nul
+start "" http://localhost:5173
 
 echo.
-echo Backend and frontend are starting.
-echo Open this in your browser:
-echo http://localhost:5173
+echo PulseIQ is running:
+echo   - App:  http://localhost:5173
+echo   - API:  http://localhost:8000/docs
+echo.
+echo To stop: close the two minimised PulseIQ windows,
+echo or run Stop-PulseIQ.cmd.
 echo.
 pause
