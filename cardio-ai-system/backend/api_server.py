@@ -14,6 +14,12 @@ from backend.ai_assistant import (
 )
 from backend.realtime_service import process_live_transcript_entry
 
+
+class NotesUpsert(BaseModel):
+    patient_name: str = Field(min_length=1, max_length=120)
+    body: str = Field(default="", max_length=20000)
+
+
 app = FastAPI(title="PulseIQ API", version="2.0.0")
 
 # Reject oversized bodies (screening text and base64 images are small; a huge
@@ -143,11 +149,16 @@ def diagnose(data: dict, user: dict = Depends(get_current_user)):
     result = run_diagnosis_from_text(text)
 
     # Persist to the signed-in clinician's history (best-effort; screening
-    # itself must not fail if storage hiccups).
+    # itself must not fail if storage hiccups). An optional patient_name lets
+    # the clinician file the screening under their own label for that patient.
     try:
-        saved = auth_store.add_screening(user["id"], {**result, "text": text.strip()})
+        saved = auth_store.add_screening(
+            user["id"],
+            {**result, "text": text.strip(), "patient_name": (data or {}).get("patient_name", "")},
+        )
         result["id"] = saved["id"]
         result["createdAt"] = saved["createdAt"]
+        result["patient_name"] = str(saved.get("patient_name") or "")
     except Exception:
         pass
 
@@ -157,6 +168,24 @@ def diagnose(data: dict, user: dict = Depends(get_current_user)):
 @app.get("/history/screenings")
 def history_screenings(user: dict = Depends(get_current_user)):
     return {"items": auth_store.list_screenings(user["id"])}
+
+
+# ---------------------------------------------------------------------------
+# Clinician notes — private, per (clinician, patient) across all accounts
+# ---------------------------------------------------------------------------
+
+
+@app.get("/notes")
+def notes_list(user: dict = Depends(get_current_user)):
+    return {"items": auth_store.list_notes(user["id"])}
+
+
+@app.post("/notes")
+def notes_create(data: NotesUpsert, user: dict = Depends(get_current_user)):
+    try:
+        return auth_store.upsert_note(user["id"], data.patient_name, data.body)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 @app.delete("/history/screenings/{screening_id}")

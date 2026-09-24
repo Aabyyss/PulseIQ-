@@ -111,6 +111,7 @@ def _init() -> None:
                 owner_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
                 created_at TEXT NOT NULL,
                 text TEXT NOT NULL,
+                patient_name TEXT NOT NULL DEFAULT '',
                 probability REAL NOT NULL,
                 risk_level TEXT NOT NULL,
                 prediction INTEGER NOT NULL,
@@ -119,6 +120,16 @@ def _init() -> None:
             );
             CREATE INDEX IF NOT EXISTS idx_screenings_owner
                 ON screenings(owner_id, id DESC);
+            CREATE TABLE IF NOT EXISTS patient_notes (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                owner_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                patient_name TEXT NOT NULL COLLATE NOCASE,
+                body TEXT NOT NULL DEFAULT '',
+                updated_at TEXT NOT NULL,
+                UNIQUE (owner_id, patient_name)
+            );
+            CREATE INDEX IF NOT EXISTS idx_patient_notes_owner
+                ON patient_notes(owner_id, patient_name);
             CREATE TABLE IF NOT EXISTS consultations (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 owner_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -131,7 +142,15 @@ def _init() -> None:
                 ON consultations(owner_id, id DESC);
             """
         )
+    _migrate(conn)
     _initialised = True
+
+
+def _migrate(conn: sqlite3.Connection) -> None:
+    """Lightweight in-place migrations for databases created pre-notes."""
+    cols = {row[1] for row in conn.execute("PRAGMA table_info(screenings)").fetchall()}
+    if "patient_name" not in cols:
+        conn.execute("ALTER TABLE screenings ADD COLUMN patient_name TEXT NOT NULL DEFAULT ''")
 
 
 # ---------------------------------------------------------------------------
@@ -269,12 +288,13 @@ def add_screening(user_id: int, item: dict[str, Any]) -> dict[str, Any]:
     created_at = item.get("createdAt") or time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime()) + "Z"
     with _lock, _connect() as conn:
         cursor = conn.execute(
-            "INSERT INTO screenings (owner_id, created_at, text, probability, risk_level, "
-            "prediction, symptoms, features) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO screenings (owner_id, created_at, text, patient_name, probability, risk_level, "
+            "prediction, symptoms, features) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 user_id,
                 created_at,
                 str(item.get("text", "")),
+                str(item.get("patient_name", "") or ""),
                 float(item.get("probability", 0.0)),
                 str(item.get("risk_level", "Low")),
                 int(item.get("prediction", 0)),
@@ -290,7 +310,7 @@ def list_screenings(user_id: int, limit: int = _MAX_HISTORY_ITEMS) -> list[dict[
     _init()
     with _connect() as conn:
         rows = conn.execute(
-            "SELECT id, created_at, text, probability, risk_level, prediction, symptoms, features "
+            "SELECT id, created_at, text, patient_name, probability, risk_level, prediction, symptoms, features "
             "FROM screenings WHERE owner_id = ? ORDER BY id DESC LIMIT ?",
             (user_id, limit),
         ).fetchall()
@@ -301,6 +321,7 @@ def list_screenings(user_id: int, limit: int = _MAX_HISTORY_ITEMS) -> list[dict[
                 "id": row["id"],
                 "createdAt": row["created_at"],
                 "text": row["text"],
+                "patient_name": row["patient_name"],
                 "probability": row["probability"],
                 "risk_level": row["risk_level"],
                 "prediction": row["prediction"],
@@ -324,6 +345,48 @@ def clear_screenings(user_id: int) -> None:
     _init()
     with _lock, _connect() as conn:
         conn.execute("DELETE FROM screenings WHERE owner_id = ?", (user_id,))
+
+
+# ---------------------------------------------------------------------------
+# Clinician notes — private, owner-scoped, one note per patient name
+# ---------------------------------------------------------------------------
+
+def _normalise_patient(name: str) -> str:
+    cleaned = " ".join(str(name or "").split())
+    if not cleaned or len(cleaned) > 120:
+        raise ValueError("Patient name must be 1–120 characters.")
+    return cleaned
+
+
+def upsert_note(user_id: int, patient_name: str, body: str) -> dict[str, Any]:
+    """Create or replace the signed-in clinician's note for a patient."""
+    _init()
+    patient = _normalise_patient(patient_name)
+    body = str(body or "")[:20000]
+    updated_at = time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime()) + "Z"
+    with _lock, _connect() as conn:
+        conn.execute(
+            "INSERT INTO patient_notes (owner_id, patient_name, body, updated_at) "
+            "VALUES (?, ?, ?, ?) "
+            "ON CONFLICT (owner_id, patient_name) "
+            "DO UPDATE SET body = excluded.body, updated_at = excluded.updated_at",
+            (user_id, patient, body, updated_at),
+        )
+    return {"patient_name": patient, "body": body, "updated_at": updated_at}
+
+
+def list_notes(user_id: int) -> list[dict[str, Any]]:
+    _init()
+    with _connect() as conn:
+        rows = conn.execute(
+            "SELECT patient_name, body, updated_at FROM patient_notes "
+            "WHERE owner_id = ? ORDER BY updated_at DESC",
+            (user_id,),
+        ).fetchall()
+    return [
+        {"patient_name": row["patient_name"], "body": row["body"], "updated_at": row["updated_at"]}
+        for row in rows
+    ]
 
 
 # ---------------------------------------------------------------------------
