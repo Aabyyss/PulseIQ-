@@ -130,6 +130,15 @@ def _init() -> None:
             );
             CREATE INDEX IF NOT EXISTS idx_patient_notes_owner
                 ON patient_notes(owner_id, patient_name);
+            CREATE TABLE IF NOT EXISTS audit_log (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+                action TEXT NOT NULL,
+                detail TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_audit_user
+                ON audit_log(user_id, id DESC);
             CREATE TABLE IF NOT EXISTS consultations (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 owner_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -277,6 +286,89 @@ def revoke_token(token: str) -> None:
         conn.execute("DELETE FROM tokens WHERE token_hash = ?", (_token_hash(token),))
 
 
+def list_sessions(user_id: int, current_token: str | None = None) -> list[dict[str, Any]]:
+    """The clinician's active sessions, newest first."""
+    _init()
+    current_hash = _token_hash(current_token) if current_token else None
+    now = time.time()
+    with _connect() as conn:
+        rows = conn.execute(
+            "SELECT token_hash, created_at, expires_at FROM tokens "
+            "WHERE user_id = ? AND expires_at > ? ORDER BY created_at DESC",
+            (user_id, now),
+        ).fetchall()
+    sessions = []
+    for row in rows:
+        sessions.append(
+            {
+                "id": row["token_hash"][:12],
+                "created_at": time.strftime(
+                    "%Y-%m-%dT%H:%M:%SZ", time.gmtime(row["created_at"])
+                ),
+                "expires_at": time.strftime(
+                    "%Y-%m-%dT%H:%M:%SZ", time.gmtime(row["expires_at"])
+                ),
+                "current": bool(current_hash and row["token_hash"] == current_hash),
+            }
+        )
+    return sessions
+
+
+def revoke_session(user_id: int, session_id: str) -> bool:
+    """Revoke one of the clinician's sessions by its public id prefix."""
+    _init()
+    with _lock, _connect() as conn:
+        rows = conn.execute(
+            "SELECT token_hash FROM tokens WHERE user_id = ? AND expires_at > ?",
+            (user_id, time.time()),
+        ).fetchall()
+        for row in rows:
+            if row["token_hash"][:12] == session_id:
+                conn.execute("DELETE FROM tokens WHERE token_hash = ?", (row["token_hash"],))
+                return True
+    return False
+
+
+def revoke_other_sessions(user_id: int, current_token: str) -> int:
+    """Sign out every session except the current one. Returns count revoked."""
+    _init()
+    current_hash = _token_hash(current_token)
+    with _lock, _connect() as conn:
+        cursor = conn.execute(
+            "DELETE FROM tokens WHERE user_id = ? AND token_hash != ?",
+            (user_id, current_hash),
+        )
+        return cursor.rowcount
+
+
+def change_password(user_id: int, current_password: str, new_password: str) -> bool:
+    """Rotate the password after verifying the current one.
+
+    All other sessions are revoked so stolen tokens die with the change.
+    """
+    _init()
+    with _connect() as conn:
+        row = conn.execute(
+            "SELECT password_hash, salt FROM users WHERE id = ?", (user_id,)
+        ).fetchone()
+    if row is None or _hash_password(current_password, row["salt"]) != row["password_hash"]:
+        return False
+    if len(new_password) < 8 or len(new_password) > 256:
+        raise ValueError("New password must be 8-256 characters.")
+    salt = secrets.token_bytes(16).hex()
+    new_hash = _hash_password(new_password, salt)
+    with _lock, _connect() as conn:
+        conn.execute(
+            "UPDATE users SET password_hash = ?, salt = ? WHERE id = ?",
+            (new_hash, salt, user_id),
+        )
+        conn.execute(
+            "DELETE FROM tokens WHERE user_id = ? AND token_hash != ?",
+            (user_id, "__none__"),  # revoke all; caller re-issues a fresh token
+        )
+    return True
+
+
 # ---------------------------------------------------------------------------
 # Screening history (owner-scoped)
 # ---------------------------------------------------------------------------
@@ -351,6 +443,35 @@ def clear_screenings(user_id: int) -> None:
 # Clinician notes — private, owner-scoped, one note per patient name
 # ---------------------------------------------------------------------------
 
+def record_audit(user_id: int | None, action: str, detail: str = "") -> None:
+    """Append an audit entry. Best-effort: never raises to the caller."""
+    try:
+        _init()
+        created_at = time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime()) + "Z"
+        with _lock, _connect() as conn:
+            conn.execute(
+                "INSERT INTO audit_log (user_id, action, detail, created_at) VALUES (?, ?, ?, ?)",
+                (user_id, str(action)[:64], str(detail or "")[:512], created_at),
+            )
+    except Exception:
+        pass
+
+
+def list_audit(user_id: int, limit: int = 100) -> list[dict[str, Any]]:
+    """The clinician's own audit trail, newest first."""
+    _init()
+    with _connect() as conn:
+        rows = conn.execute(
+            "SELECT action, detail, created_at FROM audit_log "
+            "WHERE user_id = ? ORDER BY id DESC LIMIT ?",
+            (user_id, limit),
+        ).fetchall()
+    return [
+        {"action": row["action"], "detail": row["detail"], "created_at": row["created_at"]}
+        for row in rows
+    ]
+
+
 def _normalise_patient(name: str) -> str:
     cleaned = " ".join(str(name or "").split())
     if not cleaned or len(cleaned) > 120:
@@ -387,6 +508,146 @@ def list_notes(user_id: int) -> list[dict[str, Any]]:
         {"patient_name": row["patient_name"], "body": row["body"], "updated_at": row["updated_at"]}
         for row in rows
     ]
+
+
+# ---------------------------------------------------------------------------
+# Patient timeline — owner-scoped aggregation across records for one patient
+# ---------------------------------------------------------------------------
+
+def list_patients(user_id: int) -> list[dict[str, Any]]:
+    """Distinct patient labels the clinician has used, with record counts.
+
+    Sources: screenings, notes and consultations. Names are merged
+    case-insensitively; the most recent spelling wins.
+    """
+    _init()
+    merged: dict[str, dict[str, Any]] = {}
+    with _connect() as conn:
+        for table, count_key, stamp_col, extra in (
+            ("screenings", "screenings", "created_at", "AND patient_name != ''"),
+            ("patient_notes", "notes", "updated_at", ""),
+            ("consultations", "consultations", "created_at", "AND patient_name != ''"),
+        ):
+            rows = conn.execute(
+                f"SELECT patient_name, COUNT(*) AS n, MAX({stamp_col}) AS last "
+                f"FROM {table} WHERE owner_id = ? {extra} "
+                f"GROUP BY patient_name COLLATE NOCASE",
+                (user_id,),
+            ).fetchall()
+            for row in rows:
+                # Merge case and spacing variants under one canonical key.
+                canonical = " ".join(row["patient_name"].split())
+                key = canonical.casefold()
+                entry = merged.setdefault(
+                    key,
+                    {"patient_name": canonical, "screenings": 0,
+                     "notes": 0, "consultations": 0, "last_activity": ""},
+                )
+                entry[count_key] += row["n"]
+                if row["last"] and row["last"] > entry["last_activity"]:
+                    entry["last_activity"] = row["last"]
+                    entry["patient_name"] = canonical
+    items = sorted(merged.values(), key=lambda e: e["last_activity"], reverse=True)
+    for entry in items:
+        entry["total"] = entry["screenings"] + entry["consultations"] + (1 if entry["notes"] else 0)
+    return items
+
+
+def patient_timeline(user_id: int, patient_name: str) -> dict[str, Any] | None:
+    """All records the clinician tagged with this patient name, owner-scoped.
+
+    Case and whitespace variants of the name are merged, matching the
+    grouping used by :func:`list_patients`. Returns None when the clinician
+    has no record under that name.
+    """
+    _init()
+    canonical_key = " ".join(str(patient_name or "").split()).casefold()
+    if not canonical_key:
+        raise ValueError("Patient name is required.")
+
+    with _connect() as conn:
+        variants: list[str] = []
+        for table in ("screenings", "patient_notes", "consultations"):
+            for row in conn.execute(
+                f"SELECT DISTINCT patient_name FROM {table} WHERE owner_id = ?",
+                (user_id,),
+            ).fetchall():
+                if " ".join(row["patient_name"].split()).casefold() == canonical_key:
+                    if row["patient_name"] not in variants:
+                        variants.append(row["patient_name"])
+        if not variants:
+            return None
+
+        placeholders = ",".join("?" for _ in variants)
+        params = [user_id, *variants]
+
+        screening_rows = conn.execute(
+            f"SELECT id, created_at, text, probability, risk_level, prediction, symptoms, features "
+            f"FROM screenings WHERE owner_id = ? AND patient_name IN ({placeholders}) "
+            f"ORDER BY id DESC",
+            params,
+        ).fetchall()
+        note_rows = conn.execute(
+            f"SELECT patient_name, body, updated_at FROM patient_notes "
+            f"WHERE owner_id = ? AND patient_name IN ({placeholders})",
+            params,
+        ).fetchall()
+        consultation_rows = conn.execute(
+            f"SELECT id, created_at, title, payload FROM consultations "
+            f"WHERE owner_id = ? AND patient_name IN ({placeholders}) ORDER BY id DESC",
+            params,
+        ).fetchall()
+        consultation_display = conn.execute(
+            f"SELECT patient_name FROM consultations WHERE owner_id = ? AND patient_name IN ({placeholders}) "
+            f"ORDER BY id DESC LIMIT 1",
+            params,
+        ).fetchone()
+        screening_display = conn.execute(
+            f"SELECT patient_name FROM screenings WHERE owner_id = ? AND patient_name IN ({placeholders}) "
+            f"ORDER BY id DESC LIMIT 1",
+            params,
+        ).fetchone()
+
+    # Prefer the deliberately-typed note spelling for display, then the most
+    # recent consultation, then the most recent screening label.
+    if note_rows:
+        display = note_rows[0]["patient_name"]
+    elif consultation_display:
+        display = consultation_display["patient_name"]
+    elif screening_display:
+        display = screening_display["patient_name"]
+    else:
+        display = variants[0]
+
+    return {
+        "patient_name": " ".join(display.split()),
+        "screenings": [
+            {
+                "id": row["id"],
+                "createdAt": row["created_at"],
+                "text": row["text"],
+                "probability": row["probability"],
+                "risk_level": row["risk_level"],
+                "prediction": row["prediction"],
+                "symptoms": json_loads(row["symptoms"]),
+                "features": json_loads(row["features"]),
+            }
+            for row in screening_rows
+        ],
+        "note": (
+            {"body": note_rows[0]["body"], "updated_at": note_rows[0]["updated_at"]}
+            if note_rows else None
+        ),
+        "consultations": [
+            {
+                "id": row["id"],
+                "createdAt": row["created_at"],
+                "title": row["title"],
+                "payload": json_loads(row["payload"]),
+            }
+            for row in consultation_rows
+        ],
+    }
 
 
 # ---------------------------------------------------------------------------

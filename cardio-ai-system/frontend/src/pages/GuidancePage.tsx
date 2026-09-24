@@ -52,8 +52,8 @@ const WORKFLOWS = [
     steps: [
       "Every screening auto-saves to your account, newest first, with per-entry delete and clear-all.",
       "My notes is your private notebook: one note per patient name, editable any time.",
-      "Notes exist only in your account — no other clinician on this machine can read them.",
-      "Use the patient tag on a screening to keep the trail: narrative → score → note."
+      "Patients gathers everything you tagged under one name — screenings, note, consultations — on a printable timeline.",
+      "Security shows your active sessions and recent account activity; revoke any session you don't recognise."
     ]
   }
 ];
@@ -81,7 +81,7 @@ const PRINCIPLES = [
     icon: NotebookPen,
     title: "Your records are yours",
     detail:
-      "Screenings, consultations and notes are scoped to the signed-in account. Other accounts on this machine can never see them."
+      "Screenings, consultations and notes are scoped to the signed-in account. Other accounts on this machine can never see them, and the workspace auto-locks after 15 minutes without activity."
   }
 ];
 

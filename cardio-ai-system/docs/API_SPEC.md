@@ -261,6 +261,34 @@ case-insensitive, whitespace-normalised).
 // 422 — validation failure (empty or >120-char name)
 ```
 
+## GET /patients *(auth)*
+
+Distinct patient labels the clinician has tagged across screenings, notes and
+consultations, with per-source counts and last activity, merged
+case-insensitively (whitespace-normalised).
+
+## GET /patients/timeline?patient=NAME *(auth)*
+
+All of the clinician's records under that patient label: `screenings[]`,
+`note`, `consultations[]`. Variants of the name (case/spacing) are merged.
+404 when the clinician has no record under the name.
+
+## POST /auth/change-password *(auth)*
+
+Body `{ current_password, new_password }`. Verifies the current password,
+rotates the stored hash, revokes **all** sessions, and returns a fresh
+`{ token, user }` for the caller. 401 on wrong current password.
+
+## GET /auth/sessions · DELETE /auth/sessions/{id} · POST /auth/sessions/revoke-others *(auth)*
+
+List active sessions (`id` is a public 12-char prefix, `current` marks this
+device), revoke one, or revoke every session except the caller's.
+
+## GET /auth/audit *(auth)*
+
+The clinician's own audit trail (sign-ins, sign-outs, password changes,
+session revocations), newest first, capped at 100 entries.
+
 ## Non-goals
 - No pagination or filtering; lists are capped (200 entries, newest first).
 - No batch endpoints; one narrative / one WS frame per call.

@@ -8,6 +8,7 @@ import {
   Mic,
   NotebookPen,
   ShieldCheck,
+  Users,
   type LucideIcon
 } from "lucide-react";
 import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
@@ -34,7 +35,9 @@ const NAV: NavItem[] = [
   { to: "/workflow/start", label: "Consultations", short: "Consult", icon: ClipboardList, group: "Records" },
   { to: "/history", label: "Screening history", short: "History", icon: History, group: "Records" },
   { to: "/notes", label: "My notes", short: "Notes", icon: NotebookPen, group: "Records" },
+  { to: "/patients", label: "Patients", short: "Patients", icon: Users, group: "Records" },
   { to: "/guidance", label: "Guidance", short: "Guide", icon: BookOpen, group: "System" },
+  { to: "/security", label: "Security", short: "Security", icon: ShieldCheck, group: "System" },
   { to: "/agents", label: "Agent registry", short: "Agents", icon: Bot, group: "System" }
 ];
 

@@ -160,3 +160,25 @@ render crash shows a recovery screen instead of a white page.
 **Consequences:** Restore procedure = stop server, copy a backup over
 `pulseiq.db`, restart. CI now runs the auth suite (`test_auth.py`, 24
 checks) so isolation and lockout regressions fail the build.
+
+## ADR-012 · Negation-aware extraction, patient timeline and session controls
+
+Date: 2026-09-24. Status: accepted.
+
+Three changes shipped together because they share one motivation — a
+cardiologist must be able to defend every number the workspace shows.
+
+1. **Negation-aware extraction.** The dictionary matcher is substring-based,
+   so "denies chest pain" previously scored as chest pain. A cue window (3
+   meaningful words, connectors transparent) now suppresses negated mentions.
+   Limitation: cue-after-subject forms ("chest pain denied") still match —
+   accepted because dictated narratives put the cue first, and the false
+   positive is visible in the concepts list.
+2. **Patient timeline.** Tagged screenings, notes and consultations roll up
+   per patient (`/patients`, `/patients/timeline`), owner-scoped like every
+   other record. Name variants merge case-insensitively after whitespace
+   normalisation; the deliberately-typed note spelling wins for display.
+3. **Session controls and audit.** Password change rotates all sessions,
+   revocation is per-session or "everyone else", and an append-only audit
+   log records auth events for the account owner. The UI auto-locks after
+   15 idle minutes.

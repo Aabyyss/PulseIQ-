@@ -98,3 +98,39 @@ html:not(.dark) .shadow-pop { box-shadow: 0 16px 44px -14px rgba(76, 29, 149, 0.
 /* Gradient + opacity utilities seen in the codebase */
 html:not(.dark) .from-accent\/10 { --tw-gradient-from: rgba(124, 58, 237, 0.08); --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to, rgba(124, 58, 237, 0)); }
 html:not(.dark) .text-accent-ink { color: #ffffff; }
+
+/*
+ * PRINT — referral summaries (Patients page, consultation reports).
+ * Forces light colours so printouts stay legible regardless of the active
+ * theme, and strips chrome that only makes sense on screen.
+ */
+@media print {
+  html, html.dark {
+    --wash-a: transparent;
+    --wash-b: transparent;
+  }
+  html, html.dark, html:not(.dark) body {
+    background: #fff !important;
+    color: #1f2937 !important;
+  }
+  aside,
+  nav,
+  header,
+  .print\:hidden,
+  button {
+    display: none !important;
+  }
+  main {
+    padding: 0 !important;
+  }
+  .bg-panel, .bg-inset\/60, .bg-elev\/30, .bg-inset {
+    background: #fff !important;
+  }
+  .border-line, .border-line2 {
+    border-color: #d1d5db !important;
+  }
+  .text-fg { color: #111827 !important; }
+  .text-muted, .text-faint { color: #374151 !important; }
+  .text-accent { color: #6d28d9 !important; }
+}
+

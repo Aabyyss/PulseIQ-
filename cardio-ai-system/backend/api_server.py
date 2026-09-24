@@ -97,6 +97,7 @@ def auth_register(payload: RegisterRequest):
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     token = auth_store.issue_token(user["id"])
+    auth_store.record_audit(user["id"], "account.created", payload.email)
     return _session_response(user, token)
 
 
@@ -120,6 +121,7 @@ def auth_login(payload: LoginRequest, request: Request):
         raise HTTPException(status_code=401, detail="Incorrect email or password.")
     rate_limit.record_success(_client_ip(request), payload.email)
     token = auth_store.issue_token(user["id"])
+    auth_store.record_audit(user["id"], "auth.login", _client_ip(request))
     return _session_response(user, token)
 
 
@@ -128,7 +130,55 @@ def auth_logout(request: Request, user: dict = Depends(get_current_user)):
     token = request.headers.get("authorization", "").removeprefix("Bearer ").strip()
     if token:
         auth_store.revoke_token(token)
+    auth_store.record_audit(user["id"], "auth.logout")
     return {"ok": True}
+
+
+class PasswordChange(BaseModel):
+    current_password: str = Field(min_length=1, max_length=256)
+    new_password: str = Field(min_length=8, max_length=256)
+
+
+@app.post("/auth/change-password")
+def auth_change_password(payload: PasswordChange, request: Request, user: dict = Depends(get_current_user)):
+    try:
+        changed = auth_store.change_password(
+            user["id"], payload.current_password, payload.new_password
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    if not changed:
+        raise HTTPException(status_code=401, detail="Current password is incorrect.")
+    token = auth_store.issue_token(user["id"])
+    auth_store.record_audit(user["id"], "auth.password_changed", _client_ip(request))
+    return {"token": token, "user": user}
+
+
+@app.get("/auth/sessions")
+def auth_sessions(request: Request, user: dict = Depends(get_current_user)):
+    token = request.headers.get("authorization", "").removeprefix("Bearer ").strip()
+    return {"items": auth_store.list_sessions(user["id"], token or None)}
+
+
+@app.delete("/auth/sessions/{session_id}")
+def auth_session_revoke(session_id: str, user: dict = Depends(get_current_user)):
+    ok = auth_store.revoke_session(user["id"], session_id)
+    if ok:
+        auth_store.record_audit(user["id"], "auth.session_revoked", session_id)
+    return {"ok": ok}
+
+
+@app.post("/auth/sessions/revoke-others")
+def auth_sessions_revoke_others(request: Request, user: dict = Depends(get_current_user)):
+    token = request.headers.get("authorization", "").removeprefix("Bearer ").strip()
+    count = auth_store.revoke_other_sessions(user["id"], token or "")
+    auth_store.record_audit(user["id"], "auth.others_revoked", str(count))
+    return {"revoked": count}
+
+
+@app.get("/auth/audit")
+def auth_audit(user: dict = Depends(get_current_user)):
+    return {"items": auth_store.list_audit(user["id"])}
 
 
 @app.get("/auth/me")
@@ -186,6 +236,27 @@ def notes_create(data: NotesUpsert, user: dict = Depends(get_current_user)):
         return auth_store.upsert_note(user["id"], data.patient_name, data.body)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+# ---------------------------------------------------------------------------
+# Patient timeline — owner-scoped aggregation for one patient label
+# ---------------------------------------------------------------------------
+
+
+@app.get("/patients")
+def patients_list(user: dict = Depends(get_current_user)):
+    return {"items": auth_store.list_patients(user["id"])}
+
+
+@app.get("/patients/timeline")
+def patient_timeline(patient: str, user: dict = Depends(get_current_user)):
+    try:
+        timeline = auth_store.patient_timeline(user["id"], patient)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    if timeline is None:
+        raise HTTPException(status_code=404, detail="Patient not found.")
+    return timeline
 
 
 @app.delete("/history/screenings/{screening_id}")

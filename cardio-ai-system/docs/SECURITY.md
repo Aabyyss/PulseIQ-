@@ -15,6 +15,18 @@ the same owner-scoping rule as every other record: queries filter by the
 authenticated user id, never by a client-supplied name. Note bodies stay
 inside the local database and are excluded from exports and logs.
 
+## Session controls (added 2026-09-24)
+
+- Clinicians can list their active sessions, revoke any of them, or revoke
+  everything except the current device (`/auth/sessions*`).
+- Changing the password revokes **all** sessions immediately; the caller
+  receives the only surviving token.
+- An append-only audit trail records account creation, sign-ins, sign-outs,
+  password changes and session revocations, visible to the account owner at
+  `/auth/audit`.
+- The workspace auto-locks after 15 minutes without input: the session token
+  is revoked and the clinician must sign in again.
+
 ## Authentication (multi-user, added 2026-09-23)
 
 - Accounts are per-clinician: email + password, stored in SQLite at

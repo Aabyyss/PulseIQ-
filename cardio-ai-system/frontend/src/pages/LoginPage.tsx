@@ -1,6 +1,6 @@
 import { FormEvent, useState } from "react";
 import { Link, Navigate, useLocation } from "react-router-dom";
-import { AlertCircle, LoaderCircle, Lock, Mail, Stethoscope, UserRound } from "lucide-react";
+import { AlertCircle, Clock, LoaderCircle, Lock, Mail, Stethoscope, UserRound } from "lucide-react";
 import { EcgTrace } from "@/components/app/ecg-trace";
 import { LogoMark, Wordmark } from "@/components/app/logo";
 import { ThemeToggle } from "@/components/app/theme-toggle";
@@ -16,7 +16,7 @@ const inputClass =
 
 export function LoginPage() {
   const { user, ready, signIn, signUp } = useAuth();
-  const { state } = useLocation() as { state?: { from?: string } };
+  const { state } = useLocation() as { state?: { from?: string; idle?: boolean } };
   const [mode, setMode] = useState<Mode>("signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -105,6 +105,16 @@ export function LoginPage() {
               ? "Your screening and consultation history is scoped to your account."
               : "Set up an account to keep your records private to you."}
           </p>
+
+          {state?.idle ? (
+            <Alert className="mt-5">
+              <Clock />
+              <AlertTitle>Locked after inactivity</AlertTitle>
+              <AlertDescription>
+                You were signed out after 15 minutes without activity. Your records stayed safe.
+              </AlertDescription>
+            </Alert>
+          ) : null}
 
           {error ? (
             <Alert variant="destructive" className="mt-5">
