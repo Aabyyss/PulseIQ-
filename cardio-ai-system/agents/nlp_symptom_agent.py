@@ -42,7 +42,27 @@ symptom_dictionary = {
         # Urdu script + Roman Urdu
         "سینے میں درد", "سینے کا درد", "چھاتی میں درد", "سینے میں جلن",
         "seene mein dard", "seenay mein dard", "seene mein darad",
-        "chati mein dard", "seene mein jalan"
+        "chati mein dard", "seene mein jalan",
+        # Classic angina radiation - patients name the destination, not the
+        # chest, so these collocations carry the chest-pain concept.
+        "pain radiating to my left arm", "pain radiating to left arm",
+        "pain radiating to my arm", "pain radiating to my jaw",
+        "pain radiating to the jaw", "pain radiating to my neck",
+        "pain radiating to my back", "pain radiating to my shoulder",
+        "pain spreading to my arm", "pain spreading to my jaw",
+        "pain spreading to my neck", "pain spreading to my back",
+        "spreads to my arm", "spreads to my jaw",
+        "radiating to my left arm", "radiating to my arm",
+        "radiating to my jaw", "radiating to my neck",
+        "radiating to my back", "radiating to my shoulder",
+        "left arm and jaw pain", "jaw and arm pain",
+        "pain going to my left arm", "pain going to my arm",
+        "pain going to my jaw",
+        "درد بازو کی طرف", "درد جبڑے کی طرف", "درد گردن کی طرف",
+        "درد کمر کی طرف", "درد کندھے کی طرف",
+        "dard bazu ki taraf", "dard jabre ki taraf",
+        "dard gardan ki taraf", "dard kamar ki taraf",
+        "dard kandhe ki taraf"
     ],
     "shortness of breath": [
         "shortness of breath", "breathing difficulty", "breathlessness",

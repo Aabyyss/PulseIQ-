@@ -67,6 +67,13 @@ PHRASE_CASES = [
     ("pasina aa raha hai bohat", {"sweating"}),
     ("پسینہ آ رہا ہے اور چکر بھی", {"sweating", "dizziness"}),
     ("i feel great today", set()),
+    # Radiation phrasings - patients name the destination, not the chest.
+    # Orthopedic look-alikes must stay unmatched.
+    ("crushing chest pain radiating to my left arm", {"chest pain"}),
+    ("pain radiating to my jaw and i feel nauseous", {"chest pain", "nausea"}),
+    ("dard jabre ki taraf ja raha hai", {"chest pain"}),
+    ("my left arm hurts when i lift it", set()),
+    ("i pulled a muscle in my back", set()),
     # No false triggers on unrelated words
     ("hello doctor", set()),
     ("i have a headache and fever", set()),
