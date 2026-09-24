@@ -10,6 +10,11 @@ accounts share one machine-level server, so the primary risks are
 **cross-account data leakage** and data egress off the device. Everything
 below follows from those two.
 
+Patient notes (`/notes`) and the optional patient tag on screenings follow
+the same owner-scoping rule as every other record: queries filter by the
+authenticated user id, never by a client-supplied name. Note bodies stay
+inside the local database and are excluded from exports and logs.
+
 ## Authentication (multi-user, added 2026-09-23)
 
 - Accounts are per-clinician: email + password, stored in SQLite at

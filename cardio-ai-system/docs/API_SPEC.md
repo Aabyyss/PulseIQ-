@@ -231,6 +231,36 @@ Clears the caller's consultation records. **200** `{ "ok": true }`
 
 ---
 
+## POST /diagnose — patient tag *(auth)*
+
+The `/diagnose` request accepts an optional `patient_name` string (trimmed,
+1–120 chars). It is stored on the screening row and echoed back in the
+response as `patient_name`, so history entries can be filed under a patient
+label.
+
+## GET /notes *(auth)*
+
+List the signed-in clinician's patient notes, most recently updated first.
+
+```json
+{ "items": [{ "patient_name": "Jane Roe", "body": "…", "updated_at": "2026-09-23T23:49:44Z" }] }
+```
+
+## POST /notes *(auth)*
+
+Create or replace the note for a patient (one note per patient name,
+case-insensitive, whitespace-normalised).
+
+```json
+// request
+{ "patient_name": "Jane Roe", "body": "Suspected angina; stress echo ordered." }
+
+// 200 — the stored note
+{ "patient_name": "Jane Roe", "body": "…", "updated_at": "…" }
+
+// 422 — validation failure (empty or >120-char name)
+```
+
 ## Non-goals
 - No pagination or filtering; lists are capped (200 entries, newest first).
 - No batch endpoints; one narrative / one WS frame per call.
