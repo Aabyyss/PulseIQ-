@@ -1,16 +1,19 @@
 import {
   Activity,
+  BookOpen,
   Bot,
   ClipboardList,
   History,
   LayoutGrid,
   Mic,
+  NotebookPen,
   ShieldCheck,
   type LucideIcon
 } from "lucide-react";
 import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
 import { EcgTrace } from "@/components/app/ecg-trace";
 import { LogoMark, Wordmark } from "@/components/app/logo";
+import { ThemeToggle } from "@/components/app/theme-toggle";
 import { initialsOf, useAuth } from "@/lib/auth";
 import { providerLabel, useEngineStatus } from "@/lib/engine";
 import { cn } from "@/lib/utils";
@@ -30,6 +33,8 @@ const NAV: NavItem[] = [
   { to: "/live", label: "Live copilot", short: "Copilot", icon: Mic, group: "Workspace" },
   { to: "/workflow/start", label: "Consultations", short: "Consult", icon: ClipboardList, group: "Records" },
   { to: "/history", label: "Screening history", short: "History", icon: History, group: "Records" },
+  { to: "/notes", label: "My notes", short: "Notes", icon: NotebookPen, group: "Records" },
+  { to: "/guidance", label: "Guidance", short: "Guide", icon: BookOpen, group: "System" },
   { to: "/agents", label: "Agent registry", short: "Agents", icon: Bot, group: "System" }
 ];
 
@@ -142,10 +147,13 @@ function SidebarFooter() {
 
       <div className="relative overflow-hidden rounded-lg border border-line bg-inset px-3 pt-1">
         <EcgTrace className="-mx-1 h-9 opacity-70" speed="7s" />
-        <p className="flex items-center gap-1.5 pb-2.5 pt-0.5 text-2xs text-faint">
-          <ShieldCheck className="h-3 w-3" strokeWidth={1.75} />
-          On-device · Private per account
-        </p>
+        <Link
+          to="/guidance"
+          className="flex items-center gap-1.5 pb-2.5 pt-0.5 text-2xs text-faint transition-colors hover:text-muted"
+        >
+          <BookOpen className="h-3 w-3" strokeWidth={1.75} />
+          How to use PulseIQ
+        </Link>
       </div>
 
       {user ? (
@@ -204,6 +212,7 @@ function Topbar({ title }: { title: string }) {
         <div className="hidden sm:block">
           <EngineStatus />
         </div>
+        <ThemeToggle />
         <a
           href="https://github.com/Aabyyss/PulseIQ-"
           target="_blank"

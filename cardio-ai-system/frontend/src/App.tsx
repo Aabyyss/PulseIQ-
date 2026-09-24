@@ -4,6 +4,8 @@ import { LoginPage } from "@/pages/LoginPage";
 import { DiagnosePage } from "@/pages/DiagnosePage";
 import { HistoryPage } from "@/pages/HistoryPage";
 import { HomePage } from "@/pages/HomePage";
+import { GuidancePage } from "@/pages/GuidancePage";
+import { NotesPage } from "@/pages/NotesPage";
 import { LiveConsultationPage } from "@/pages/LiveConsultationPage";
 import { ResearchAgentsPage } from "@/pages/ResearchAgentsPage";
 import { WorkflowSessionPage } from "@/pages/WorkflowSessionPage";
@@ -39,6 +41,14 @@ export default function App() {
     <Routes>
       <Route path="/login" element={<LoginPage />} />
       <Route
+        path="/guidance"
+        element={
+          <AppShell>
+            <GuidancePage />
+          </AppShell>
+        }
+      />
+      <Route
         path="*"
         element={
           <RequireAuth>
@@ -49,6 +59,7 @@ export default function App() {
               <Route path="/workflow/start" element={<WorkflowStartPage />} />
               <Route path="/workflow/session" element={<WorkflowSessionPage /> } />
               <Route path="/history" element={<HistoryPage />} />
+              <Route path="/notes" element={<NotesPage />} />
               <Route path="/agents" element={<ResearchAgentsPage />} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
