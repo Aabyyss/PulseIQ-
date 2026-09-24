@@ -50,6 +50,17 @@ html:not(.dark) .text-muted { color: #645c85; }
 html:not(.dark) .text-faint { color: #6e6690; }
 html:not(.dark) .text-faint\/60 { color: rgba(110, 102, 144, 0.6); }
 
+/* Headings get their colour from `@apply text-fg` in index.css, which
+   compiles to the dark literal — the utility override above cannot reach
+   it, so restate it for the elements themselves. */
+html:not(.dark) h1, html:not(.dark) h2,
+html:not(.dark) h3, html:not(.dark) h4 { color: #2a2440; }
+
+/* Component classes in index.css that bake dark literals via @apply. */
+html:not(.dark) .label { color: #6e6690; }
+html:not(.dark) .rule { background-color: #e7e1f2; }
+html:not(.dark) select option { background-color: #f5f2fb; color: #2a2440; }
+
 html:not(.dark) .text-accent { color: #7c3aed; }
 html:not(.dark) .text-accent\/70 { color: rgba(124, 58, 237, 0.75); }
 html:not(.dark) .text-accent\/50 { color: rgba(124, 58, 237, 0.6); }
@@ -76,16 +87,19 @@ html:not(.dark) .hover\:border-danger\/40:hover { border-color: rgba(220, 38, 38
 html:not(.dark) .hover\:text-danger-strong:hover { color: #b91c1c; }
 
 html:not(.dark) .text-warn { color: #b45309; }
+html:not(.dark) .text-warn-strong { color: #92400e; }
 html:not(.dark) .bg-warn { background-color: #b45309; }
 html:not(.dark) .bg-warn\/10 { background-color: rgba(180, 83, 9, 0.08); }
 html:not(.dark) .bg-warn\/15 { background-color: rgba(180, 83, 9, 0.1); }
 
 html:not(.dark) .text-ok { color: #15803d; }
+html:not(.dark) .text-ok-strong { color: #166534; }
 html:not(.dark) .bg-ok { background-color: #15803d; }
 html:not(.dark) .bg-ok\/10 { background-color: rgba(21, 128, 61, 0.08); }
 html:not(.dark) .bg-ok\/15 { background-color: rgba(21, 128, 61, 0.1); }
 
 html:not(.dark) .text-info { color: #2563eb; }
+html:not(.dark) .text-info-strong { color: #1d4ed8; }
 html:not(.dark) .bg-info\/10 { background-color: rgba(37, 99, 235, 0.08); }
 html:not(.dark) .bg-info\/15 { background-color: rgba(37, 99, 235, 0.1); }
 html:not(.dark) .bg-info\/20 { background-color: rgba(37, 99, 235, 0.12); }
