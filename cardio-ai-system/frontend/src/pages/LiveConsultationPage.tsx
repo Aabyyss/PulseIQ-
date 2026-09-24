@@ -122,7 +122,10 @@ export function LiveConsultationPage() {
       getConsultationSocketUrl() + (token ? `?token=${encodeURIComponent(token)}` : "")
     );
 
-    ws.onopen = () => setSocketConnected(true);
+    ws.onopen = () => {
+      setSocketConnected(true);
+      setError(""); // a later reconnect must clear an earlier failure banner
+    };
     ws.onclose = () => setSocketConnected(false);
     ws.onerror = () =>
       setError("Realtime connection failed. Start the PulseIQ backend on localhost:8000 and refresh.");

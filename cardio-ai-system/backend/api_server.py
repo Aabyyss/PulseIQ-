@@ -1,3 +1,5 @@
+import asyncio
+
 from fastapi import Depends, FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -429,8 +431,15 @@ async def consultation_socket(websocket: WebSocket, token: str = ""):
                 report_text = ""
             if not isinstance(language_code, str) or not language_code.strip():
                 language_code = "en-US"
-            processed = process_live_transcript_entry(
-                text=text, speaker=speaker, report_text=report_text, language_code=language_code
+            # Process off the event loop: the copilot plan can call the
+            # local LLM for tens of seconds on CPU, and blocking here would
+            # freeze every other request and websocket on the server.
+            processed = await asyncio.to_thread(
+                process_live_transcript_entry,
+                text=text,
+                speaker=speaker,
+                report_text=report_text,
+                language_code=language_code,
             )
             await websocket.send_json(processed)
     except WebSocketDisconnect:

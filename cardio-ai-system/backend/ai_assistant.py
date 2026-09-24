@@ -66,10 +66,14 @@ def _ollama_available() -> bool:
 # Generic LLM plumbing
 # ---------------------------------------------------------------------------
 
-def _call_ollama(prompt: str, timeout: int, json_mode: bool = False) -> str:
+def _call_ollama(prompt: str, timeout: int, json_mode: bool = False, max_tokens: int | None = None) -> str:
     payload: dict = {"model": OLLAMA_MODEL, "prompt": prompt, "stream": False}
     if json_mode:
         payload["format"] = "json"
+    if max_tokens:
+        # CPU inference on this device runs ~8-15 tok/s; without a cap the
+        # model rambles past 30s and the live copilot times out client-side.
+        payload["options"] = {"num_predict": max_tokens}
     req = request.Request(
         url=f"{OLLAMA_BASE_URL}/api/generate",
         data=json.dumps(payload).encode("utf-8"),
@@ -123,12 +127,12 @@ def _safe_parse_json(raw_text: str) -> dict:
     return json.loads(match.group(0))
 
 
-def _llm(prompt: str, timeout: int = 30, json_mode: bool = False) -> str:
+def _llm(prompt: str, timeout: int = 30, json_mode: bool = False, max_tokens: int | None = None) -> str:
     """Call the best available LLM; raise RuntimeError when none can answer."""
     provider = get_active_provider()
     if provider == "ollama":
         try:
-            return _call_ollama(prompt, timeout=timeout, json_mode=json_mode)
+            return _call_ollama(prompt, timeout=timeout, json_mode=json_mode, max_tokens=max_tokens)
         except Exception:
             pass  # fall through to gemini/local
     if provider == "gemini" or os.getenv("GEMINI_API_KEY", "").strip():
@@ -382,7 +386,12 @@ Rules:
 def generate_ai_copilot_plan(text: str, report_text: str, diagnosis: dict, symptoms: list[str]) -> dict:
     """Doctor copilot plan. Falls back to the local rule engine when no LLM is available."""
     try:
-        raw = _llm(_build_copilot_prompt(text, report_text, diagnosis, symptoms), timeout=30, json_mode=True)
+        raw = _llm(
+            _build_copilot_prompt(text, report_text, diagnosis, symptoms),
+            timeout=20,
+            json_mode=True,
+            max_tokens=300,  # plan JSON fits; truncation falls back to the instant local plan
+        )
         parsed = _safe_parse_json(raw)
         return {
             "doctor_questions": parsed.get("doctor_questions", []),
@@ -514,7 +523,7 @@ Language hint: {language_hint}
 Text:
 {text}
 """.strip()
-        translated = _llm(prompt, timeout=20)
+        translated = _llm(prompt, timeout=20, max_tokens=250)
         return translated.strip() or text
     except Exception:
         # No LLM available: return original text. Symptom dictionaries already
