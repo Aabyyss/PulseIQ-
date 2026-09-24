@@ -1,0 +1,100 @@
+/*
+ * LIGHT THEME — violet on white.
+ *
+ * Imported after Tailwind's base layers so these overrides win when <html>
+ * has no `dark` class (see lib/theme.ts). The dark palette lives in
+ * tailwind.config.ts and remains the default; this file only overrides it
+ * in light mode.
+ *
+ * Contrast notes: fg 13.9:1, muted 5.9:1, faint 5.3:1 on white — all AA.
+ * Accent #7C3AED on white is 5.1:1 (AA for normal text) and is paired with
+ * `accent-ink` white for solid fills.
+ */
+
+html:not(.dark) {
+  --tw-ring-offset-color: #ffffff;
+}
+
+html:not(.dark) body {
+  background-color: #ffffff;
+}
+
+html:not(.dark) .bg-canvas { background-color: #ffffff; }
+html:not(.dark) .bg-canvas\/70 { background-color: rgba(255, 255, 255, 0.7); }
+html:not(.dark) .bg-canvas\/85 { background-color: rgba(255, 255, 255, 0.85); }
+html:not(.dark) .bg-canvas\/95 { background-color: rgba(255, 255, 255, 0.95); }
+
+html:not(.dark) .bg-panel { background-color: #fcfbfe; }
+html:not(.dark) .bg-panel\/70 { background-color: rgba(252, 251, 254, 0.7); }
+html:not(.dark) .bg-elev { background-color: #f5f2fb; }
+html:not(.dark) .bg-elev\/60 { background-color: rgba(245, 242, 251, 0.6); }
+html:not(.dark) .bg-elev\/50 { background-color: rgba(245, 242, 251, 0.5); }
+html:not(.dark) .bg-elev\/40 { background-color: rgba(245, 242, 251, 0.4); }
+html:not(.dark) .bg-elev\/30 { background-color: rgba(245, 242, 251, 0.3); }
+html:not(.dark) .bg-elev\/70 { background-color: rgba(245, 242, 251, 0.7); }
+html:not(.dark) .bg-inset { background-color: #f7f5fc; }
+html:not(.dark) .bg-inset\/70 { background-color: rgba(247, 245, 252, 0.7); }
+
+html:not(.dark) .border-line { border-color: #e7e1f2; }
+html:not(.dark) .border-line2 { border-color: #d3c8ea; }
+html:not(.dark) .border-line2\/80 { border-color: rgba(211, 200, 234, 0.8); }
+html:not(.dark) .border-line\/60 { border-color: rgba(231, 225, 242, 0.6); }
+html:not(.dark) .bg-line { background-color: #e7e1f2; }
+html:not(.dark) .bg-line2 { background-color: #d3c8ea; }
+html:not(.dark) .bg-line2\/60 { background-color: rgba(211, 200, 234, 0.6); }
+html:not(.dark) .bg-line\/60 { background-color: rgba(231, 225, 242, 0.6); }
+
+html:not(.dark) .text-fg { color: #2a2440; }
+html:not(.dark) .text-muted { color: #645c85; }
+html:not(.dark) .text-faint { color: #6e6690; }
+html:not(.dark) .text-faint\/60 { color: rgba(110, 102, 144, 0.6); }
+
+html:not(.dark) .text-accent { color: #7c3aed; }
+html:not(.dark) .text-accent\/70 { color: rgba(124, 58, 237, 0.75); }
+html:not(.dark) .text-accent\/50 { color: rgba(124, 58, 237, 0.6); }
+html:not(.dark) .bg-accent { background-color: #7c3aed; }
+html:not(.dark) .bg-accent\/15 { background-color: rgba(124, 58, 237, 0.12); }
+html:not(.dark) .bg-accent\/70 { background-color: rgba(124, 58, 237, 0.75); }
+html:not(.dark) .bg-accent\/25 { background-color: rgba(124, 58, 237, 0.2); }
+html:not(.dark) .hover\:bg-accent\/90:hover { background-color: #6d28d9; }
+html:not(.dark) .ring-accent\/70 { --tw-ring-color: rgba(124, 58, 237, 0.45); }
+html:not(.dark) .border-accent\/45 { border-color: rgba(124, 58, 237, 0.45); }
+html:not(.dark) .border-accent\/40 { border-color: rgba(124, 58, 237, 0.4); }
+html:not(.dark) .border-accent\/30 { border-color: rgba(124, 58, 237, 0.3); }
+
+html:not(.dark) .text-danger { color: #dc2626; }
+html:not(.dark) .text-danger-strong { color: #b91c1c; }
+html:not(.dark) .bg-danger { background-color: #dc2626; }
+html:not(.dark) .bg-danger\/10 { background-color: rgba(220, 38, 38, 0.08); }
+html:not(.dark) .bg-danger\/15 { background-color: rgba(220, 38, 38, 0.1); }
+html:not(.dark) .bg-danger\/20 { background-color: rgba(220, 38, 38, 0.12); }
+html:not(.dark) .border-danger\/40 { border-color: rgba(220, 38, 38, 0.35); }
+html:not(.dark) .border-danger\/30 { border-color: rgba(220, 38, 38, 0.3); }
+html:not(.dark) .border-danger\/25 { border-color: rgba(220, 38, 38, 0.25); }
+html:not(.dark) .hover\:border-danger\/40:hover { border-color: rgba(220, 38, 38, 0.35); }
+html:not(.dark) .hover\:text-danger-strong:hover { color: #b91c1c; }
+
+html:not(.dark) .text-warn { color: #b45309; }
+html:not(.dark) .bg-warn { background-color: #b45309; }
+html:not(.dark) .bg-warn\/10 { background-color: rgba(180, 83, 9, 0.08); }
+html:not(.dark) .bg-warn\/15 { background-color: rgba(180, 83, 9, 0.1); }
+
+html:not(.dark) .text-ok { color: #15803d; }
+html:not(.dark) .bg-ok { background-color: #15803d; }
+html:not(.dark) .bg-ok\/10 { background-color: rgba(21, 128, 61, 0.08); }
+html:not(.dark) .bg-ok\/15 { background-color: rgba(21, 128, 61, 0.1); }
+
+html:not(.dark) .text-info { color: #2563eb; }
+html:not(.dark) .bg-info\/10 { background-color: rgba(37, 99, 235, 0.08); }
+html:not(.dark) .bg-info\/15 { background-color: rgba(37, 99, 235, 0.1); }
+html:not(.dark) .bg-info\/20 { background-color: rgba(37, 99, 235, 0.12); }
+
+/* Solid / inverted surfaces keep their dark fill for depth */
+html:not(.dark) .bg-\[\#0B0C0F\] { background-color: #0b0c0f; }
+html:not(.dark) .shadow-panel { box-shadow: 0 1px 2px rgba(42, 36, 64, 0.05), 0 10px 26px -18px rgba(76, 29, 149, 0.28); }
+html:not(.dark) .shadow-lift { box-shadow: 0 2px 6px rgba(42, 36, 64, 0.07), 0 18px 38px -22px rgba(76, 29, 149, 0.32); }
+html:not(.dark) .shadow-pop { box-shadow: 0 16px 44px -14px rgba(76, 29, 149, 0.3), 0 0 0 1px rgba(109, 40, 217, 0.08); }
+
+/* Gradient + opacity utilities seen in the codebase */
+html:not(.dark) .from-accent\/10 { --tw-gradient-from: rgba(124, 58, 237, 0.08); --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to, rgba(124, 58, 237, 0)); }
+html:not(.dark) .text-accent-ink { color: #ffffff; }

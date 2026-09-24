@@ -5,6 +5,7 @@ import App from "./App";
 import { ErrorBoundary } from "@/components/app/error-boundary";
 import { AuthProvider } from "@/lib/auth";
 import "./index.css";
+import "./light-theme.css";
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
