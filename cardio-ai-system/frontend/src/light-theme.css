@@ -17,6 +17,9 @@ html:not(.dark) {
 
 html:not(.dark) body {
   background-color: #ffffff;
+  /* body's colour is baked dark by `@apply text-fg` in index.css; uncolored
+     text (e.g. the mobile wordmark) would otherwise inherit near-white. */
+  color: #2a2440;
 }
 
 html:not(.dark) .bg-canvas { background-color: #ffffff; }
@@ -35,6 +38,24 @@ html:not(.dark) .bg-elev\/70 { background-color: rgba(245, 242, 251, 0.7); }
 html:not(.dark) .bg-inset { background-color: #f7f5fc; }
 html:not(.dark) .bg-inset\/70 { background-color: rgba(247, 245, 252, 0.7); }
 html:not(.dark) .bg-inset\/60 { background-color: rgba(247, 245, 252, 0.6); }
+
+/* Utilities used in the app but absent above kept their dark-palette
+   literals in light mode — the cause of the failed contrast audit (the
+   login brand panel rendered dark navy at 60% under dark-violet text). */
+html:not(.dark) .bg-canvas\/60 { background-color: rgba(255, 255, 255, 0.6); }
+html:not(.dark) .bg-elev\/95 { background-color: rgba(245, 242, 251, 0.95); }
+html:not(.dark) .hover\:bg-accent-strong:hover { background-color: #6d28d9; }
+html:not(.dark) .bg-accent\/5 { background-color: rgba(124, 58, 237, 0.05); }
+html:not(.dark) .bg-accent\/10 { background-color: rgba(124, 58, 237, 0.08); }
+html:not(.dark) .text-accent\/60 { color: rgba(124, 58, 237, 0.65); }
+html:not(.dark) .border-accent\/20 { border-color: rgba(124, 58, 237, 0.22); }
+html:not(.dark) .border-accent\/25 { border-color: rgba(124, 58, 237, 0.25); }
+html:not(.dark) .border-info\/25 { border-color: rgba(37, 99, 235, 0.3); }
+html:not(.dark) .border-info\/30 { border-color: rgba(37, 99, 235, 0.35); }
+html:not(.dark) .border-ok\/25 { border-color: rgba(21, 128, 61, 0.3); }
+html:not(.dark) .border-ok\/30 { border-color: rgba(21, 128, 61, 0.35); }
+html:not(.dark) .border-warn\/25 { border-color: rgba(180, 83, 9, 0.3); }
+html:not(.dark) .border-warn\/30 { border-color: rgba(180, 83, 9, 0.35); }
 
 html:not(.dark) .border-line { border-color: #e7e1f2; }
 html:not(.dark) .border-line2 { border-color: #d3c8ea; }
