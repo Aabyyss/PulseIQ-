@@ -31,6 +31,11 @@ CASES = [
     # Roman-Urdu negation cues
     ("nahi hai thakan", set()),
     ("koi dard nahi", set()),
+    # "but" flips polarity: it must stop the negation window instead of
+    # leaking the cue across the contrast (regression for the window fix).
+    ("no nausea but severe sweating", {"sweating"}),
+    ("no chest pain but severe dizziness", {"dizziness"}),
+    ("no dizziness but chest pain at night", {"chest pain"}),
 ]
 
 # Patient-phrasing extraction: casual English, Roman Urdu, Urdu script.

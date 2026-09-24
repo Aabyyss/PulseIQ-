@@ -124,8 +124,11 @@ _ROMAN_NEGATION_CUES = ("nahi", "nahin", "koi")
 # apply. Connector words ("and", "or", commas) don't count toward the
 # window, so a dictated list like "denies chest pain and shortness of
 # breath" negates both findings.
+# "but" is deliberately NOT a connector: it flips polarity ("no chest
+# pain but severe dizziness"), so it terminates the cue window instead.
 _NEGATION_WINDOW_WORDS = 3
-_CONNECTORS = {"and", "or", "but", ",", ";", "+"}
+_CONNECTORS = {"and", "or", ",", ";", "+"}
+_WINDOW_STOPS = {"but"}
 
 
 def _split_words(lower_text):
@@ -156,6 +159,8 @@ def _is_negated(text_lower, phrase_char_pos, words):
     idx = word_idx - 1
     while idx >= 0 and len(window) < _NEGATION_WINDOW_WORDS:
         token = words[idx]
+        if token in _WINDOW_STOPS:
+            break
         if token not in _CONNECTORS:
             window.append(token)
         idx -= 1
