@@ -1,10 +1,10 @@
 import { authFetch } from "@/lib/auth";
 import type { AiInsightsResponse, DiagnosisResponse, FinalReport, ReportImageAnalysis, ResearchAgent } from "@/lib/types";
 
-export async function diagnoseText(text: string): Promise<DiagnosisResponse> {
+export async function diagnoseText(text: string, patientName = ""): Promise<DiagnosisResponse> {
   const response = await authFetch("/api/diagnose", {
     method: "POST",
-    body: JSON.stringify({ text })
+    body: JSON.stringify({ text, patient_name: patientName })
   });
 
   if (response.status === 401) {

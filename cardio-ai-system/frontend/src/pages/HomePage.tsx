@@ -49,9 +49,9 @@ const ACTIONS = [
 const CAPABILITIES = [
   {
     icon: ServerCog,
-    title: "Runs on your machine",
+    title: "Instant, on-demand screening",
     detail:
-      "The reasoning engine ships with the app and answers locally — no cloud, no round trips."
+      "Turn a narrative into a probability, a triage band and per-feature attribution in seconds."
   },
   {
     icon: ShieldCheck,
@@ -61,9 +61,9 @@ const CAPABILITIES = [
   },
   {
     icon: Stethoscope,
-    title: "Built for clinical framing",
+    title: "Patient notes that follow the case",
     detail:
-      "Every output is written to support a clinician's judgement — never to replace it or to diagnose."
+      "Keep a private note per patient; tag screenings with the same name and the trail stays together."
   }
 ];
 
@@ -101,7 +101,7 @@ export function HomePage() {
             </div>
 
             <div className="mt-8 flex flex-wrap items-center gap-x-6 gap-y-2 text-2xs text-faint">
-              {["No API keys", "Per-clinician accounts", "Works offline after setup"].map((item) => (
+              {["Per-clinician accounts", "Private notes", "Guided workflows"].map((item) => (
                 <span key={item} className="flex items-center gap-1.5">
                   <span className="h-1 w-1 rounded-full bg-line2" />
                   {item}
@@ -200,10 +200,11 @@ export function HomePage() {
 
         <div className="mt-4 rounded-xl border border-line bg-elev/30 px-5 py-4">
           <p className="text-xs leading-relaxed text-faint">
-            <span className="font-medium text-muted">Clinical scope.</span> PulseIQ is a screening and
-            documentation aid. It does not diagnose, and its output must be reviewed by a qualified
-            clinician. Any presentation suggesting acute coronary syndrome — ongoing chest pain,
-            syncope, or respiratory distress — should be escalated on clinical grounds alone.
+            <span className="font-medium text-muted">New to the workspace?</span> The{" "}
+            <Link to="/guidance" className="font-medium text-accent hover:underline">
+              Guidance page
+            </Link>{" "}
+            walks through every workflow and the clinical principles behind the tool.
           </p>
         </div>
       </section>

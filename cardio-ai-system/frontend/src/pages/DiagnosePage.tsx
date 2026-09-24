@@ -8,6 +8,7 @@ import {
   Sparkles,
   Wand2
 } from "lucide-react";
+import { Link } from "react-router-dom";
 import { analyzeReportImage, diagnoseText, fetchAiInsights } from "@/lib/api";
 import type { DiagnosisResponse, ReportImageAnalysis } from "@/lib/types";
 import { PageHeader } from "@/components/app/page-header";
@@ -74,6 +75,7 @@ function RiskScale({ probability, level }: { probability: number; level: RiskLev
 
 export function DiagnosePage() {
   const [text, setText] = useState("");
+  const [patientName, setPatientName] = useState("");
   const [validationError, setValidationError] = useState("");
   const [requestError, setRequestError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -101,7 +103,7 @@ export function DiagnosePage() {
     setInsightsError("");
     setReportImageAnalysis(null);
     try {
-      const diagnosis = await diagnoseText(trimmed);
+      const diagnosis = await diagnoseText(trimmed, patientName.trim());
       setResult(diagnosis);
     } catch {
       setRequestError(
@@ -189,6 +191,22 @@ export function DiagnosePage() {
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-4">
+              <div>
+                <label
+                  htmlFor="patient-name"
+                  className="mb-1.5 block text-xs font-medium text-muted"
+                >
+                  Patient (optional)
+                </label>
+                <input
+                  id="patient-name"
+                  value={patientName}
+                  onChange={(e) => setPatientName(e.target.value)}
+                  placeholder="e.g. John Doe — files this screening under the name in your history"
+                  maxLength={120}
+                  className="h-10 w-full rounded-lg border border-line bg-inset px-3 text-sm text-fg shadow-[inset_0_1px_2px_rgba(0,0,0,0.12)] transition-colors placeholder:text-faint hover:border-line2 focus:border-accent/45"
+                />
+              </div>
               <Textarea
                 value={text}
                 onChange={(e) => setText(e.target.value)}
@@ -328,8 +346,11 @@ export function DiagnosePage() {
                     </div>
                   ) : (
                     <p className="text-xs text-muted">
-                      No recognised cardiac concepts were detected. Treat a low score on an unrecognised
-                      narrative as inconclusive rather than reassuring.
+                      No recognised cardiac concepts were detected. See{" "}
+                      <Link to="/guidance" className="font-medium text-accent hover:underline">
+                        Guidance
+                      </Link>{" "}
+                      before weighing the score.
                     </p>
                   )}
                 </TabsContent>

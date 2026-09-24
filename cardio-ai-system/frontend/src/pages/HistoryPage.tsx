@@ -69,7 +69,7 @@ export function HistoryPage() {
         eyebrow="Records"
         icon={Clock}
         title="Screening history"
-        description="Every screening you run is saved to your account on the local server and shown here, newest first. Other accounts on this machine can never see your records."
+        description="Every screening you run is saved to your account, newest first."
         actions={
           history.length > 0 ? (
             <Button variant="ghost" size="sm" onClick={handleClear} className="hover:text-danger-strong">
@@ -178,6 +178,11 @@ export function HistoryPage() {
                           <span className="num text-xs text-faint">
                             {stamp.date} · {stamp.time}
                           </span>
+                          {item.patient_name ? (
+                            <span className="rounded border border-accent/30 bg-accent/10 px-2 py-0.5 text-2xs font-medium text-accent">
+                              {item.patient_name}
+                            </span>
+                          ) : null}
                         </div>
                         <div className="flex items-center gap-2">
                           <span className="num rounded border border-line bg-elev px-2 py-0.5 text-2xs font-medium text-muted">

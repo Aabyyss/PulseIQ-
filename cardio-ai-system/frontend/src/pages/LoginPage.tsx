@@ -1,8 +1,9 @@
 import { FormEvent, useState } from "react";
-import { Navigate, useLocation } from "react-router-dom";
+import { Link, Navigate, useLocation } from "react-router-dom";
 import { AlertCircle, LoaderCircle, Lock, Mail, Stethoscope, UserRound } from "lucide-react";
 import { EcgTrace } from "@/components/app/ecg-trace";
 import { LogoMark, Wordmark } from "@/components/app/logo";
+import { ThemeToggle } from "@/components/app/theme-toggle";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/auth";
@@ -57,7 +58,6 @@ export function LoginPage() {
           <LogoMark />
           <Wordmark />
         </div>
-
         <div className="max-w-md space-y-6">
           <div>
             <p className="label mb-3">CARDIAC SCREENING WORKSPACE</p>
@@ -71,7 +71,6 @@ export function LoginPage() {
           </div>
           <EcgTrace className="h-10 w-full opacity-70" speed="7s" />
         </div>
-
         <ul className="space-y-2.5 text-xs text-muted">
           {[
             "Per-account history — screenings stay with their clinician",
@@ -84,6 +83,9 @@ export function LoginPage() {
             </li>
           ))}
         </ul>
+        <div className="absolute right-6 top-6">
+          <ThemeToggle />
+        </div>
       </div>
 
       {/* Form panel */}
@@ -182,7 +184,11 @@ export function LoginPage() {
           </div>
 
           <p className="mt-6 text-center text-2xs leading-relaxed text-faint">
-            Screening aid only — output must be reviewed by a qualified clinician.
+            First time here? Read the{" "}
+            <Link to="/guidance" className="font-medium text-accent hover:underline">
+              guidance page
+            </Link>{" "}
+            before your first screening.
           </p>
         </div>
       </div>

@@ -5,6 +5,7 @@ export type DiagnosisResponse = {
   prediction: number;
   probability: number;
   risk_level: "Low" | "Medium" | "High";
+  patient_name?: string;
 };
 
 export type DiagnosisHistoryItem = DiagnosisResponse & {
