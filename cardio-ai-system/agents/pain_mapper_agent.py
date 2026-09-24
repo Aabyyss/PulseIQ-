@@ -7,6 +7,10 @@ PAIN_POINT_MAP = {
     "palpitations": {"x": -0.08, "y": 0.05, "z": 0.32, "label": "Cardiac rhythm focus"},
     "dizziness": {"x": 0.0, "y": 0.35, "z": 0.15, "label": "Perfusion concern"},
     "fatigue": {"x": 0.0, "y": -0.15, "z": 0.2, "label": "Systemic fatigue pattern"},
+    "nausea": {"x": 0.02, "y": -0.05, "z": 0.28, "label": "Epigastric/autonomic"},
+    "sweating": {"x": -0.02, "y": 0.0, "z": 0.3, "label": "Autonomic (systemic)"},
+    "leg swelling": {"x": 0.05, "y": -0.45, "z": 0.1, "label": "Dependent edema"},
+    "cough": {"x": 0.1, "y": 0.15, "z": 0.2, "label": "Pulmonary congestion"},
 }
 
 
