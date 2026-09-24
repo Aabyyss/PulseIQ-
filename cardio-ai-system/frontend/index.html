@@ -1,17 +1,19 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" class="dark">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <meta name="theme-color" content="#0B0C0F" />
-    <meta name="color-scheme" content="dark" />
+    <meta name="theme-color" content="#12071F" />
+    <script>
+      (function(){try{var t=localStorage.getItem("pulseiq.theme");if(t!=="light"&&t!=="dark"){t=window.matchMedia&&window.matchMedia("(prefers-color-scheme: light)").matches?"light":"dark";}document.documentElement.classList.toggle("dark",t==="dark");}catch(e){document.documentElement.classList.add("dark");}})();
+    </script>
     <meta
       name="description"
-      content="PulseIQ — cardiac screening, live consultation capture and structured reporting. Runs locally with no accounts and no API keys."
+      content="PulseIQ — cardiac screening, live consultation capture and structured reporting for clinician teams."
     />
     <link
       rel="icon"
-      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='9' fill='%230B0C0F'/%3E%3Cpath d='M4.8 17.4h4.3l2.2-5.6 3.3 11.4 2.8-7.5 1.9 4.3h6.9' fill='none' stroke='%2335D1BA' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%237C3AED'/%3E%3Cstop offset='1' stop-color='%234C1D95'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='64' height='64' rx='14' fill='url(%23g)'/%3E%3Cpath d='M10 34.8h8.6L23 24l6.9 23 5.8-14.9 3.9 8.7 2.5-4.6h11.9' fill='none' stroke='%23fff' stroke-width='3.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3Ccircle cx='53.8' cy='34.8' r='2.6' fill='%23fff'/%3E%3C/svg%3E"
     />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />

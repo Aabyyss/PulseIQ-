@@ -9,6 +9,11 @@
 
   html {
     -webkit-tap-highlight-color: transparent;
+  }
+  html:not(.dark) {
+    color-scheme: light;
+  }
+  html.dark {
     color-scheme: dark;
   }
 
@@ -17,10 +22,24 @@
     font-feature-settings: "cv05" 1, "cv11" 1, "ss03" 1;
     /* Two very low-contrast washes anchor the canvas without reading as decoration. */
     background-image:
-      radial-gradient(760px circle at 8% -8%, rgba(53, 209, 186, 0.055), transparent 62%),
-      radial-gradient(680px circle at 104% 2%, rgba(90, 169, 245, 0.04), transparent 58%);
+      radial-gradient(760px circle at 8% -8%, var(--wash-a), transparent 62%),
+      radial-gradient(680px circle at 104% 2%, var(--wash-b), transparent 58%);
     background-repeat: no-repeat;
     background-attachment: fixed;
+  }
+
+  html:not(.dark) {
+    --wash-a: rgba(109, 40, 217, 0.06);
+    --wash-b: rgba(139, 92, 246, 0.045);
+    /* AA-checked on white: 7.4:1 for body text, 4.7:1 for small labels. */
+    --scrollbar-thumb: #D8CFEB;
+    --scrollbar-thumb-hover: #C9BCE3;
+  }
+  html.dark {
+    --wash-a: rgba(53, 209, 186, 0.055);
+    --wash-b: rgba(90, 169, 245, 0.04);
+    --scrollbar-thumb: #2A2F37;
+    --scrollbar-thumb-hover: #3A4049;
   }
 
   h1,
@@ -32,8 +51,16 @@
   }
 
   ::selection {
-    background: rgba(53, 209, 186, 0.28);
-    color: #fff;
+    background: var(--selection-bg);
+    color: var(--selection-fg);
+  }
+  html:not(.dark) {
+    --selection-bg: rgba(124, 58, 237, 0.22);
+    --selection-fg: #2E1065;
+  }
+  html.dark {
+    --selection-bg: rgba(53, 209, 186, 0.28);
+    --selection-fg: #fff;
   }
 
   :focus-visible {
@@ -60,18 +87,18 @@
     background: transparent;
   }
   ::-webkit-scrollbar-thumb {
-    background: #2A2F37;
+    background: var(--scrollbar-thumb);
     border: 3px solid transparent;
     border-radius: 9999px;
     background-clip: content-box;
   }
   ::-webkit-scrollbar-thumb:hover {
-    background: #3A4049;
+    background: var(--scrollbar-thumb-hover);
     background-clip: content-box;
   }
   * {
     scrollbar-width: thin;
-    scrollbar-color: #2a2f37 transparent;
+    scrollbar-color: var(--scrollbar-thumb) transparent;
   }
 }
 
@@ -79,7 +106,14 @@
   /* Primary container: hairline border, faint top light, real elevation. */
   .panel {
     @apply relative rounded-xl border border-line bg-panel shadow-panel;
-    background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.022), transparent 88px);
+    background-image: linear-gradient(180deg, var(--panel-top-light), transparent 88px);
+  }
+
+  html:not(.dark) {
+    --panel-top-light: rgba(109, 40, 217, 0.045);
+  }
+  html.dark {
+    --panel-top-light: rgba(255, 255, 255, 0.022);
   }
 
   .panel-flat {
@@ -89,11 +123,17 @@
   /* Blueprint grid used behind hero content. */
   .grid-veil {
     background-image:
-      linear-gradient(rgba(255, 255, 255, 0.028) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(255, 255, 255, 0.028) 1px, transparent 1px);
+      linear-gradient(var(--veil-line) 1px, transparent 1px),
+      linear-gradient(90deg, var(--veil-line) 1px, transparent 1px);
     background-size: 34px 34px;
     mask-image: radial-gradient(circle at 50% 40%, #000 25%, transparent 78%);
     -webkit-mask-image: radial-gradient(circle at 50% 40%, #000 25%, transparent 78%);
+  }
+  html:not(.dark) {
+    --veil-line: rgba(109, 40, 217, 0.07);
+  }
+  html.dark {
+    --veil-line: rgba(255, 255, 255, 0.028);
   }
 
   .rule {
@@ -115,8 +155,17 @@
 
   .skeleton {
     @apply rounded-md;
-    background: linear-gradient(90deg, #171a20 25%, #1f242b 37%, #171a20 63%) 0 0 / 300% 100%;
+    background: linear-gradient(90deg, var(--skeleton-a), var(--skeleton-b), var(--skeleton-a))
+      0 0 / 300% 100%;
     animation: shimmer 1.8s linear infinite;
+  }
+  html:not(.dark) {
+    --skeleton-a: #EFEBF8;
+    --skeleton-b: #E4DDF3;
+  }
+  html.dark {
+    --skeleton-a: #171a20;
+    --skeleton-b: #1f242b;
   }
 }
 

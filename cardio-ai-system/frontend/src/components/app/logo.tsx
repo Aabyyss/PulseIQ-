@@ -1,28 +1,39 @@
 import { cn } from "@/lib/utils";
 
 /**
- * The PulseIQ mark: an ECG deflection inside a dark tile.
- * Rendered as inline SVG so it stays crisp at every size and needs no asset pipeline.
+ * The PulseIQ mark: a white ECG deflection with a terminal beat dot inside a
+ * violet-gradient tile. Rendered as inline SVG so it stays crisp at every
+ * size and needs no asset pipeline. The gradient id is fixed; if two marks
+ * ever render on the same page it stays valid because they share the
+ * definition.
  */
 export function LogoMark({ className }: { className?: string }) {
   return (
     <span
       className={cn(
-        "relative flex h-8 w-8 shrink-0 items-center justify-center rounded-[9px] border border-line2/80 bg-elev shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]",
+        "relative flex h-8 w-8 shrink-0 items-center justify-center rounded-[9px] border border-white/10 shadow-[inset_0_1px_0_rgba(255,255,255,0.18),0_2px_8px_-2px_rgba(109,40,217,0.6)]",
         className
       )}
       aria-hidden
     >
-      <svg viewBox="0 0 32 32" className="h-5 w-5">
+      <svg viewBox="0 0 32 32" className="absolute inset-0 h-full w-full rounded-[9px]">
+        <defs>
+          <linearGradient id="pulseiq-tile" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0" stopColor="#8B5CF6" />
+            <stop offset="0.55" stopColor="#7C3AED" />
+            <stop offset="1" stopColor="#4C1D95" />
+          </linearGradient>
+        </defs>
+        <rect width="32" height="32" rx="9" fill="url(#pulseiq-tile)" />
         <path
-          d="M3.6 17.2h4.6l2.3-5.9 3.5 12 3-7.9 2 4.4h9.4"
+          d="M5 17.4h4.3l2.2-5.6 3.3 11.4 2.8-7.5 1.9 4.3 1.2-2.2h6.3"
           fill="none"
-          stroke="currentColor"
-          strokeWidth="2.4"
+          stroke="#fff"
+          strokeWidth="2.1"
           strokeLinecap="round"
           strokeLinejoin="round"
-          className="text-accent"
         />
+        <circle cx="26.6" cy="17.4" r="1.5" fill="#fff" />
       </svg>
     </span>
   );
