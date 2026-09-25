@@ -48,6 +48,8 @@ const ROUTES = [
   { path: "/history", name: "history" },
   { path: "/notes", name: "notes" },
   { path: "/patients", name: "patients" },
+  { path: "/guidance", name: "guidance" },
+  { path: "/security", name: "security" },
   { path: "/agents", name: "agents" },
 ];
 
