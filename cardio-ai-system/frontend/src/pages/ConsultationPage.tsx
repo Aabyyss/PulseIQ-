@@ -106,6 +106,8 @@ export function ConsultationPage() {
     lines,
     interimText,
     listeningHint,
+    micLevel,
+    speechActive,
     lastHeard,
     draft,
     setDraft,
@@ -357,10 +359,28 @@ export function ConsultationPage() {
         </Button>
 
         {isListening ? (
-          <p className="flex items-center gap-2 text-2xs text-danger-strong">
-            <Radio className="h-3 w-3 animate-pulse-soft" strokeWidth={2} />
-            Capturing audio — speak naturally
-          </p>
+          <>
+            <p className="flex items-center gap-2 text-2xs text-danger-strong">
+              <Radio className="h-3 w-3 animate-pulse-soft" strokeWidth={2} />
+              {speechActive ? "Hearing you — keep going" : "Capturing audio — speak naturally"}
+            </p>
+            <div
+              className="h-1.5 w-full overflow-hidden rounded-full border border-line bg-inset"
+              role="meter"
+              aria-label="Microphone level"
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={Math.round(micLevel * 100)}
+            >
+              <div
+                className={cn(
+                  "h-full rounded-full transition-[width] duration-75",
+                  speechActive ? "bg-ok" : "bg-accent/70"
+                )}
+                style={{ width: `${Math.max(2, Math.round(micLevel * 100))}%` }}
+              />
+            </div>
+          </>
         ) : null}
 
         {micState === "denied" ? (
