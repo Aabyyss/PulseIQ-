@@ -23,7 +23,15 @@ def process_live_transcript_entry(text: str, speaker: str, report_text: str = ""
     original_transcript = text
     english_transcript = translate_to_english(text=text, language_hint=language_code)
 
+    # The dictionary matches English and Urdu directly, so extraction runs
+    # on BOTH the original and the translated text and the findings are
+    # unioned: if translation degrades, hallucinates, or fails (no LLM,
+    # timeout), the original-language findings survive. The translated
+    # narrative stays the diagnosis input for its richer English context.
     symptoms = extract_symptoms_from_text(english_transcript)
+    for symptom in extract_symptoms_from_text(original_transcript):
+        if symptom not in symptoms:
+            symptoms.append(symptom)
     diagnosis = run_diagnosis_from_text(english_transcript) if symptoms else None
     risk_level = diagnosis["risk_level"] if diagnosis else "Low"
     probability = diagnosis["probability"] if diagnosis else 0.5
