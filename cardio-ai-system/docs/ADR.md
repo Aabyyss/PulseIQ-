@@ -217,3 +217,50 @@ Decisions:
 Known limitation (unchanged from ADR-012): cue-after-subject negation
 ("chest pain denied") still matches; the concepts list stays visible to
 the clinician for exactly this reason.
+
+
+## ADR-014 · Urdu-robust capture, dual-text extraction and hands-free control
+
+Date: 2026-09-26. Status: accepted.
+
+Real Urdu consultations exposed three failure layers: the same word
+arrives with arabic or urdu codepoints and optional vowel marks, the
+negator sits AFTER the noun phrase where the matcher only looked
+before it, and a flaky LLM translation could erase the findings
+entirely. Voice UX had no "is it hearing me?" signal, and ending a
+visit always required a click. Decisions:
+
+- **Normalisation before matching.** Urdu-script text is canonicalised
+  (alef/yeh/heh variants unified, harakat/tatweel/ZWNJ stripped) on
+  both server and client; the word count is preserved so negation
+  windows stay valid. The frontend mirrors the backend map.
+- **Post-phrase negation window.** A lookahead window carries only
+  symptom-ceasing cues ("nahi", "resolved", "gone") so "chest pain
+  without sweating" still flags both, closing the gap ADR-013 noted.
+  Punctuation rides on words ("resolved,"), so window tokens are
+  cleaned before cue comparison.
+- **Roman Urdu as whole words.** Loosely transliterated symptom words
+  (chakkar, dharkan, pasina, saans, khansi, matli, thak) match as
+  whole words with every plausible spelling; negation applies to
+  whole-word matches too, and collision-prone strings ("hospital")
+  stay unmatched.
+- **Dual-text extraction.** The dictionary understands Urdu directly,
+  so extraction runs on BOTH the original and translated line and
+  unions the findings; translation failure degrades coverage instead
+  of losing the encounter. The translated narrative remains the
+  diagnosis input.
+- **Hands-free commands.** Final speech results are checked against
+  command patterns BEFORE joining the transcript: "save visit" (and
+  Urdu "save karo") triggers the same guarded save as the button,
+  "clear transcript" resets the session; commands never enter the
+  record.
+- **Mic level meter.** A second AudioContext tap renders a smoothed
+  RMS bar with a speech-active state, making muted or blocked input
+  visible in seconds. It is cosmetic and tears down with the session.
+- **Korean capture.** ko-KR joins the input languages; analysis is
+  translation-based like the other non-English locales.
+
+Consequence: the vocabulary test suite covers orthography variants,
+post-phrase negation and whole-word collisions; the copilot page
+shows instant concepts per line regardless of translator health, and
+the whole visit can be run without touching the keyboard.
