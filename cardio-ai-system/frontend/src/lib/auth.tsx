@@ -47,8 +47,13 @@ async function parseError(response: Response, fallback: string): Promise<string>
 
 const FETCH_TIMEOUT_MS = 15000;
 
-async function fetchWithTimeout(path: string, init: RequestInit): Promise<Response> {
-  return fetch(path, { ...init, signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
+/**
+ * Endpoints that call the local LLM (final report, insights, image reading)
+ * legitimately take 30-90s on CPU, so callers may raise the timeout via
+ * `timeoutMs` — the default stays tight for ordinary API calls.
+ */
+async function fetchWithTimeout(path: string, init: RequestInit, timeoutMs: number): Promise<Response> {
+  return fetch(path, { ...init, signal: AbortSignal.timeout(timeoutMs) });
 }
 
 /**
@@ -56,21 +61,22 @@ async function fetchWithTimeout(path: string, init: RequestInit): Promise<Respon
  * for transient network failures (backend restart, momentary drop). On 401
  * the local session is cleared so the app returns to the sign-in screen.
  */
-export async function authFetch(path: string, init: RequestInit = {}): Promise<Response> {
+export async function authFetch(path: string, init: RequestInit & { timeoutMs?: number } = {}): Promise<Response> {
+  const { timeoutMs = FETCH_TIMEOUT_MS, ...restInit } = init;
   const token = getToken();
-  const headers = new Headers(init.headers);
+  const headers = new Headers(restInit.headers);
   if (token) headers.set("Authorization", `Bearer ${token}`);
-  if (init.body && !headers.has("Content-Type")) headers.set("Content-Type", "application/json");
+  if (restInit.body && !headers.has("Content-Type")) headers.set("Content-Type", "application/json");
 
-  const requestInit = { ...init, headers };
+  const requestInit = { ...restInit, headers };
   let response: Response;
   try {
-    response = await fetchWithTimeout(path, requestInit);
+    response = await fetchWithTimeout(path, requestInit, timeoutMs);
   } catch (firstError) {
     // One retry for network-level failures only (not HTTP errors).
     await new Promise((resolve) => setTimeout(resolve, 400));
     try {
-      response = await fetchWithTimeout(path, requestInit);
+      response = await fetchWithTimeout(path, requestInit, timeoutMs);
     } catch {
       throw firstError instanceof Error ? firstError : new Error("Network request failed.");
     }

@@ -431,7 +431,9 @@ Rules:
 - Include provided patient/doctor details in the summary section.
 - No markdown and no extra keys.
 """.strip()
-        raw = _llm(prompt, timeout=30, json_mode=True)
+        # CPU-tier models need a hard cap: an uncapped report runs minutes
+        # and outlasts every client timeout. 500 tokens fits the schema.
+        raw = _llm(prompt, timeout=30, json_mode=True, max_tokens=500)
         parsed = _safe_parse_json(raw)
         return {
             "title": parsed.get("title", "Consultation Report"),

@@ -48,3 +48,12 @@ export async function loadConsultations<T>(): Promise<T[]> {
   return body.items ?? [];
 }
 
+export async function deleteConsultation(id: number): Promise<boolean> {
+  const response = await authFetch(`/api/consultations/${id}`, { method: "DELETE" });
+  return response.ok;
+}
+
+export async function clearConsultations(): Promise<void> {
+  await authFetch("/api/consultations", { method: "DELETE" });
+}
+
