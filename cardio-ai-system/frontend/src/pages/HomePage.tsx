@@ -24,7 +24,7 @@ const ACTIONS = [
     to: "/consultation",
     icon: Stethoscope,
     title: "Run a consultation",
-    detail: "Speak or type the encounter — concepts, risk, body map and guidance update live; save the visit in one click.",
+    detail: "Speak or type in nine languages — concepts, risk, body map and guidance update live; say \"save visit\" to finish hands-free.",
     cta: "Open consultation"
   },
   {
@@ -91,7 +91,7 @@ export function HomePage() {
             </div>
 
             <div className="mt-8 flex flex-wrap items-center gap-x-6 gap-y-2 text-2xs text-faint">
-              {["Per-clinician accounts", "Private notes", "Guided workflows"].map((item) => (
+              {["Per-clinician accounts", "Private notes", "9 capture languages"].map((item) => (
                 <span key={item} className="flex items-center gap-1.5">
                   <span className="h-1 w-1 rounded-full bg-line2" />
                   {item}
