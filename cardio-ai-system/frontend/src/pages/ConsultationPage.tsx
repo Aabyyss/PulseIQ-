@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   AlertCircle,
   BadgeCheck,
@@ -139,6 +139,44 @@ export function ConsultationPage() {
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
   const [savedId, setSavedId] = useState<number | null>(null);
+  const [voiceNotice, setVoiceNotice] = useState("");
+
+  // Latest values for the voice-command effect without re-subscribing it.
+  const savingRef = useRef(saving);
+  const linesCountRef = useRef(lines.length);
+  const saveFnRef = useRef<() => Promise<void>>(async () => {});
+  savingRef.current = saving;
+  linesCountRef.current = lines.length;
+
+  // Hands-free: "save visit" runs the same guarded save as the button;
+  // "clear transcript" is wiped inside the hook, so only a notice is due.
+  useEffect(() => {
+    const event = capture.lastVoiceCommand;
+    if (!event) return;
+    if (event.command === "save-visit") {
+      if (savingRef.current) {
+        setVoiceNotice("Save already in progress…");
+        return;
+      }
+      if (linesCountRef.current === 0) {
+        setVoiceNotice("Nothing to save yet — the transcript is empty.");
+        return;
+      }
+      setVoiceNotice("Voice command heard — saving the visit…");
+      void saveFnRef.current();
+    } else if (event.command === "clear-transcript") {
+      setSavedId(null);
+      setSaveError("");
+      setVoiceNotice("Transcript cleared by voice command.");
+    }
+  }, [capture.lastVoiceCommand]);
+
+  // The notice is momentary; nothing should stick around for a minute.
+  useEffect(() => {
+    if (!voiceNotice) return;
+    const timer = window.setTimeout(() => setVoiceNotice(""), 6000);
+    return () => window.clearTimeout(timer);
+  }, [voiceNotice]);
 
   // Narrative screening (the old screening page, folded in here).
   const [screenText, setScreenText] = useState("");
@@ -191,6 +229,8 @@ export function ConsultationPage() {
       setSaving(false);
     }
   }
+  // Voice commands invoke the latest save closure (fresh patient fields).
+  saveFnRef.current = handleSaveVisit;
 
   async function handleScreen(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -455,6 +495,7 @@ export function ConsultationPage() {
           )}
           {saving ? "Saving visit…" : savedId !== null ? "Visit saved" : "Save visit & export PDF"}
         </Button>
+        {voiceNotice ? <p className="text-2xs font-medium text-accent">{voiceNotice}</p> : null}
         <p className="text-2xs leading-relaxed text-faint">
           One click downloads the structured report as a PDF and stores the visit in your records — transcript, detected
           concepts, guidance and body map included. A patient name makes it findable on the Patients page.
