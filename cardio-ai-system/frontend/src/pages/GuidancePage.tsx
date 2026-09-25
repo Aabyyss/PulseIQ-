@@ -1,11 +1,9 @@
 import {
   Activity,
   BookOpen,
-  ClipboardList,
   Clock,
   GraduationCap,
   History,
-  Mic,
   NotebookPen,
   ShieldCheck,
   Stethoscope
@@ -17,33 +15,15 @@ import { cn } from "@/lib/utils";
 
 const WORKFLOWS = [
   {
-    icon: Activity,
-    title: "Symptom screening",
+    icon: Stethoscope,
+    title: "Consultation workspace",
     steps: [
-      "Open Symptom screening and type or paste the patient's symptom story in their own words.",
-      "Optionally tag a patient name — the screening files under it in your history and links to your note.",
-      "Run the screening. You get a probability, a Low/Medium/High band, matched symptom concepts, the 13 model inputs, and per-feature attribution.",
-      "Optional: Interpret asks the local AI for a clinical-style reading of the numbers.",
-      "Optional: upload a lab/ECG report image to pull values into the narrative."
-    ]
-  },
-  {
-    icon: Mic,
-    title: "Live copilot",
-    steps: [
-      "Open Live copilot and start capture during the consultation.",
-      "Speak naturally; speech is transcribed on-device and each entry is screened in real time.",
-      "The copilot surfaces suggested questions, investigations, red flags and a plan as you go.",
-      "Stop capture to end the session; nothing is saved unless you export it."
-    ]
-  },
-  {
-    icon: ClipboardList,
-    title: "Consultation workflow",
-    steps: [
-      "Open Consultations and work through the structured intake: history, pain mapping, risk questions.",
-      "Save at any point — the visit record lands in your account when you export the report.",
-      "The exported report can be printed or attached to the patient record."
+      "Open Consultation — one screen runs the whole encounter. Quick consult is audio-first: press Start listening and speak naturally.",
+      "The copilot attributes each line automatically: symptom-telling lines are marked patient, clinical or informing lines are marked doctor. Manual roles are there if you prefer.",
+      "Concepts, the risk band, the body pain map and suggested questions update the moment a line is captured — no waiting for the language model to finish.",
+      "Full consult shows the same live transcript plus the patient-details form; both modes stay in sync.",
+      "Assess a narrative any time on the same screen for a scored risk estimate, and upload a report image to pull out findings.",
+      "Save visit downloads the structured PDF and stores the record in your account in one click; History → Consultations keeps every visit re-exportable."
     ]
   },
   {
@@ -96,7 +76,7 @@ const FAQ = [
   },
   {
     q: "What languages does symptom extraction understand?",
-    a: "The clinical vocabulary matches English, Urdu and Roman-Urdu phrases for the five core concepts: chest pain, shortness of breath, dizziness, palpitations and fatigue."
+    a: "The clinical vocabulary matches English, Urdu and Roman-Urdu phrasings for nine cardiac concepts: chest pain (including \"pain in my heart\"), shortness of breath, dizziness, palpitations, fatigue, nausea, sweating, leg swelling and cough."
   },
   {
     q: "Where is my data stored?",

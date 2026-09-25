@@ -44,11 +44,10 @@ const CHROME_CANDIDATES = [
 
 const ROUTES = [
   { path: "/", name: "home" },
-  { path: "/diagnose", name: "diagnose" },
-  { path: "/live", name: "live" },
-  { path: "/workflow/start", name: "workflow-start" },
-  { path: "/workflow/session", name: "workflow-session" },
+  { path: "/consultation", name: "consultation" },
   { path: "/history", name: "history" },
+  { path: "/notes", name: "notes" },
+  { path: "/patients", name: "patients" },
   { path: "/agents", name: "agents" },
 ];
 

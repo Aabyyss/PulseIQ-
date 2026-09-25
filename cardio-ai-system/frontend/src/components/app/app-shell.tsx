@@ -2,12 +2,11 @@ import {
   Activity,
   BookOpen,
   Bot,
-  ClipboardList,
   History,
   LayoutGrid,
-  Mic,
   NotebookPen,
   ShieldCheck,
+  Stethoscope,
   Users,
   type LucideIcon
 } from "lucide-react";
@@ -30,10 +29,8 @@ interface NavItem {
 
 const NAV: NavItem[] = [
   { to: "/", label: "Overview", short: "Overview", icon: LayoutGrid, group: "Workspace", end: true },
-  { to: "/diagnose", label: "Symptom screening", short: "Screen", icon: Activity, group: "Workspace" },
-  { to: "/live", label: "Live copilot", short: "Copilot", icon: Mic, group: "Workspace" },
-  { to: "/workflow/start", label: "Consultations", short: "Consult", icon: ClipboardList, group: "Records" },
-  { to: "/history", label: "Screening history", short: "History", icon: History, group: "Records" },
+  { to: "/consultation", label: "Consultation", short: "Consult", icon: Stethoscope, group: "Workspace" },
+  { to: "/history", label: "History & visits", short: "History", icon: History, group: "Records" },
   { to: "/notes", label: "My notes", short: "Notes", icon: NotebookPen, group: "Records" },
   { to: "/patients", label: "Patients", short: "Patients", icon: Users, group: "Records" },
   { to: "/guidance", label: "Guidance", short: "Guide", icon: BookOpen, group: "System" },

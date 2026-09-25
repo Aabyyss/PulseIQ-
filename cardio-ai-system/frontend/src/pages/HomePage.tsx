@@ -2,10 +2,7 @@ import { Link } from "react-router-dom";
 import {
   Activity,
   ArrowRight,
-  ClipboardList,
-  Gauge,
   History,
-  Mic,
   ServerCog,
   ShieldCheck,
   Stethoscope
@@ -24,25 +21,18 @@ const PIPELINE = [
 
 const ACTIONS = [
   {
-    to: "/diagnose",
-    icon: Gauge,
-    title: "Screen symptoms",
-    detail: "Turn a described complaint into a scored, explained risk estimate.",
-    cta: "Open screening"
+    to: "/consultation",
+    icon: Stethoscope,
+    title: "Run a consultation",
+    detail: "Speak or type the encounter — concepts, risk, body map and guidance update live; save the visit in one click.",
+    cta: "Open consultation"
   },
   {
-    to: "/live",
-    icon: Mic,
-    title: "Run a live copilot",
-    detail: "Capture speech in real time and surface questions, tests and red flags.",
-    cta: "Start session"
-  },
-  {
-    to: "/workflow/start",
-    icon: ClipboardList,
-    title: "Record a consultation",
-    detail: "Collect history, map pain regions and export a structured visit report.",
-    cta: "Open workflow"
+    to: "/history",
+    icon: History,
+    title: "Review records",
+    detail: "Every screening and saved visit, with re-exportable PDFs and per-patient trails.",
+    cta: "Open history"
   }
 ];
 
@@ -90,13 +80,13 @@ export function HomePage() {
 
             <div className="mt-7 flex flex-wrap items-center gap-3">
               <Button asChild size="lg">
-                <Link to="/diagnose" className="inline-flex items-center gap-2">
-                  Run a screening
+                <Link to="/consultation" className="inline-flex items-center gap-2">
+                  Start a consultation
                   <ArrowRight className="h-4 w-4" strokeWidth={2} />
                 </Link>
               </Button>
               <Button asChild size="lg" variant="outline">
-                <Link to="/live">Open the live copilot</Link>
+                <Link to="/history">Review past visits</Link>
               </Button>
             </div>
 
@@ -146,7 +136,7 @@ export function HomePage() {
         <div className="mb-4 flex items-end justify-between gap-4">
           <div>
             <p className="label">Start here</p>
-            <h2 className="mt-1.5 text-lg font-semibold">Three ways into the workspace</h2>
+            <h2 className="mt-1.5 text-lg font-semibold">Two ways into the workspace</h2>
           </div>
           <Link
             to="/history"
@@ -157,7 +147,7 @@ export function HomePage() {
           </Link>
         </div>
 
-        <div className="grid gap-4 md:grid-cols-3">
+        <div className="grid gap-4 sm:grid-cols-2">
           {ACTIONS.map((action, index) => (
             <Link key={action.to} to={action.to} className="group block animate-fade-up" style={{ animationDelay: `${index * 60}ms` }}>
               <Card className="h-full transition-colors duration-200 hover:border-line2 hover:bg-elev/40">

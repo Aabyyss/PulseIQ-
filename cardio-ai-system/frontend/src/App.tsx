@@ -1,17 +1,14 @@
 import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { AppShell } from "@/components/app/app-shell";
 import { LoginPage } from "@/pages/LoginPage";
-import { DiagnosePage } from "@/pages/DiagnosePage";
+import { ConsultationPage } from "@/pages/ConsultationPage";
 import { HistoryPage } from "@/pages/HistoryPage";
 import { HomePage } from "@/pages/HomePage";
 import { GuidancePage } from "@/pages/GuidancePage";
 import { NotesPage } from "@/pages/NotesPage";
 import { PatientsPage } from "@/pages/PatientsPage";
 import { SecurityPage } from "@/pages/SecurityPage";
-import { LiveConsultationPage } from "@/pages/LiveConsultationPage";
 import { ResearchAgentsPage } from "@/pages/ResearchAgentsPage";
-import { WorkflowSessionPage } from "@/pages/WorkflowSessionPage";
-import { WorkflowStartPage } from "@/pages/WorkflowStartPage";
 import { useAuth } from "@/lib/auth";
 import { IDLE_LOCK_MS, useIdleAutoLock } from "@/lib/idle-lock";
 
@@ -63,10 +60,13 @@ export default function App() {
           <RequireAuth>
             <Routes>
               <Route path="/" element={<HomePage />} />
-              <Route path="/diagnose" element={<DiagnosePage />} />
-              <Route path="/live" element={<LiveConsultationPage />} />
-              <Route path="/workflow/start" element={<WorkflowStartPage />} />
-              <Route path="/workflow/session" element={<WorkflowSessionPage /> } />
+              {/* The consultation workspace: quick (audio-first) and full modes on one screen. */}
+              <Route path="/consultation" element={<ConsultationPage />} />
+              {/* Previous entry points forward to the merged workspace. */}
+              <Route path="/diagnose" element={<Navigate to="/consultation" replace />} />
+              <Route path="/live" element={<Navigate to="/consultation" replace />} />
+              <Route path="/workflow/start" element={<Navigate to="/consultation" replace />} />
+              <Route path="/workflow/session" element={<Navigate to="/consultation" replace />} />
               <Route path="/history" element={<HistoryPage />} />
               <Route path="/notes" element={<NotesPage />} />
               <Route path="/patients" element={<PatientsPage />} />
