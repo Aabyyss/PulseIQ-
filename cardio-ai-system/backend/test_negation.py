@@ -113,6 +113,22 @@ PHRASE_CASES = [
     ("chest pain without sweating", {"chest pain"}),
     ("سینے میں درد ہے اور پسینہ آ رہا ہے", {"chest pain", "sweating"}),
     ("دل میں درد ہے لیکن سانس پھول رہی ہے", {"chest pain", "shortness of breath"}),
+    # ASR transliterates Roman Urdu loosely; every plausible spelling of
+    # the common symptom words is recognised as a whole word.
+    ("seene me dard hota hai", {"chest pain"}),
+    ("mujhe chakkar aa rahe hain", {"dizziness"}),
+    ("meri dharkan tez hai", {"palpitations"}),
+    ("pasina aa raha hai", {"sweating"}),
+    ("saans lene mein taklif hai", {"shortness of breath"}),
+    ("khansi aa rahi hai", {"cough"}),
+    ("matli si ho rahi hai", {"nausea"}),
+    ("thakan rehti hai", {"fatigue"}),
+    # Collision guards: stems must not fire inside unrelated words, and
+    # negation must apply to the whole-word matches too.
+    ("i am retired", set()),
+    ("hospital", set()),
+    ("no chakkar", set()),
+    ("chakkar nahi hai", set()),
 ]
 
 

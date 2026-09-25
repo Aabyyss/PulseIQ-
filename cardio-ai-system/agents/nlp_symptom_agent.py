@@ -24,9 +24,18 @@ except ImportError:
 
 # A few everyday patient words are too collision-prone for substring
 # matching ("tired" also sits inside "retired") yet too common to list
-# in every collocation, so they match as whole words only.
+# in every collocation, so they match as whole words only. Roman-Urdu
+# equivalents are whole-word too: they collide inside other words and
+# ASR transliterates them inconsistently, so every reasonable spelling
+# is listed explicitly.
 _WORD_STEMS = {
-    "fatigue": ("tired", "weak"),
+    "fatigue": ("tired", "weak", "thak", "kamzor"),
+    "dizziness": ("chakkar", "chaker", "chakur"),
+    "palpitations": ("dharkan", "dhadkan", "dharken"),
+    "sweating": ("pasina", "pasine", "paseena"),
+    "shortness of breath": ("saans", "saansh", "sans"),
+    "cough": ("khansi", "khaansi", "khansi"),
+    "nausea": ("matli", "matlee", "ulti", "ultian"),
 }
 
 # Urdu-script orthography varies by writer, keyboard and ASR engine: the
@@ -100,6 +109,11 @@ symptom_dictionary = {
         "سینے میں درد", "سینے کا درد", "چھاتی میں درد", "سینے میں جلن",
         "seene mein dard", "seenay mein dard", "seene mein darad",
         "chati mein dard", "seene mein jalan",
+        # ASR transliterates Roman Urdu loosely; every plausible spelling
+        # of the chest phrases is listed so voice capture keeps up.
+        "sine mein dard", "sene mein dard", "seene me dard",
+        "seenay me dard", "seene mein dadr", "dil me dard",
+        "dil mein dard", "dil ka drad", "dil mein drad",
         # Classic angina radiation - patients name the destination, not the
         # chest, so these collocations carry the chest-pain concept.
         "pain radiating to my left arm", "pain radiating to left arm",
@@ -380,6 +394,8 @@ def extract_symptoms_from_text(text, return_details=False):
         for pattern in patterns:
             for match in pattern.finditer(text_lower):
                 if _is_negated(text_lower, match.start(), words):
+                    continue
+                if _is_negated_after(text_lower, match.start(), len(match.group()), words):
                     continue
                 detected.append(symptom)
                 details[symptom] = match.group()
