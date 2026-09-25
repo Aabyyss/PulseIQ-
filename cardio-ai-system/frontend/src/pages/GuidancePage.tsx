@@ -21,6 +21,8 @@ const WORKFLOWS = [
       "Open Consultation — one screen runs the whole encounter. Quick consult is audio-first: press Start listening and speak naturally.",
       "The copilot attributes each line automatically: symptom-telling lines are marked patient, clinical or informing lines are marked doctor. Manual roles are there if you prefer.",
       "Concepts, the risk band, the body pain map and suggested questions update the moment a line is captured — no waiting for the language model to finish.",
+      "Watch the level bar under the listening button: it rides your voice and turns green while speech is detected, so a muted or blocked mic is obvious immediately.",
+      "Hands-free: say \"save visit\" to finish and store the encounter, or \"clear transcript\" to start over — spoken commands never enter the record.",
       "Full consult shows the same live transcript plus the patient-details form; both modes stay in sync.",
       "Assess a narrative any time on the same screen for a scored risk estimate, and upload a report image to pull out findings.",
       "Save visit downloads the structured PDF and stores the record in your account in one click; History → Consultations keeps every visit re-exportable."
