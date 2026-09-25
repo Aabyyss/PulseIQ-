@@ -166,7 +166,8 @@ model or Gemini); degrades to an explanatory payload otherwise.
 or `{ "error": "image_base64 is required" }`
 
 ## WS /ws/consultation *(token required)*
-Live copilot loop. One JSON frame per transcript line, response per line.
+Live copilot loop. One JSON frame per transcript line, **two** responses per
+line: an instant ack, then the full analysis once the local LLM finishes.
 Connect as `ws://host:8000/ws/consultation?token=<bearer token>`; an invalid
 or missing token is rejected with close code **4401** before accept.
 
@@ -175,10 +176,20 @@ or missing token is rejected with close code **4401** before accept.
 { "speaker": "patient|doctor", "text": "…", "report_text": "accumulated note", "language_code": "en-US" }
 ```
 `speaker` defaults `patient`; blank `text` gets `{"error": "text is required"}`.
+`language_code` accepts any of the UI locales: en-US, ur-PK, hi-IN, ar-SA,
+ko-KR, fr-FR, es-ES, de-DE, zh-CN.
 
-**Server → client** (success)
+**Server → client, frame 1 — `line_ack` (instant, no LLM):**
+```json
+{ "kind": "line_ack", "speaker": "patient", "transcript": "as spoken", "original_transcript": "as spoken", "symptoms": ["regex-extracted concepts"] }
+```
+Lets the UI show concepts, risk hints and the body map immediately; the
+dictionary matches English, Urdu script and Roman Urdu directly.
+
+**Server → client, frame 2 — `analysis` (after the copilot pipeline):**
 ```json
 {
+  "kind": "analysis",
   "speaker": "patient",
   "transcript": "english normalised text",
   "original_transcript": "as spoken",
@@ -193,6 +204,10 @@ or missing token is rejected with close code **4401** before accept.
   "ai_copilot": { "doctor_questions": [], "recommended_tests": [], "next_steps": [], "diagnostic_impression": [], "urgency": "low|moderate|high", "safety_note": "…" }
 }
 ```
+`symptoms` unions extraction over the original and the translated line
+(ADR-014), so a degraded translation cannot erase findings. Clients that
+ignore `kind` still work: the analysis frame carries the same fields as
+before.
 
 ---
 
@@ -310,7 +325,9 @@ without saving anything to history.
 ```
 
 Negation-aware: "no chest pain but severe dizziness" yields only
-`dizziness` — "but" terminates the negation window (ADR-013).
+`dizziness` — "but" terminates the negation window (ADR-013). Urdu
+script is normalised before matching and the negator may follow the
+noun phrase ("دل کا درد نہیں ہے" yields nothing, ADR-014).
 
 ## Non-goals
 - No pagination or filtering; lists are capped (200 entries, newest first).
