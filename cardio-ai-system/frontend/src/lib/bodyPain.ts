@@ -24,24 +24,54 @@ export type LocalClinicalGuidance = {
 };
 
 /**
+ * Mirror of the backend's Urdu normalisation: arabic yeh/heh/alef
+ * codepoints are unified with the Urdu ones and vowel marks are
+ * dropped, so the same dictated word written differently still matches.
+ */
+const URDU_CHAR_MAP: Record<string, string> = {
+  "\u0622": "\u0627",
+  "\u0623": "\u0627",
+  "\u0625": "\u0627",
+  "\u064a": "\u06cc",
+  "\u0649": "\u06cc",
+  "\u0647": "\u06c1",
+  "\u0629": "\u06c1"
+};
+const URDU_STRIP_RE = /[\u064b-\u0652\u0670\u0640\u200c\u200d\u200e\u200f]/g;
+
+function normalizeUrduText(text: string): string {
+  return text
+    .replace(/[\u0622\u0623\u0625]/g, "\u0627")
+    .replace(/[\u064a\u0649]/g, "\u06cc")
+    .replace(/[\u0647\u0629]/g, "\u06c1")
+    .replace(URDU_STRIP_RE, "");
+}
+
+/**
  * Region matching is regex-based and word-aware so patient phrasings such as
  * "it pains in my heart", "left side of the heart" or "mera seena dard" hit
  * the right zone. Substring matching missed them (they contain no "chest").
  * Most patterns live under the chest concept — cardiac pain is localised to
  * "the heart" and its sides, and ASR turns "pains" into a verb — plus the
  * side-specific arm/leg variants and Urdu/Roman-Urdu phrasings.
+ *
+ * \b only bounds ASCII words: Urdu-script patterns are plain multi-word
+ * substrings (wrapping them in \b made them unmatchable), and Roman-Urdu
+ * lists every spelling ASR tends to produce.
  */
 const REGION_PATTERNS: Record<BodyRegionId, RegExp[]> = {
   head: [
     /\bhead\s*(pain|ache|aches|hurts?|paining)\b/,
     /\bpain(?:s)?\s+(?:in|of)\s+(?:my\s+|the\s+)?head\b/,
     /\bheadache\b/, /\bmigraine\b/,
-    /\bsir\s+(?:mein|main)\s+dard\b/, /\bسر درد\b/
+    /\b(?:sar|sir|sirr)\s+(?:mein|main|me)?\s*dard\b/,
+    /سر(?:\s+میں)?\s+درد/
   ],
   neck: [
     /\bneck\s*(pain|ache|aches|hurts?|stiffness|stiff|paining)\b/,
     /\bpain(?:s)?\s+(?:in|of)\s+(?:my\s+|the\s+)?neck\b/, /\bcervical\s+pain\b/,
-    /\bgardan\s+(?:mein|main)?\s*dard\b/, /\bگردن میں درد\b/
+    /\bgardan\s+(?:mein|main|me)?\s*dard\b/,
+    /گردن(?:\s+میں)?\s+درد/
   ],
   chest: [
     /\bchest\s*(pain|pressure|tightness|discomfort|hurts?|heavy|heaviness|burning|paining)\b/,
@@ -55,20 +85,25 @@ const REGION_PATTERNS: Record<BodyRegionId, RegExp[]> = {
     /\b(?:left|right)\s+side\s+of\s+(?:my\s+|the\s+)?(?:heart|chest)\b/,
     /\bpain\s+(?:in|on)\s+(?:my\s+|the\s+)?(?:left|right)\s+side\b/,
     /\bheart\s+pain\b/,
-    /\bseene\s+(?:mein|main)?\s*dard\b/, /\bseenay\s+mein\s+dard\b/, /\bchati\s+mein\s+dard\b/,
-    /\bdil\s+(?:mein|main|ka)\s+dard\b/, /\bdil\s+ka\s+dard\b/,
-    /\bسینے میں درد\b/, /\bسینے کا درد\b/, /\bچھاتی میں درد\b/, /\bسینے میں جلن\b/,
-    /\bدل میں درد\b/, /\bدل کا درد\b/
+    // Roman Urdu incl. the spellings ASR produces ("sine me dard").
+    /\b(?:seene|seenay|sine|sene)\s+(?:mein|main|me)?\s*(?:dard|darad|drad|jalan)\b/,
+    /\b(?:chat|chati)\s+(?:mein|main|me)?\s*dard\b/,
+    /\bdil\s+(?:mein|main|me|ka|ki)\s+(?:dard|darad|drad)\b/,
+    // Urdu script as plain substrings (\b never matches Urdu).
+    /سینے(?:\s+میں|\s+کا)?\s+درد/, /چھاتی\s+میں\s+درد/, /سینے\s+میں\s+جلن/,
+    /دل(?:\s+میں|\s+کا)?\s+درد/
   ],
   left_arm: [
     /\bleft\s+arm\b/, /\bpain\s+in\s+(?:my\s+|the\s+)?left\s+arm\b/,
     /\bleft\s+shoulder\b/, /\bleft\s+hand\s+numbness\b/,
-    /\bbaen\s+bazu\s+(?:mein\s+)?dard\b/, /\bبائیں بازو میں درد\b/
+    /\b(?:baen|bayen|bayay)\s+bazu(?:\s+(?:mein|main|me))?\s*dard\b/,
+    /بائیں\s+بازو(?:\s+میں)?\s+درد/
   ],
   right_arm: [
     /\bright\s+arm\b/, /\bpain\s+in\s+(?:my\s+|the\s+)?right\s+arm\b/,
     /\bright\s+shoulder\b/,
-    /\bdayan\s+bazu\s+(?:mein\s+)?dard\b/, /\bدایاں بازو(?:\s+درد| میں درد)\b/
+    /\bdayan\s+bazu(?:\s+(?:mein|main|me))?\s*dard\b/,
+    /دایاں\s+بازو(?:\s+میں)?\s+درد/
   ],
   upper_abdomen: [
     /\bupper\s+(?:abdomen|stomach|belly)\s*(pain|ache|hurts?)?/,
@@ -84,25 +119,28 @@ const REGION_PATTERNS: Record<BodyRegionId, RegExp[]> = {
     /\bback\s*(pain|ache|hurts?|paining)\b/,
     /\bpain(?:s)?\s+(?:in|of)\s+(?:my\s+|the\s+)?back\b/,
     /\bupper\s+back\b/, /\blower\s+back\b/,
-    /\bkamar\s+(?:mein|main)?\s*dard\b/, /\bکمر میں درد\b/
+    /\bkamar\s+(?:mein|main|me)?\s*dard\b/,
+    /کمر(?:\s+میں)?\s+درد/
   ],
   left_leg: [
     /\bleft\s+(?:leg|calf|thigh|knee|ankle|foot|feet)\b/,
     /\bpain\s+(?:in|of)\s+(?:my\s+|the\s+)?left\s+leg\b/,
-    /\bbaen\s+tang\s+(?:mein\s+)?dard\b/, /\bبائیں ٹانگ میں درد\b/
+    /\b(?:baen|bayen|bayay)\s+tang(?:\s+(?:mein|main|me))?\s*dard\b/,
+    /بائیں\s+ٹانگ(?:\s+میں)?\s+درد/
   ],
   right_leg: [
     /\bright\s+(?:leg|calf|thigh|knee|ankle|foot|feet)\b/,
     /\bpain\s+(?:in|of)\s+(?:my\s+|the\s+)?right\s+leg\b/,
-    /\bdayan\s+tang\s+(?:mein\s+)?dard\b/, /\bدایاں ٹانگ(?:\s+درد| میں درد)\b/
+    /\bdayan\s+tang(?:\s+(?:mein|main|me))?\s*dard\b/,
+    /دایاں\s+ٹانگ(?:\s+میں)?\s+درد/
   ]
 };
 
-/** Bare "leg pain" / "stomach pain" without a side maps to both sides. */
+/** Bare "leg pain" / "dard" without a side maps to both sides. */
 const GENERIC_PATTERNS: { pattern: RegExp; targets: BodyRegionId[] }[] = [
   { pattern: /\barm\s*(pain|ache|hurts?|paining)\b|\bshoulder\s+pain\b/, targets: ["left_arm", "right_arm"] },
   { pattern: /\bleg\s*(pain|ache|hurts?|paining)\b/, targets: ["left_leg", "right_leg"] },
-  { pattern: /\bstomach\s*(pain|ache|hurts?)\b|\bbelly\s+pain\b|\bpet\s+mein\s+dard\b/, targets: ["upper_abdomen"] }
+  { pattern: /\bstomach\s*(pain|ache|hurts?)\b|\bbelly\s+pain\b|\bpet\s+(?:mein|main|me)?\s*dard\b/, targets: ["upper_abdomen"] }
 ];
 
 const REGION_LABELS: Record<BodyRegionId, string> = {
@@ -196,7 +234,8 @@ function insightFor(region: BodyRegionId, text: string): BodyPainInsight {
 }
 
 export function inferBodyPainInsights(transcript: string, reportText: string): BodyPainInsight[] {
-  const text = `${transcript} ${reportText}`.toLowerCase();
+  const raw = `${transcript} ${reportText}`.toLowerCase();
+  const text = /[\u0600-\u06ff]/.test(raw) ? normalizeUrduText(raw) : raw;
   const matched: BodyPainInsight[] = [];
   const seen = new Set<BodyRegionId>();
 
