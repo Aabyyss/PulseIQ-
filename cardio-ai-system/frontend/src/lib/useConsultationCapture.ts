@@ -132,6 +132,8 @@ export function useConsultationCapture() {
   const [language, setLanguageState] = useState("en-US");
   const [isListening, setIsListening] = useState(false);
   const [micState, setMicState] = useState<"idle" | "granted" | "denied">("idle");
+  const [micLevel, setMicLevel] = useState(0);
+  const [speechActive, setSpeechActive] = useState(false);
   const [connected, setConnected] = useState(false);
   const [awaitingCopilot, setAwaitingCopilot] = useState(false);
   const [error, setError] = useState("");
@@ -412,6 +414,72 @@ export function useConsultationCapture() {
     }
   }, []);
 
+  // Mic level meter: an analyser on a second tap of the mic feeds a RMS
+  // value the UI renders as a bar, so "is it hearing me?" is visible at
+  // a glance. Runs only while listening; torn down on stop.
+  const audioCtxRef = useRef<AudioContext | null>(null);
+  const analyserRef = useRef<AnalyserNode | null>(null);
+  const meterStreamRef = useRef<MediaStream | null>(null);
+  const meterRafRef = useRef<number | null>(null);
+  const smoothLevelRef = useRef(0);
+
+  const stopMeter = useCallback(() => {
+    if (meterRafRef.current !== null) {
+      cancelAnimationFrame(meterRafRef.current);
+      meterRafRef.current = null;
+    }
+    meterStreamRef.current?.getTracks().forEach((track) => track.stop());
+    meterStreamRef.current = null;
+    analyserRef.current = null;
+    if (audioCtxRef.current && audioCtxRef.current.state !== "closed") {
+      void audioCtxRef.current.close();
+    }
+    audioCtxRef.current = null;
+    smoothLevelRef.current = 0;
+    setMicLevel(0);
+    setSpeechActive(false);
+  }, []);
+
+  const startMeter = useCallback(async () => {
+    if (!navigator.mediaDevices?.getUserMedia || !window.AudioContext) return;
+    try {
+      const ctx = new AudioContext();
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const source = ctx.createMediaStreamSource(stream);
+      const analyser = ctx.createAnalyser();
+      analyser.fftSize = 512;
+      source.connect(analyser);
+      audioCtxRef.current = ctx;
+      meterStreamRef.current = stream;
+      analyserRef.current = analyser;
+
+      const buffer = new Uint8Array(analyser.frequencyBinCount);
+      const tick = () => {
+        const node = analyserRef.current;
+        if (!node) return;
+        node.getByteTimeDomainData(buffer);
+        let sumSquares = 0;
+        for (let i = 0; i < buffer.length; i++) {
+          const centered = (buffer[i] - 128) / 128;
+          sumSquares += centered * centered;
+        }
+        const rms = Math.sqrt(sumSquares / buffer.length);
+        // Attack fast (a word shows immediately), decay slowly (no flicker).
+        const scaled = Math.min(1, rms * 3.2);
+        smoothLevelRef.current =
+          scaled > smoothLevelRef.current
+            ? smoothLevelRef.current + (scaled - smoothLevelRef.current) * 0.45
+            : smoothLevelRef.current + (scaled - smoothLevelRef.current) * 0.08;
+        setMicLevel(smoothLevelRef.current);
+        setSpeechActive(smoothLevelRef.current > 0.12);
+        meterRafRef.current = requestAnimationFrame(tick);
+      };
+      meterRafRef.current = requestAnimationFrame(tick);
+    } catch {
+      // Meter is cosmetic; the recognizer still works without it.
+    }
+  }, []);
+
   const startListening = useCallback(async () => {
     if (!speechSupported) {
       setError("Speech recognition is not supported in this browser. Use Chrome or Edge.");
@@ -523,7 +591,8 @@ export function useConsultationCapture() {
     recognitionRef.current = recognition;
     keepListeningRef.current = true;
     setIsListening(true);
-  }, [preflightMic, sendLine, clearTranscript, speechSupported]);
+    void startMeter();
+  }, [preflightMic, sendLine, clearTranscript, startMeter, speechSupported]);
 
   const stopListening = useCallback(() => {
     if (restartTimerRef.current) {
@@ -536,7 +605,8 @@ export function useConsultationCapture() {
     setInterimText("");
     setListeningHint("");
     setIsListening(false);
-  }, []);
+    stopMeter();
+  }, [stopMeter]);
 
   const toggleListening = useCallback(() => {
     if (keepListeningRef.current) stopListening();
@@ -575,6 +645,10 @@ export function useConsultationCapture() {
       if (restartTimerRef.current) window.clearTimeout(restartTimerRef.current);
       keepListeningRef.current = false;
       recognitionRef.current?.stop();
+      meterStreamRef.current?.getTracks().forEach((track) => track.stop());
+      if (audioCtxRef.current && audioCtxRef.current.state !== "closed") {
+        void audioCtxRef.current.close();
+      }
     },
     []
   );
@@ -598,6 +672,8 @@ export function useConsultationCapture() {
     interimText,
     listeningHint,
     lastVoiceCommand,
+    micLevel,
+    speechActive,
     lastHeard,
     draft,
     setDraft,
