@@ -431,6 +431,20 @@ async def consultation_socket(websocket: WebSocket, token: str = ""):
                 report_text = ""
             if not isinstance(language_code, str) or not language_code.strip():
                 language_code = "en-US"
+            # Instant ack: echo the line with its regex-extracted symptoms so
+            # the UI shows concepts, risk hints and the body map immediately.
+            # The full copilot plan needs the local LLM (tens of seconds on
+            # CPU), so it follows as a separate message rather than blocking.
+            try:
+                await websocket.send_json({
+                    "kind": "line_ack",
+                    "speaker": "doctor" if speaker == "doctor" else "patient",
+                    "transcript": text,
+                    "original_transcript": text,
+                    "symptoms": extract_symptoms_from_text(text),
+                })
+            except Exception:
+                pass  # client gone; the to_thread result would also fail to send
             # Process off the event loop: the copilot plan can call the
             # local LLM for tens of seconds on CPU, and blocking here would
             # freeze every other request and websocket on the server.
@@ -441,6 +455,7 @@ async def consultation_socket(websocket: WebSocket, token: str = ""):
                 report_text=report_text,
                 language_code=language_code,
             )
+            processed["kind"] = "analysis"
             await websocket.send_json(processed)
     except WebSocketDisconnect:
         return

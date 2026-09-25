@@ -30,6 +30,7 @@ export type PainPoint = {
 export type RealtimeConsultationEvent = {
   speaker: "doctor" | "patient";
   transcript: string;
+  original_transcript?: string;
   symptoms: string[];
   diagnosis?: DiagnosisResponse | null;
   pain_points: PainPoint[];
