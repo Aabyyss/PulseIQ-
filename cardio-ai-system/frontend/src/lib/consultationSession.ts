@@ -38,6 +38,8 @@ export async function finishConsultation(input: {
   nextSteps: string[];
   reportText: string;
   lastHeardText: string;
+  /** Capture locale of the encounter, shown in History (e.g. ur-PK). */
+  spokenLanguage: string;
 }): Promise<SaveVisitResult> {
   // Report generation calls the local LLM (30-90s on CPU), so the request
   // gets a long timeout instead of the default 15s API timeout.
@@ -96,6 +98,7 @@ export async function finishConsultation(input: {
       chief_complaint: input.meta.chiefComplaint,
       risk_level: input.riskLevel,
       symptom_notes: input.symptomNotes,
+      spoken_language: input.spokenLanguage,
       transcript: input.lines.map((line) => ({ speaker: line.speaker, text: line.text, timestamp: line.timestamp })),
       report,
       created_at: new Date().toISOString()

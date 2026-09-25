@@ -217,7 +217,8 @@ export function ConsultationPage() {
         diagnosticImpression,
         nextSteps,
         reportText,
-        lastHeardText: lastHeard
+        lastHeardText: lastHeard,
+        spokenLanguage: language
       });
       setSavedId(result.savedId ?? (result.saved ? 0 : null));
       if (!result.saved) {
