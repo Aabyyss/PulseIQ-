@@ -28,6 +28,52 @@ except ImportError:
 _WORD_STEMS = {
     "fatigue": ("tired", "weak"),
 }
+
+# Urdu-script orthography varies by writer, keyboard and ASR engine: the
+# same word arrives with Arabic or Urdu codepoints for alef/yeh/heh, with
+# or without vowel marks, tatweel stretchers, or zero-width joiners. The
+# matcher normalises all of it to the canonical Urdu used in the
+# dictionary so "دل میں درد" written as "دل ميں درد" still matches.
+_URDU_CHAR_MAP = {
+    "\u0622": "ا",  # alef with madda above -> alef
+    "\u0623": "ا",  # alef with hamza above -> alef
+    "\u0625": "ا",  # alef with hamza below -> alef
+    "\u064a": "ی",  # arabic yeh -> farsi yeh
+    "\u0649": "ی",  # alef maksura -> farsi yeh
+    "\u0647": "ہ",  # arabic heh -> gol heh
+    "\u0629": "ہ",  # teh marbuta -> gol heh
+}
+# Harakat, tanwin, shadda, sukun, tatweel, ZWNJ/ZWJ: stripped outright.
+_URDU_STRIP_CHARS = "\u064b\u064c\u064d\u064e\u064f\u0650\u0651\u0652\u0670\u0640\u200c\u200d\u200e\u200f"
+
+
+def normalize_urdu(text):
+    """Canonicalise Urdu-script text for dictionary matching.
+
+    Word count and order are preserved (normalisation is per character
+    within each word), so negation-window word indices stay valid when
+    computed against the normalised string.
+    """
+    stripped = {ord(ch): None for ch in _URDU_STRIP_CHARS}
+    mapped = text.translate(str.maketrans(_URDU_CHAR_MAP)).translate(stripped)
+    return " ".join(mapped.split())
+
+
+# Dictionary phrases in Urdu script, normalised once at import time so the
+# matcher can compare against normalised transcripts without re-doing work.
+# Urdu-script dictionary phrases are normalised once and cached, so the
+# matcher never re-normalises a needle per line.
+_URDU_PHRASE_CACHE = {}
+
+
+def _phrase_needle(phrase):
+    if phrase.isascii():
+        return phrase
+    needle = _URDU_PHRASE_CACHE.get(phrase)
+    if needle is None:
+        needle = normalize_urdu(phrase)
+        _URDU_PHRASE_CACHE[phrase] = needle
+    return needle
 _WORD_STEM_RES = {
     symptom: [re.compile(rf"\b{re.escape(stem)}\b") for stem in stems]
     for symptom, stems in _WORD_STEMS.items()
@@ -167,6 +213,21 @@ _NEGATION_CUES = (
 # English cue equivalents clinicians commonly dictate in Roman Urdu.
 _ROMAN_NEGATION_CUES = ("nahi", "nahin", "koi")
 
+# The same cues in Urdu script (nahi/nah/koï) — without these, a denied
+# finding dictated in Urdu script counted as a positive symptom.
+_URDU_NEGATION_CUES = ("\u0646\u06c1\u06cc\u06ba", "\u0646\u0647", "\u06a9\u0648\u0626\u06cc")
+
+# Cues valid AFTER a phrase are only the ones that end the symptom itself
+# ("the pain resolved", "dil ka dard nahi hai"). The full cue set must
+# NOT apply here: "chest pain without sweating" would otherwise negate
+# the chest pain instead of the sweating.
+_AFTER_NEGATION_CUES = (
+    "resolved", "gone", "settled", "stopped", "denies",
+    "nahi", "nahin",
+    "\u0646\u06c1\u06cc\u06ba",  # nahi
+    "\u0646\u0647",        # nah
+)
+
 # How many meaningful words before a match may contain a cue and still
 # apply. Connector words ("and", "or", commas) don't count toward the
 # window, so a dictated list like "denies chest pain and shortness of
@@ -176,6 +237,15 @@ _ROMAN_NEGATION_CUES = ("nahi", "nahin", "koi")
 _NEGATION_WINDOW_WORDS = 3
 _CONNECTORS = {"and", "or", ",", ";", "+"}
 _WINDOW_STOPS = {"but"}
+
+# Dictated and ASR text leans punctuation onto words ("resolved,").
+# Cue comparison uses the bare word; fully-stripped tokens (a bare
+# comma) are transparent connectors.
+_PUNCT_STRIP = ".,;:!?\"'()\u060c"
+
+
+def _clean_token(word):
+    return word.strip(_PUNCT_STRIP)
 
 
 def _split_words(lower_text):
@@ -205,17 +275,55 @@ def _is_negated(text_lower, phrase_char_pos, words):
     window = []
     idx = word_idx - 1
     while idx >= 0 and len(window) < _NEGATION_WINDOW_WORDS:
-        token = words[idx]
+        token = _clean_token(words[idx])
+        if not token:
+            idx -= 1
+            continue
         if token in _WINDOW_STOPS:
             break
         if token not in _CONNECTORS:
             window.append(token)
         idx -= 1
-    for cue in _NEGATION_CUES + _ROMAN_NEGATION_CUES:
+    for cue in _NEGATION_CUES + _ROMAN_NEGATION_CUES + _URDU_NEGATION_CUES:
         if not cue:
             continue
         if " " in cue:
             if cue in " ".join(reversed(window)):
+                return True
+        elif cue in window:
+            return True
+    return False
+
+
+def _is_negated_after(text_lower, phrase_char_pos, phrase_len, words):
+    """True if a negation cue follows the phrase within the window.
+
+    Urdu places its negator after the noun phrase — "dil ka dard NAHI
+    hai" — unlike English ("no chest pain"), so the lookahead window is
+    essential for Urdu-script denials.
+    """
+    after_pos = phrase_char_pos + phrase_len
+    # Anchor on the phrase's final character: after_pos itself usually
+    # lands on the separator space, which no word contains, and the
+    # index helper would fall through to the last word of the text.
+    word_idx = _char_index_to_word_index(text_lower, max(after_pos - 1, 0))
+    window = []
+    idx = word_idx + 1
+    while idx < len(words) and len(window) < _NEGATION_WINDOW_WORDS:
+        token = _clean_token(words[idx])
+        if not token:
+            idx += 1
+            continue
+        if token in _WINDOW_STOPS:
+            break
+        if token not in _CONNECTORS:
+            window.append(token)
+        idx += 1
+    for cue in _AFTER_NEGATION_CUES:
+        if not cue:
+            continue
+        if " " in cue:
+            if cue in " ".join(window):
                 return True
         elif cue in window:
             return True
@@ -237,17 +345,28 @@ def extract_symptoms_from_text(text, return_details=False):
 
     detected = []
     details = {}
+
+    # Urdu-script input is matched against a normalised copy of the text;
+    # normalisation preserves word order, so negation windows computed on
+    # the normalised string stay valid. Roman-Urdu and English are untouched.
+    search_text = text_lower
     words = _split_words(text_lower)
+    if any("\u0600" <= ch <= "\u06ff" for ch in text_lower):
+        search_text = normalize_urdu(text_lower)
+        words = _split_words(search_text)
 
     for symptom, phrases in symptom_dictionary.items():
         for phrase in phrases:
+            needle = _phrase_needle(phrase)
             start = 0
             while True:
-                pos = text_lower.find(phrase, start)
+                pos = search_text.find(needle, start)
                 if pos == -1:
                     break
                 start = pos + 1
-                if _is_negated(text_lower, pos, words):
+                if _is_negated(search_text, pos, words):
+                    continue
+                if _is_negated_after(search_text, pos, len(needle), words):
                     continue
                 if symptom not in detected:
                     detected.append(symptom)

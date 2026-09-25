@@ -98,6 +98,21 @@ PHRASE_CASES = [
     ("دل میں درد ہے", {"chest pain"}),
     ("heart pain after walking", {"chest pain"}),
     ("right side of my chest aches at night", {"chest pain"}),
+    # Urdu-script orthography variants: arabic yeh/heh codepoints must
+    # still match (normalisation unifies them with the Urdu forms).
+    ("دل ميں درد ہے", {"chest pain"}),
+    # Urdu negation sits AFTER the noun phrase ("dard NAHI hai") and must
+    # not leak into the next symptom.
+    ("دل کا درد نہیں ہے", set()),
+    ("دل میں درد نہیں", set()),
+    ("dil ka dard nahi hai", set()),
+    ("the chest pain has resolved", set()),
+    ("the chest pain is gone now", set()),
+    # "without" after a phrase denies the FOLLOWING symptom, not the
+    # preceding one (the post-window carries only symptom-ceasing cues).
+    ("chest pain without sweating", {"chest pain"}),
+    ("سینے میں درد ہے اور پسینہ آ رہا ہے", {"chest pain", "sweating"}),
+    ("دل میں درد ہے لیکن سانس پھول رہی ہے", {"chest pain", "shortness of breath"}),
 ]
 
 
