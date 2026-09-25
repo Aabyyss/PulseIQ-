@@ -42,6 +42,45 @@ type LineAckEvent = {
 const MAX_LINES = 200;
 
 /*
+ * Hands-free spoken commands. Matched against every final result BEFORE it
+ * can become a transcript line, so a command is never documented as part of
+ * the encounter. Urdu variants cover the phrasings an Urdu speaker would
+ * naturally say ("save karo", "saf karo").
+ */
+type VoiceCommand = "save-visit" | "clear-transcript";
+
+const VOICE_COMMANDS: { command: VoiceCommand; patterns: RegExp[] }[] = [
+  {
+    command: "save-visit",
+    patterns: [
+      /\bsave\s+(?:this\s+)?(?:the\s+)?visit\b/,
+      /\bsave\s+(?:this\s+)?(?:the\s+)?consultation\b/,
+      /\bfinish\s+(?:and\s+save|the\s+visit|the\s+consultation)\b/,
+      /\bend\s+(?:the\s+)?visit\s+(?:and\s+save)\b/,
+      /\bsave\s+(?:ye|yeh|this)?\s*(?:visit|karo|kar)\b/,
+      /\bvisit\s+save\s+karo\b/
+    ]
+  },
+  {
+    command: "clear-transcript",
+    patterns: [
+      /\bclear\s+(?:the\s+)?transcript\b/,
+      /\bstart\s+(?:a\s+)?(?:new|fresh)\s+(?:visit|consultation|transcript)\b/,
+      /\bclear\s+(?:sab|karo|kar)\b/,
+      /\bsaf\s+karo\b/, /\bsaaf\s+karo\b/
+    ]
+  }
+];
+
+function matchVoiceCommand(text: string): VoiceCommand | null {
+  const normalized = ` ${text.toLowerCase().replace(/\s+/g, " ")} `;
+  for (const entry of VOICE_COMMANDS) {
+    if (entry.patterns.some((pattern) => pattern.test(normalized))) return entry.command;
+  }
+  return null;
+}
+
+/*
  * Who-is-speaking heuristic: the patient tells or informs about symptoms in
  * the first person ("it pains in my heart", "mujhe chakkar aa rahe hain");
  * the clinician informs about the case ("the patient reports…", "on
@@ -99,6 +138,7 @@ export function useConsultationCapture() {
   const [lastHeard, setLastHeard] = useState("");
   const [interimText, setInterimText] = useState("");
   const [listeningHint, setListeningHint] = useState("");
+  const [lastVoiceCommand, setLastVoiceCommand] = useState<{ command: VoiceCommand; seq: number } | null>(null);
   const [draft, setDraft] = useState("");
   const [reportText, setReportText] = useState("");
 
@@ -341,6 +381,7 @@ export function useConsultationCapture() {
     setSymptoms([]);
     setBodyInsights([]);
     setInterimText("");
+    setListeningHint("");
     setAwaitingCopilot(false);
     setRiskLevel("Low");
     setDoctorQuestions([]);
@@ -413,6 +454,15 @@ export function useConsultationCapture() {
             );
             continue;
           }
+          // Commands execute without entering the encounter record.
+          const command = matchVoiceCommand(trimmed);
+          if (command) {
+            // A seq stamp makes repeated commands distinguishable.
+            setLastVoiceCommand({ command, seq: Date.now() });
+            setInterimText("");
+            if (command === "clear-transcript") clearTranscript();
+            return;
+          }
           setListeningHint("");
           sendLine(trimmed);
         } else {
@@ -473,7 +523,7 @@ export function useConsultationCapture() {
     recognitionRef.current = recognition;
     keepListeningRef.current = true;
     setIsListening(true);
-  }, [preflightMic, sendLine, speechSupported]);
+  }, [preflightMic, sendLine, clearTranscript, speechSupported]);
 
   const stopListening = useCallback(() => {
     if (restartTimerRef.current) {
@@ -547,6 +597,7 @@ export function useConsultationCapture() {
     lines,
     interimText,
     listeningHint,
+    lastVoiceCommand,
     lastHeard,
     draft,
     setDraft,
