@@ -76,7 +76,11 @@ const FAQ = [
   },
   {
     q: "What languages does symptom extraction understand?",
-    a: "The clinical vocabulary matches English, Urdu and Roman-Urdu phrasings for nine cardiac concepts: chest pain (including \"pain in my heart\"), shortness of breath, dizziness, palpitations, fatigue, nausea, sweating, leg swelling and cough."
+    a: "The clinical vocabulary matches English, Urdu and Roman-Urdu phrasings for nine cardiac concepts: chest pain (including \"pain in my heart\"), shortness of breath, dizziness, palpitations, fatigue, nausea, sweating, leg swelling and cough. Korean can be captured and is translated before analysis; Urdu matching works even when the translator is offline."
+  },
+  {
+    q: "Can I control the copilot by voice?",
+    a: "Yes. While listening, say \"save visit\" to finish and store the encounter, or \"clear transcript\" to start over - in Urdu, \"save karo\" works too. Spoken commands are never added to the transcript."
   },
   {
     q: "Where is my data stored?",

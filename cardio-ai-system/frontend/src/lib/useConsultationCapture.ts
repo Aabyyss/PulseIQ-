@@ -24,6 +24,7 @@ export const LANGUAGE_OPTIONS = [
   { label: "Urdu", code: "ur-PK" },
   { label: "Hindi", code: "hi-IN" },
   { label: "Arabic", code: "ar-SA" },
+  { label: "Korean", code: "ko-KR" },
   { label: "French", code: "fr-FR" },
   { label: "Spanish", code: "es-ES" },
   { label: "German", code: "de-DE" },
@@ -49,7 +50,8 @@ const MAX_LINES = 200;
  */
 const PATIENT_SPEECH_CUES = [
   /\bi\b/, /\bim\b/, /\bi'm\b/, /\bive\b/, /\bi've\b/, /\bill\b/, /\bi'll\b/, /\bmy\b/, /\bme\b/, /\bmine\b/, /\bmyself\b/,
-  /\bmujhe\b/, /\bmera\b/, /\bmeri\b/, /\bmeray\b/, /\bmere\b/, /\bmain(?:\s+(?:ne|ko|se))?\b/, /\bmera?\b/
+  /\bmujhe\b/, /\bmera\b/, /\bmeri\b/, /\bmeray\b/, /\bmere\b/, /\bmain(?:\s+(?:ne|ko|se))?\b/, /\bmera?\b/,
+  /\bje\b/, /\bjeo\b/, /\bnae\b/, /\bnaui\b/, /\bmaneun\b/
 ];
 const DOCTOR_SPEECH_CUES = [
   /\bpatient\b/, /\b(?:his|her|their)\s+history\b/, /\bpresents?\b/, /\bcomplain(?:s|ing)?\s+of\b/,
