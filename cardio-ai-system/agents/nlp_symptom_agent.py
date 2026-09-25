@@ -39,6 +39,17 @@ symptom_dictionary = {
         "pain in my chest", "pain in the chest", "pain in chest",
         "pressure in my chest", "pressure in chest", "heaviness in my chest",
         "heaviness in chest", "burning in my chest", "angina",
+        # Patients localise cardiac pain to "the heart", not the anatomical
+        # chest, and ASR often yields "it pains in my heart" (verb form).
+        "pain in my heart", "pains in my heart", "pain in the heart",
+        "pains in the heart", "pain in heart", "heart pain", "heart pains",
+        "heart hurts", "heart aches",
+        "left side of my heart", "left side of the heart",
+        "right side of my heart", "right side of the heart",
+        "left side of my chest", "left side of the chest",
+        "right side of my chest", "right side of the chest",
+        "heart area", "dil mein dard", "dil ka dard",
+        "دل میں درد", "دل کا درد",
         # Urdu script + Roman Urdu
         "سینے میں درد", "سینے کا درد", "چھاتی میں درد", "سینے میں جلن",
         "seene mein dard", "seenay mein dard", "seene mein darad",

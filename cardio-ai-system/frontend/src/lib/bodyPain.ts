@@ -23,17 +23,99 @@ export type LocalClinicalGuidance = {
   nextSteps: string[];
 };
 
-const REGION_KEYWORDS: Record<BodyRegionId, string[]> = {
-  head: ["head pain", "headache", "migraine", "pain in head"],
-  neck: ["neck pain", "neck stiffness", "cervical pain", "pain in neck", "گردن میں درد", "gardan mein dard"],
-  chest: ["chest pain", "chest pressure", "chest tightness", "pain in chest", "سینے میں درد", "seene mein dard"],
-  left_arm: ["left arm pain", "pain in left arm", "left shoulder pain", "left hand numbness", "left arm", "بائیں بازو میں درد", "baen bazu mein dard"],
-  right_arm: ["right arm pain", "pain in right arm", "right shoulder pain", "right arm", "دایاں بازو درد", "dayan bazu dard"],
-  upper_abdomen: ["upper abdomen pain", "epigastric pain", "stomach burning", "upper stomach pain"],
-  lower_abdomen: ["lower abdomen pain", "pelvic pain", "abdominal cramps", "lower stomach pain"],
-  back: ["back pain", "upper back pain", "lower back pain", "pain in back", "کمر میں درد", "kamar dard"],
-  left_leg: ["left leg pain", "left calf pain", "left thigh pain", "pain in left leg", "left knee pain", "بائیں ٹانگ میں درد", "baen tang mein dard"],
-  right_leg: ["right leg pain", "right calf pain", "right thigh pain", "pain in right leg", "right knee pain", "دایاں ٹانگ درد", "dayan tang dard"],
+/**
+ * Region matching is regex-based and word-aware so patient phrasings such as
+ * "it pains in my heart", "left side of the heart" or "mera seena dard" hit
+ * the right zone. Substring matching missed them (they contain no "chest").
+ * Most patterns live under the chest concept — cardiac pain is localised to
+ * "the heart" and its sides, and ASR turns "pains" into a verb — plus the
+ * side-specific arm/leg variants and Urdu/Roman-Urdu phrasings.
+ */
+const REGION_PATTERNS: Record<BodyRegionId, RegExp[]> = {
+  head: [
+    /\bhead\s*(pain|ache|aches|hurts?|paining)\b/,
+    /\bpain(?:s)?\s+(?:in|of)\s+(?:my\s+|the\s+)?head\b/,
+    /\bheadache\b/, /\bmigraine\b/,
+    /\bsir\s+(?:mein|main)\s+dard\b/, /\bسر درد\b/
+  ],
+  neck: [
+    /\bneck\s*(pain|ache|aches|hurts?|stiffness|stiff|paining)\b/,
+    /\bpain(?:s)?\s+(?:in|of)\s+(?:my\s+|the\s+)?neck\b/, /\bcervical\s+pain\b/,
+    /\bgardan\s+(?:mein|main)?\s*dard\b/, /\bگردن میں درد\b/
+  ],
+  chest: [
+    /\bchest\s*(pain|pressure|tightness|discomfort|hurts?|heavy|heaviness|burning|paining)\b/,
+    /\bpain(?:s)?\s+(?:in|of)\s+(?:my\s+|the\s+)?chest\b/,
+    /\b(?:pressure|tightness|heaviness|burning)\s+in\s+(?:my\s+|the\s+)?chest\b/,
+    /\btight\s+chest\b/, /\bangina\b/,
+    // Patients say "heart", not "chest" — every cardiac phrasing maps here.
+    /\bheart\s*(pain|pains|hurts?|ache|aches|paining|burning)\b/,
+    /\bpain(?:s)?\s+(?:in|of)\s+(?:my\s+|the\s+)?heart\b/,
+    /\bheart\s*area\b/,
+    /\b(?:left|right)\s+side\s+of\s+(?:my\s+|the\s+)?(?:heart|chest)\b/,
+    /\bpain\s+(?:in|on)\s+(?:my\s+|the\s+)?(?:left|right)\s+side\b/,
+    /\bheart\s+pain\b/,
+    /\bseene\s+(?:mein|main)?\s*dard\b/, /\bseenay\s+mein\s+dard\b/, /\bchati\s+mein\s+dard\b/,
+    /\bdil\s+(?:mein|main|ka)\s+dard\b/, /\bdil\s+ka\s+dard\b/,
+    /\bسینے میں درد\b/, /\bسینے کا درد\b/, /\bچھاتی میں درد\b/, /\bسینے میں جلن\b/,
+    /\bدل میں درد\b/, /\bدل کا درد\b/
+  ],
+  left_arm: [
+    /\bleft\s+arm\b/, /\bpain\s+in\s+(?:my\s+|the\s+)?left\s+arm\b/,
+    /\bleft\s+shoulder\b/, /\bleft\s+hand\s+numbness\b/,
+    /\bbaen\s+bazu\s+(?:mein\s+)?dard\b/, /\bبائیں بازو میں درد\b/
+  ],
+  right_arm: [
+    /\bright\s+arm\b/, /\bpain\s+in\s+(?:my\s+|the\s+)?right\s+arm\b/,
+    /\bright\s+shoulder\b/,
+    /\bdayan\s+bazu\s+(?:mein\s+)?dard\b/, /\bدایاں بازو(?:\s+درد| میں درد)\b/
+  ],
+  upper_abdomen: [
+    /\bupper\s+(?:abdomen|stomach|belly)\s*(pain|ache|hurts?)?/,
+    /\bepigastric\b/, /\bstomach\s+burning\b/,
+    /\bpain\s+(?:in|of)\s+(?:my\s+|the\s+)?upper\s+(?:stomach|abdomen)\b/
+  ],
+  lower_abdomen: [
+    /\blower\s+(?:abdomen|stomach|belly)\s*(pain|ache|hurts?)?/,
+    /\bpelvic\s+pain\b/, /\babdominal\s+cramps\b/,
+    /\bpain\s+(?:in|of)\s+(?:my\s+|the\s+)?lower\s+(?:stomach|abdomen|belly)\b/
+  ],
+  back: [
+    /\bback\s*(pain|ache|hurts?|paining)\b/,
+    /\bpain(?:s)?\s+(?:in|of)\s+(?:my\s+|the\s+)?back\b/,
+    /\bupper\s+back\b/, /\blower\s+back\b/,
+    /\bkamar\s+(?:mein|main)?\s*dard\b/, /\bکمر میں درد\b/
+  ],
+  left_leg: [
+    /\bleft\s+(?:leg|calf|thigh|knee|ankle|foot|feet)\b/,
+    /\bpain\s+(?:in|of)\s+(?:my\s+|the\s+)?left\s+leg\b/,
+    /\bbaen\s+tang\s+(?:mein\s+)?dard\b/, /\bبائیں ٹانگ میں درد\b/
+  ],
+  right_leg: [
+    /\bright\s+(?:leg|calf|thigh|knee|ankle|foot|feet)\b/,
+    /\bpain\s+(?:in|of)\s+(?:my\s+|the\s+)?right\s+leg\b/,
+    /\bdayan\s+tang\s+(?:mein\s+)?dard\b/, /\bدایاں ٹانگ(?:\s+درد| میں درد)\b/
+  ]
+};
+
+/** Bare "leg pain" / "stomach pain" without a side maps to both sides. */
+const GENERIC_PATTERNS: { pattern: RegExp; targets: BodyRegionId[] }[] = [
+  { pattern: /\barm\s*(pain|ache|hurts?|paining)\b|\bshoulder\s+pain\b/, targets: ["left_arm", "right_arm"] },
+  { pattern: /\bleg\s*(pain|ache|hurts?|paining)\b/, targets: ["left_leg", "right_leg"] },
+  { pattern: /\bstomach\s*(pain|ache|hurts?)\b|\bbelly\s+pain\b|\bpet\s+mein\s+dard\b/, targets: ["upper_abdomen"] }
+];
+
+const REGION_LABELS: Record<BodyRegionId, string> = {
+  head: "Head",
+  neck: "Neck",
+  chest: "Chest",
+  left_arm: "Left Arm",
+  right_arm: "Right Arm",
+  upper_abdomen: "Upper Abdomen",
+  lower_abdomen: "Lower Abdomen",
+  back: "Back",
+  left_leg: "Left Leg",
+  right_leg: "Right Leg"
 };
 
 function factorsForRegion(region: BodyRegionId, text: string): { factors: string[]; urgency: "low" | "moderate" | "high" } {
@@ -103,41 +185,56 @@ function factorsForRegion(region: BodyRegionId, text: string): { factors: string
   };
 }
 
+function insightFor(region: BodyRegionId, text: string): BodyPainInsight {
+  const factors = factorsForRegion(region, text);
+  return {
+    region,
+    label: REGION_LABELS[region],
+    possibleFactors: factors.factors,
+    urgency: factors.urgency,
+  };
+}
+
 export function inferBodyPainInsights(transcript: string, reportText: string): BodyPainInsight[] {
   const text = `${transcript} ${reportText}`.toLowerCase();
   const matched: BodyPainInsight[] = [];
+  const seen = new Set<BodyRegionId>();
 
-  (Object.keys(REGION_KEYWORDS) as BodyRegionId[]).forEach((region) => {
-    const hit = REGION_KEYWORDS[region].some((keyword) => text.includes(keyword));
+  (Object.keys(REGION_PATTERNS) as BodyRegionId[]).forEach((region) => {
+    const hit = REGION_PATTERNS[region].some((pattern) => pattern.test(text));
     if (!hit) return;
-    const factors = factorsForRegion(region, text);
-    matched.push({
-      region,
-      label: region.replace("_", " ").replace(/\b\w/g, (c) => c.toUpperCase()),
-      possibleFactors: factors.factors,
-      urgency: factors.urgency,
-    });
+    seen.add(region);
+    matched.push(insightFor(region, text));
   });
 
   // Generic fallbacks when side isn't stated.
-  if ((text.includes("arm pain") || text.includes("shoulder pain")) && !matched.some((m) => m.region === "left_arm" || m.region === "right_arm")) {
-    const left = factorsForRegion("left_arm", text);
-    const right = factorsForRegion("right_arm", text);
-    matched.push({ region: "left_arm", label: "Left Arm", possibleFactors: left.factors, urgency: left.urgency });
-    matched.push({ region: "right_arm", label: "Right Arm", possibleFactors: right.factors, urgency: right.urgency });
-  }
-  if (text.includes("leg pain") && !matched.some((m) => m.region === "left_leg" || m.region === "right_leg")) {
-    const left = factorsForRegion("left_leg", text);
-    const right = factorsForRegion("right_leg", text);
-    matched.push({ region: "left_leg", label: "Left Leg", possibleFactors: left.factors, urgency: left.urgency });
-    matched.push({ region: "right_leg", label: "Right Leg", possibleFactors: right.factors, urgency: right.urgency });
-  }
-  if (text.includes("stomach pain") && !matched.some((m) => m.region === "upper_abdomen" || m.region === "lower_abdomen")) {
-    const upper = factorsForRegion("upper_abdomen", text);
-    matched.push({ region: "upper_abdomen", label: "Upper Abdomen", possibleFactors: upper.factors, urgency: upper.urgency });
-  }
+  GENERIC_PATTERNS.forEach(({ pattern, targets }) => {
+    if (!pattern.test(text)) return;
+    targets
+      .filter((region) => !seen.has(region))
+      .forEach((region) => {
+        seen.add(region);
+        matched.push(insightFor(region, text));
+      });
+  });
 
-  return matched;
+  // Keep a stable display order regardless of match order.
+  const order = Object.keys(REGION_LABELS) as BodyRegionId[];
+  return matched.sort((a, b) => order.indexOf(a.region) - order.indexOf(b.region));
+}
+
+/**
+ * Merge per-line insights into a running view of the encounter: the body map
+ * accumulates every region reported across the whole transcript instead of
+ * flashing to "0 regions" whenever a new line contains no location.
+ * Re-derives factors/urgency against the full accumulated text so cardiac
+ * flags ("…and sweating") raise urgency even when they arrive later.
+ */
+export function mergeInsights(existing: BodyPainInsight[], incoming: BodyPainInsight[], text: string): BodyPainInsight[] {
+  const regions = new Set([...existing.map((i) => i.region), ...incoming.map((i) => i.region)]);
+  return (Object.keys(REGION_LABELS) as BodyRegionId[])
+    .filter((region) => regions.has(region))
+    .map((region) => insightFor(region, text));
 }
 
 export function deriveLocalClinicalGuidance(insights: BodyPainInsight[]): LocalClinicalGuidance {

@@ -86,6 +86,18 @@ PHRASE_CASES = [
     ("hello doctor", set()),
     ("i have a headache and fever", set()),
     ("he is retired", set()),
+    # Patients localise cardiac pain to "the heart" (and ASR drops/stretches
+    # words); these surfaced from real copilot transcripts.
+    ("it pains in my heart twice a day", {"chest pain"}),
+    ("and it pains in my heart sometimes", {"chest pain"}),
+    ("it pains in the left side of my heart twice a day", {"chest pain"}),
+    ("i have pain in my bag and in my left side of the heart", {"chest pain"}),
+    ("there is a stabbing pain in my heart area", {"chest pain"}),
+    ("my heart hurts when i climb stairs", {"chest pain"}),
+    ("dil mein dard hota hai", {"chest pain"}),
+    ("دل میں درد ہے", {"chest pain"}),
+    ("heart pain after walking", {"chest pain"}),
+    ("right side of my chest aches at night", {"chest pain"}),
 ]
 
 
