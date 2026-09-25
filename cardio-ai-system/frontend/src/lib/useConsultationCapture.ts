@@ -96,6 +96,7 @@ export function useConsultationCapture() {
   const [error, setError] = useState("");
   const [lastHeard, setLastHeard] = useState("");
   const [interimText, setInterimText] = useState("");
+  const [listeningHint, setListeningHint] = useState("");
   const [draft, setDraft] = useState("");
   const [reportText, setReportText] = useState("");
 
@@ -397,9 +398,24 @@ export function useConsultationCapture() {
         const text = result[0].transcript;
         if (result.isFinal) {
           const trimmed = text.trim();
-          if (trimmed) sendLine(trimmed);
+          if (!trimmed) continue;
+          // ASR noise produces junk finals ("uh", "a", "mmm") that would
+          // otherwise become transcript lines and dilute the analysis.
+          const wordCount = trimmed.split(/\s+/).length;
+          if (wordCount < 2 && !/[\u0600-\u06ff\uac00-\ud7af]/.test(trimmed) && trimmed.length < 4) {
+            setLastHeard(trimmed);
+            setListeningHint(
+              /[\u0600-\u06ff]/.test(trimmed) || languageRef.current === "ur-PK"
+                ? "واضح سنائی دیجیے — یہ سطر شامل نہیں ہوئی۔"
+                : "That wasn't clear enough to include — try speaking a little closer to the mic."
+            );
+            continue;
+          }
+          setListeningHint("");
+          sendLine(trimmed);
         } else {
           interim += text;
+          setListeningHint("");
         }
       }
       setInterimText(interim.trim());
@@ -466,6 +482,7 @@ export function useConsultationCapture() {
     recognitionRef.current?.stop();
     recognitionRef.current = null;
     setInterimText("");
+    setListeningHint("");
     setIsListening(false);
   }, []);
 
@@ -527,6 +544,7 @@ export function useConsultationCapture() {
     // capture state
     lines,
     interimText,
+    listeningHint,
     lastHeard,
     draft,
     setDraft,

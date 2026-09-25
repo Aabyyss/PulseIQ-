@@ -105,6 +105,7 @@ export function ConsultationPage() {
     micState,
     lines,
     interimText,
+    listeningHint,
     lastHeard,
     draft,
     setDraft,
@@ -539,6 +540,9 @@ export function ConsultationPage() {
                   <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-accent">listening</span>
                   <p className="mt-1 text-sm italic leading-relaxed text-muted">{interimText}</p>
                 </div>
+              ) : null}
+              {!interimText && listeningHint && isListening ? (
+                <p className="text-center text-2xs italic leading-relaxed text-faint">{listeningHint}</p>
               ) : null}
             </>
           )}
