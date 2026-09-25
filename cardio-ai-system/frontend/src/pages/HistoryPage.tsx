@@ -44,6 +44,7 @@ type ConsultationRecord = {
   chief_complaint?: string;
   risk_level?: string;
   symptom_notes?: string[];
+  spoken_language?: string;
   transcript?: { speaker: string; text: string; timestamp?: string }[];
   report?: FinalReport;
 };
@@ -356,6 +357,11 @@ export function HistoryPage() {
                                 <span className="rounded border border-accent/30 bg-accent/10 px-2 py-0.5 text-2xs font-medium text-accent">
                                   {visit.patient_name}
                                   {visit.patient_age ? `, ${visit.patient_age}` : ""}
+                                </span>
+                              ) : null}
+                              {visit.spoken_language ? (
+                                <span className="num rounded border border-line bg-elev px-1.5 py-0.5 text-2xs font-medium text-faint">
+                                  {visit.spoken_language}
                                 </span>
                               ) : null}
                               {visit.chief_complaint ? (
