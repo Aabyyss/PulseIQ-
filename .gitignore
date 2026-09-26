@@ -51,3 +51,10 @@ cardio-ai-system/backend/data/
 
 # --- TypeScript incremental build cache ---
 *.tsbuildinfo
+
+# --- Personal notes (never publish) ---
+cardio-ai-system/docs/linkedIn-post-pulseiq.md
+
+# --- Demo video intermediates (regenerable via scripts/record-demo.cjs) ---
+cardio-ai-system/docs/demo/raw-take*.webm
+cardio-ai-system/docs/demo/page@*.webm
