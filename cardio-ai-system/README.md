@@ -27,7 +27,7 @@ frontend and model.**
 | `models/` | Trained model and metadata |
 | `data/` | Public heart dataset |
 | `docs/` | Screenshots and the demo walkthrough |
-| `scripts/` | `capture-screenshots.cjs` — regenerates the documentation screenshots |
+| `scripts/` | Screenshot/video capture helpers — regenerate the documentation media |
 | `*.ps1`, `*.cmd` | Setup, run and one-click launcher scripts |
 
 ## Fast start
@@ -52,7 +52,8 @@ cd frontend && npm install && npm run dev                  # terminal 2
 ```
 </details>
 
-No API keys, no accounts. The built-in clinical engine works fully offline; an optional
+No API keys. First launch asks you to create a clinician account — it is stored locally on
+your machine only. The built-in clinical engine works fully offline; an optional
 [Ollama](https://ollama.com) install upgrades the text quality automatically.
 
 ## Scope

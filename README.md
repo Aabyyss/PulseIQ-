@@ -40,10 +40,10 @@ detected, which model inputs they produced, and what a clinician would reach for
 | | Feature | What it does |
 |---|---|---|
 | 🩺 | **Symptom screening** | Free-text narrative → clinical concepts → 13 model inputs → an explained probability, with every step visible |
-| 🎙️ | **Live copilot** | Realtime speech-to-text with speaker attribution, suggested questions, recommended investigations and red-flag escalation |
+| 🎙️ | **Live copilot** | Realtime speech-to-text with speaker attribution, suggested questions, recommended investigations and red-flag escalation — plus hands-free voice commands ("save visit") and a live mic level meter |
 | 🧍 | **Body pain mapping** | Described pain plots onto a front/back diagram as the encounter runs |
 | 📄 | **Consultation reports** | Structured visit capture → one-click PDF export of summary, advice, plan and red flags |
-| 🌍 | **Multilingual capture** | Urdu, Hindi, Arabic, French, Spanish, German, Mandarin — normalised to English |
+| 🌍 | **Multilingual capture** | 9 capture languages — English, Urdu (script + Roman), Hindi, Arabic, Korean, French, Spanish, German, Mandarin — normalised to English for analysis |
 | 🖼️ | **Report reading** | Lab reports and scans parsed for key findings (needs a vision model) |
 | 🕘 | **History & review** | Last 20 screenings kept on-device, with band distribution and mean probability |
 | 🤖 | **17 clinical agents** | Guidelines, uncertainty, causality, fairness, robustness, explainability — each an isolated, replaceable module |
@@ -68,6 +68,12 @@ detected, which model inputs they produced, and what a clinician would reach for
 | **3 · Optional** | Gemini free tier — used automatically if you already have a key | `GEMINI_API_KEY` env var |
 
 ## 🚀 Quickstart
+
+**What you need:** a Windows, macOS or Linux machine — that's it. On Windows, `setup.ps1`
+installs Python 3.12 and Node.js automatically (via winget) if they are missing. First launch
+opens a sign-in screen: create your clinician account (it lives only on your machine), then
+explore. Optional but recommended for richer AI text: install [Ollama](https://ollama.com) and
+run `ollama pull llama3.2` — PulseIQ detects it and upgrades automatically.
 
 **Windows** — or just double-click `Start-PulseIQ.cmd`:
 
