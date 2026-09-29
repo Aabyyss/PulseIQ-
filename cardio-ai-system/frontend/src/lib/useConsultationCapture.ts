@@ -8,6 +8,7 @@ import {
   type BodyPainInsight
 } from "@/lib/bodyPain";
 import { getConsultationSocketCandidates } from "@/lib/realtime";
+import { fetchLearnedVocabulary } from "@/lib/api";
 import type { RealtimeConsultationEvent } from "@/lib/types";
 
 export type TranscriptLine = {
@@ -37,6 +38,18 @@ type LineAckEvent = {
   transcript: string;
   original_transcript?: string;
   symptoms?: string[];
+  matched_phrases?: Record<string, string>;
+  learned_generation?: number;
+  learned_count?: number;
+  learned_hit?: boolean;
+};
+
+/** What the extractor made of the most recent captured line — feeds the teach UI. */
+export type LastLineReading = {
+  text: string;
+  symptoms: string[];
+  matched: Record<string, string>;
+  learnedHit: boolean;
 };
 
 const MAX_LINES = 200;
@@ -186,6 +199,21 @@ export function useConsultationCapture() {
     setBodyInsights((prev) => mergeInsights(prev, incoming, allText));
   }, []);
 
+  // Self-learning state — refreshed from line acks and the vocabulary API.
+  const [learnedCount, setLearnedCount] = useState(0);
+  const [learnedGeneration, setLearnedGeneration] = useState(0);
+  const [lastLineReading, setLastLineReading] = useState<LastLineReading | null>(null);
+
+  const refreshLearned = useCallback(async () => {
+    try {
+      const vocab = await fetchLearnedVocabulary();
+      setLearnedCount(vocab.phrases.length + vocab.suppressions.length);
+      setLearnedGeneration(vocab.generation);
+    } catch {
+      /* learning indicator is cosmetic; never block capture */
+    }
+  }, []);
+
   const addSymptoms = useCallback((found: string[]) => {
     if (!found.length) return;
     setSymptoms((prev) => {
@@ -209,10 +237,18 @@ export function useConsultationCapture() {
     let cancelled = false;
     let activeSocket: WebSocket | null = null;
 
-    const handleAck = (payload: LineAckEvent) => {
-      addSymptoms(payload.symptoms ?? []);
-      recomputeBodyInsights();
-    };
+  const handleAck = (payload: LineAckEvent) => {
+    addSymptoms(payload.symptoms ?? []);
+    recomputeBodyInsights();
+    setLastLineReading({
+      text: payload.original_transcript?.trim() || payload.transcript,
+      symptoms: payload.symptoms ?? [],
+      matched: payload.matched_phrases ?? {},
+      learnedHit: Boolean(payload.learned_hit)
+    });
+    if (typeof payload.learned_count === "number") setLearnedCount(payload.learned_count);
+    if (typeof payload.learned_generation === "number") setLearnedGeneration(payload.learned_generation);
+  };
 
     const handleAnalysis = (payload: RealtimeConsultationEvent) => {
       const seq = ++analysisSeqRef.current;
@@ -653,6 +689,11 @@ export function useConsultationCapture() {
     []
   );
 
+  // Prime the learning indicator once on mount (ack messages keep it fresh).
+  useEffect(() => {
+    void refreshLearned();
+  }, [refreshLearned]);
+
   return {
     // session controls
     speaker,
@@ -696,6 +737,11 @@ export function useConsultationCapture() {
     nextSteps,
     patientRecommendations,
     safetyNote,
-    cardiacRegions
+    cardiacRegions,
+    // self-learning
+    learnedCount,
+    learnedGeneration,
+    lastLineReading,
+    refreshLearned
   };
 }
