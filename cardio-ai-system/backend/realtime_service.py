@@ -16,9 +16,16 @@ from agents.robustness_agent import robustness_checks
 from agents.uncertainty_agent import estimate_prediction_uncertainty
 from backend.ai_assistant import generate_ai_copilot_plan, translate_to_english
 from backend.orchestrator import run_diagnosis_from_text
+from backend import vocabulary_service
 
 
-def process_live_transcript_entry(text: str, speaker: str, report_text: str = "", language_code: str = "en-US") -> dict:
+def process_live_transcript_entry(
+    text: str,
+    speaker: str,
+    report_text: str = "",
+    language_code: str = "en-US",
+    owner_id: int | None = None,
+) -> dict:
     normalized_speaker = "doctor" if speaker == "doctor" else "patient"
     original_transcript = text
     english_transcript = translate_to_english(text=text, language_hint=language_code)
@@ -28,11 +35,13 @@ def process_live_transcript_entry(text: str, speaker: str, report_text: str = ""
     # unioned: if translation degrades, hallucinates, or fails (no LLM,
     # timeout), the original-language findings survive. The translated
     # narrative stays the diagnosis input for its richer English context.
-    symptoms = extract_symptoms_from_text(english_transcript)
-    for symptom in extract_symptoms_from_text(original_transcript):
+    # Both passes honour the signed-in clinician's learned vocabulary, so a
+    # phrase taught this session applies from the next line onward.
+    symptoms = vocabulary_service.extract_symptoms_for_user(english_transcript, owner_id)
+    for symptom in vocabulary_service.extract_symptoms_for_user(original_transcript, owner_id):
         if symptom not in symptoms:
             symptoms.append(symptom)
-    diagnosis = run_diagnosis_from_text(english_transcript) if symptoms else None
+    diagnosis = run_diagnosis_from_text(english_transcript, symptoms=symptoms) if symptoms else None
     risk_level = diagnosis["risk_level"] if diagnosis else "Low"
     probability = diagnosis["probability"] if diagnosis else 0.5
     cardiac_regions = infer_cardiac_regions(symptoms=symptoms, report_text=report_text)
