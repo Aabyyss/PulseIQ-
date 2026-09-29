@@ -84,9 +84,16 @@ the signed-in user's history before the response is returned.
   "features": { "age": 52, "sex": 1, "cp": 2, "trestbps": 140, "chol": 240, "fbs": 0, "restecg": 0, "thalach": 150, "exang": 0, "oldpeak": 1.5, "slope": 2, "ca": 0, "thal": 2 },
   "prediction": 1,
   "probability": 0.83,
-  "risk_level": "High|Medium|Low"
+  "risk_level": "High|Medium|Low",
+  "learned_generation": 17
 }
 ```
+Extraction unions the built-in dictionary with the caller's **learned
+vocabulary** (taught phrases, see `/learning/teach` below), so a phrase the
+clinician taught fires here exactly as it does in the live loop.
+`learned_generation` is the store's change counter at extraction time — a
+client that saw a smaller value is seeing stale vocabulary state.
+
 **200 (validation)**
 ```json
 { "error": "text is required" }
@@ -181,10 +188,23 @@ ko-KR, fr-FR, es-ES, de-DE, zh-CN.
 
 **Server → client, frame 1 — `line_ack` (instant, no LLM):**
 ```json
-{ "kind": "line_ack", "speaker": "patient", "transcript": "as spoken", "original_transcript": "as spoken", "symptoms": ["regex-extracted concepts"] }
+{
+  "kind": "line_ack", "speaker": "patient",
+  "transcript": "as spoken", "original_transcript": "as spoken",
+  "symptoms": ["extracted concepts"],
+  "matched_phrases": { "chest pain": "seene mein dard" },
+  "learned_generation": 17, "learned_count": 3, "learned_hit": false
+}
 ```
 Lets the UI show concepts, risk hints and the body map immediately; the
-dictionary matches English, Urdu script and Roman Urdu directly.
+dictionary matches English, Urdu script and Roman Urdu directly, plus the
+signed-in clinician's **learned vocabulary** (ADR-015). `matched_phrases`
+maps concept → surface phrase that matched; learned phrases are suffixed
+`" (learned)"` in the value. `learned_generation` is the vocabulary store's
+change counter, `learned_count` is how many entries this clinician has,
+and `learned_hit` is true when this line was recognised by a taught phrase
+or suppressed by a taught suppression pattern (drives the "learned phrase
+used" badge and the × not-a-symptom correction affordance).
 
 **Server → client, frame 2 — `analysis` (after the copilot pipeline):**
 ```json
@@ -320,17 +340,79 @@ without saving anything to history.
   "text": "seene mein dard hai aur pasina aa raha hai",
   "symptoms": ["chest pain", "sweating"],
   "matched_phrases": { "chest pain": "seene mein dard", "sweating": "pasina" },
-  "count": 2
+  "count": 2,
+  "learned_generation": 17, "learned_count": 3
 }
 ```
 
 Negation-aware: "no chest pain but severe dizziness" yields only
 `dizziness` — "but" terminates the negation window (ADR-013). Urdu
 script is normalised before matching and the negator may follow the
-noun phrase ("دل کا درد نہیں ہے" yields nothing, ADR-014).
+noun phrase ("دل کا درد نہیں ہے" yields nothing, ADR-014). Runs with
+the signed-in clinician's learned vocabulary applied (ADR-015);
+`learned_generation` / `learned_count` describe the overlay in effect,
+and a taught phrase shows up in `matched_phrases` suffixed `" (learned)"`.
+
+---
+
+## Self-learning — per-clinician taught vocabulary (ADR-015)
+
+Clinicians teach PulseIQ their patients' own words: teach that a phrase
+means one of the nine clinical concepts, or teach a suppression regex for
+phrasings that must never count as a symptom. Everything is scoped to the
+signed-in account at the SQL level — one clinician's vocabulary never
+affects another's extraction. Concepts are constrained to the nine the
+pipeline knows (`valid_concepts` in the list response); unknown ones are
+rejected with 422. Extraction hot-reloads on the next spoken line after
+any write: a generation counter bumps on every mutation and per-owner
+overlays reload when it changes. Stored in
+`backend/data/learned_vocabulary.db` (env `PULSEIQ_LEARNED_DB`), capped at
+500 entries per clinician. Teach/suppress/clear events land in
+`GET /auth/audit`.
+
+## GET /learning/vocabulary *(auth)*
+Everything this clinician taught.
+
+**200**
+```json
+{
+  "phrases": [ { "id": 3, "concept": "dizziness", "phrase": "sir halka ho raha", "origin": "feedback", "created_at": "2026-09-30T10:12:00Z" } ],
+  "suppressions": [ { "id": 1, "pattern": "my chest is a size", "note": "clothing, not symptom", "created_at": "…" } ],
+  "generation": 17,
+  "valid_concepts": ["chest pain", "…nine concepts…"]
+}
+```
+`origin` is `feedback` (taught from the concept-chip controls during a
+consultation) or `manual` (taught from the learning panel form).
+
+## POST /learning/teach *(auth)*
+**Request** `{ "concept": "dizziness", "phrase": "sir halka ho raha", "origin": "feedback" }`
+— `origin` defaults to `manual`; phrase is normalised to lowercase,
+whitespace-collapsed, ≤120 chars, deduplicated per (owner, concept).
+
+**200** `{ "item": { …row as above, plus "created": true|false… }, "generation": 18 }`
+**422** unknown concept, blank phrase, or vocabulary full (500 entries)
+
+## POST /learning/suppress *(auth)*
+Teach a regex that must never count as a symptom mention — checked
+**before** the built-in dictionary, so a matching line yields no findings.
+
+**Request** `{ "pattern": "my chest is a size", "note": "clothing, not symptom" }` — pattern ≤200 chars, validated at write time.
+
+**200** `{ "item": { "id": 1, "pattern": "…", "note": "…", "created_at": "…" }, "generation": 19 }`
+**422** blank/invalid regex, or duplicate of an existing pattern
+
+## DELETE /learning/phrase/{id} *(auth)* · DELETE /learning/suppression/{id} *(auth)*
+Forget one taught phrase or suppression. **200** `{ "ok": true, "generation": 20 }`
+· **404** if the row is not owned by the caller.
+
+## DELETE /learning/vocabulary *(auth)*
+Forget everything this clinician taught.
+**200** `{ "ok": true, "removed": 7, "generation": 21 }`
 
 ## Non-goals
-- No pagination or filtering; lists are capped (200 entries, newest first).
+- No pagination or filtering; lists are capped (200 entries, newest first;
+  learned vocabulary is capped at 500 entries per clinician).
 - No batch endpoints; one narrative / one WS frame per call.
 - No cross-account access of any kind; there are no admin endpoints.
 - The SPA at `:5173` is served by Vite, not by the API.
