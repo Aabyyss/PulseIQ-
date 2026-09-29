@@ -257,6 +257,11 @@ _WINDOW_STOPS = {"but"}
 # comma) are transparent connectors.
 _PUNCT_STRIP = ".,;:!?\"'()\u060c"
 
+# Concepts the learned-vocabulary overlay may add. Anything outside this
+# set in a learned entry is ignored: invented concepts would silently drop
+# out of feature mapping downstream.
+_ALL_KNOWN_CONCEPTS = frozenset(symptom_dictionary) | frozenset(_WORD_STEMS)
+
 
 def _clean_token(word):
     return word.strip(_PUNCT_STRIP)
@@ -344,7 +349,7 @@ def _is_negated_after(text_lower, phrase_char_pos, phrase_len, words):
     return False
 
 
-def extract_symptoms_from_text(text, return_details=False):
+def extract_symptoms_from_text(text, return_details=False, learned=None):
     """Extract cardiac symptom concepts from a narrative.
 
     Negation-aware: a mention preceded within three words by a cue such as
@@ -352,6 +357,13 @@ def extract_symptoms_from_text(text, return_details=False):
     Returns the list of detected symptoms, or (list, details) when
     ``return_details`` is set, where details maps each symptom to its
     matched surface phrase for transparency.
+
+    ``learned`` optionally carries a per-clinician overlay built by
+    ``backend.learned_vocabulary.overlay_for``: extra phrases that mean a
+    known concept, and suppression regexes for phrasings that must never
+    count as a symptom (a matching line yields no findings). Learned
+    phrases run through the same negation logic as the built-in
+    dictionary, so a clinician-taught phrase is still denied correctly.
     """
     text_lower = (text or "").lower()
     if nlp is not None:
@@ -359,6 +371,21 @@ def extract_symptoms_from_text(text, return_details=False):
 
     detected = []
     details = {}
+
+    learned_phrases = {}
+    learned_suppressions = []
+    if learned:
+        learned_phrases = learned.get("phrases") or {}
+        learned_suppressions = learned.get("suppressions") or []
+
+    # Suppression first: a line matching a taught pattern counts as
+    # nothing at all — the clinician said this phrasing is not a symptom.
+    for pattern in learned_suppressions:
+        try:
+            if pattern.search(text_lower):
+                return (detected, details) if return_details else detected
+        except re.error:
+            continue  # defensive: a bad stored pattern never breaks extraction
 
     # Urdu-script input is matched against a normalised copy of the text;
     # normalisation preserves word order, so negation windows computed on
@@ -401,6 +428,28 @@ def extract_symptoms_from_text(text, return_details=False):
                 details[symptom] = match.group()
                 break
             if symptom in detected:
+                break
+
+    # Learned-vocabulary pass: phrases this clinician taught, matched with
+    # the same negation windows as the built-in dictionary. Runs last so
+    # built-in matches keep precedence for the details map.
+    if learned_phrases:
+        for symptom, phrases in learned_phrases.items():
+            if symptom in detected or symptom not in _ALL_KNOWN_CONCEPTS:
+                continue
+            for phrase in phrases:
+                needle = _phrase_needle(phrase)
+                if not needle:
+                    continue
+                pos = search_text.find(needle)
+                if pos == -1:
+                    continue
+                if _is_negated(search_text, pos, words):
+                    continue
+                if _is_negated_after(search_text, pos, len(needle), words):
+                    continue
+                detected.append(symptom)
+                details[symptom] = f"{phrase} (learned)"
                 break
 
     detected = list(set(detected))
