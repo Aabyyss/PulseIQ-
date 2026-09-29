@@ -81,6 +81,10 @@ const FAQ = [
     a: "The clinical vocabulary matches English, Urdu and Roman-Urdu phrasings for nine cardiac concepts: chest pain (including \"pain in my heart\"), shortness of breath, dizziness, palpitations, fatigue, nausea, sweating, leg swelling and cough. Korean can be captured and is translated before analysis; Urdu matching works even when the translator is offline."
   },
   {
+    q: "PulseIQ missed a phrase my patient uses — can I teach it?",
+    a: "Yes. When a concept chip appears for a line you know is a symptom, tap × on the chip to mark it \"not a symptom\", or open the Learning panel to teach a phrase directly: enter what the patient said and pick the concept it means. Taught vocabulary applies from the very next spoken line, is private to your account, and can be removed at any time from the same panel. Suppression patterns for look-alike phrasings (e.g. clothing sizes) go in the panel's advanced section."
+  },
+  {
     q: "Can I control the copilot by voice?",
     a: "Yes. While listening, say \"save visit\" to finish and store the encounter, or \"clear transcript\" to start over - in Urdu, \"save karo\" works too. Spoken commands are never added to the transcript."
   },
