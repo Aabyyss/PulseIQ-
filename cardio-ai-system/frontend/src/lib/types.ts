@@ -71,6 +71,29 @@ export type ResearchAgent = {
   focus: string;
 };
 
+// Self-learning — per-clinician taught vocabulary
+export type LearnedPhrase = {
+  id: number;
+  concept: string;
+  phrase: string;
+  origin: "feedback" | "manual";
+  created_at: string;
+};
+
+export type LearnedSuppression = {
+  id: number;
+  pattern: string;
+  note: string;
+  created_at: string;
+};
+
+export type LearnedVocabulary = {
+  phrases: LearnedPhrase[];
+  suppressions: LearnedSuppression[];
+  generation: number;
+  valid_concepts: string[];
+};
+
 export type FinalReport = {
   title: string;
   summary: string;
