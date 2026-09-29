@@ -1,5 +1,14 @@
 import { authFetch } from "@/lib/auth";
-import type { AiInsightsResponse, DiagnosisResponse, FinalReport, ReportImageAnalysis, ResearchAgent } from "@/lib/types";
+import type {
+  AiInsightsResponse,
+  DiagnosisResponse,
+  FinalReport,
+  LearnedPhrase,
+  LearnedSuppression,
+  LearnedVocabulary,
+  ReportImageAnalysis,
+  ResearchAgent,
+} from "@/lib/types";
 
 export async function diagnoseText(text: string, patientName = ""): Promise<DiagnosisResponse> {
   const response = await authFetch("/api/diagnose", {
@@ -67,4 +76,77 @@ export async function analyzeReportImage(imageBase64: string, mimeType: string):
     throw new Error(body.error ?? "No analysis returned.");
   }
   return body.analysis;
+}
+
+// ---------------------------------------------------------------------------
+// Self-learning — per-clinician taught vocabulary
+// ---------------------------------------------------------------------------
+
+export async function fetchLearnedVocabulary(): Promise<LearnedVocabulary> {
+  const response = await authFetch("/api/learning/vocabulary");
+  if (!response.ok) {
+    throw new Error("Failed to load learned vocabulary.");
+  }
+  const payload = (await response.json()) as {
+    phrases?: LearnedPhrase[];
+    suppressions?: LearnedSuppression[];
+    generation?: number;
+    valid_concepts?: string[];
+  };
+  return {
+    phrases: payload.phrases ?? [],
+    suppressions: payload.suppressions ?? [],
+    generation: payload.generation ?? 0,
+    valid_concepts: payload.valid_concepts ?? [],
+  };
+}
+
+export async function teachPhrase(concept: string, phrase: string, origin: "feedback" | "manual" = "manual"): Promise<LearnedVocabulary> {
+  const response = await authFetch("/api/learning/teach", {
+    method: "POST",
+    body: JSON.stringify({ concept, phrase, origin }),
+  });
+  if (response.status === 422) {
+    const body = (await response.json()) as { detail?: string };
+    throw new Error(body.detail ?? "PulseIQ could not learn that phrase.");
+  }
+  if (!response.ok) {
+    throw new Error("Teaching failed.");
+  }
+  return fetchLearnedVocabulary();
+}
+
+export async function teachSuppression(pattern: string, note = ""): Promise<LearnedVocabulary> {
+  const response = await authFetch("/api/learning/suppress", {
+    method: "POST",
+    body: JSON.stringify({ pattern, note }),
+  });
+  if (response.status === 422) {
+    const body = (await response.json()) as { detail?: string };
+    throw new Error(body.detail ?? "Invalid pattern.");
+  }
+  if (!response.ok) {
+    throw new Error("Teaching the suppression failed.");
+  }
+  return fetchLearnedVocabulary();
+}
+
+async function deleteLearning(path: string): Promise<LearnedVocabulary> {
+  const response = await authFetch(path, { method: "DELETE" });
+  if (!response.ok) {
+    throw new Error("Could not remove that entry.");
+  }
+  return fetchLearnedVocabulary();
+}
+
+export function forgetLearnedPhrase(id: number): Promise<LearnedVocabulary> {
+  return deleteLearning(`/api/learning/phrase/${id}`);
+}
+
+export function forgetLearnedSuppression(id: number): Promise<LearnedVocabulary> {
+  return deleteLearning(`/api/learning/suppression/${id}`);
+}
+
+export function clearLearnedVocabulary(): Promise<LearnedVocabulary> {
+  return deleteLearning("/api/learning/vocabulary");
 }
