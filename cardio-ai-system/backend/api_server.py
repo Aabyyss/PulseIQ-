@@ -15,6 +15,8 @@ from backend.ai_assistant import (
     get_active_provider,
 )
 from backend.realtime_service import process_live_transcript_entry
+from backend import vocabulary_service
+from backend import learned_vocabulary as learning
 from agents.nlp_symptom_agent import extract_symptoms_from_text
 
 
@@ -200,6 +202,17 @@ def diagnose(data: dict, user: dict = Depends(get_current_user)):
         return {"error": "text is required"}
 
     result = run_diagnosis_from_text(text)
+    # Self-learning: re-extract with the clinician's learned vocabulary and
+    # union the findings so taught phrases influence screening exactly as
+    # they do live capture.
+    learned_symptoms = vocabulary_service.extract_symptoms_for_user(text, user["id"])
+    merged = list(result.get("symptoms") or [])
+    for symptom in learned_symptoms:
+        if symptom not in merged:
+            merged.append(symptom)
+    if merged != result.get("symptoms"):
+        result["symptoms"] = merged
+    result["learned_generation"] = learning.get_generation()
 
     # Persist to the signed-in clinician's history (best-effort; screening
     # itself must not fail if storage hiccups). An optional patient_name lets
@@ -229,19 +242,98 @@ def symptom_match(data: dict, user: dict = Depends(get_current_user)):
 
     Debug aid for expanding the symptom dictionary: paste a patient's own
     phrasing (any register) and see the concepts, the exact surface phrases
-    that matched, and nothing persisted to history.
+    that matched, and nothing persisted to history. Runs with the signed-in
+    clinician's learned vocabulary applied.
     """
     text = (data or {}).get("text", "")
     if not isinstance(text, str) or not text.strip():
         return {"error": "text is required"}
 
-    symptoms, details = extract_symptoms_from_text(text, return_details=True)
+    symptoms, details = vocabulary_service.extract_symptoms_for_user(
+        text, user["id"], return_details=True
+    )
+    learned = vocabulary_service.learned_overlay(user["id"]) or {}
+    learned_count = sum(len(v) for v in (learned.get("phrases") or {}).values()) + len(learned.get("suppressions") or [])
     return {
         "text": text,
         "symptoms": symptoms,
         "matched_phrases": details,
         "count": len(symptoms),
+        "learned_generation": learned.get("generation", 0),
+        "learned_count": learned_count,
     }
+
+
+# ---------------------------------------------------------------------------
+# Self-learning — per-clinician taught vocabulary (feedback loop)
+# ---------------------------------------------------------------------------
+
+class TeachPhraseRequest(BaseModel):
+    concept: str = Field(min_length=1, max_length=60)
+    phrase: str = Field(min_length=1, max_length=120)
+    origin: str = Field(default="manual", pattern="^(feedback|manual)$")
+
+
+class TeachSuppressionRequest(BaseModel):
+    pattern: str = Field(min_length=1, max_length=200)
+    note: str = Field(default="", max_length=200)
+
+
+@app.get("/learning/vocabulary")
+def learning_list(user: dict = Depends(get_current_user)):
+    """Everything this clinician taught, with the current generation."""
+    data = learning.list_vocabulary(user["id"])
+    data["generation"] = learning.get_generation()
+    data["valid_concepts"] = sorted(learning.VALID_CONCEPTS)
+    return data
+
+
+@app.post("/learning/teach")
+def learning_teach(payload: TeachPhraseRequest, user: dict = Depends(get_current_user)):
+    """Teach: this phrase means this concept — for my account only."""
+    try:
+        row = learning.teach_phrase(user["id"], payload.concept, payload.phrase, payload.origin)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    vocabulary_service.forget_cached_overlay(user["id"])
+    auth_store.record_audit(user["id"], "learning.taught", f"{payload.concept}: {payload.phrase[:80]}")
+    return {"item": row, "generation": learning.get_generation()}
+
+
+@app.post("/learning/suppress")
+def learning_suppress(payload: TeachSuppressionRequest, user: dict = Depends(get_current_user)):
+    """Teach a suppression: lines matching this regex count as nothing."""
+    try:
+        row = learning.teach_suppression(user["id"], payload.pattern, payload.note)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    vocabulary_service.forget_cached_overlay(user["id"])
+    auth_store.record_audit(user["id"], "learning.suppressed", payload.pattern[:80])
+    return {"item": row, "generation": learning.get_generation()}
+
+
+@app.delete("/learning/phrase/{phrase_id}")
+def learning_forget_phrase(phrase_id: int, user: dict = Depends(get_current_user)):
+    if not learning.forget_phrase(user["id"], phrase_id):
+        raise HTTPException(status_code=404, detail="Learned phrase not found.")
+    vocabulary_service.forget_cached_overlay(user["id"])
+    return {"ok": True, "generation": learning.get_generation()}
+
+
+@app.delete("/learning/suppression/{suppression_id}")
+def learning_forget_suppression(suppression_id: int, user: dict = Depends(get_current_user)):
+    if not learning.forget_suppression(user["id"], suppression_id):
+        raise HTTPException(status_code=404, detail="Suppression pattern not found.")
+    vocabulary_service.forget_cached_overlay(user["id"])
+    return {"ok": True, "generation": learning.get_generation()}
+
+
+@app.delete("/learning/vocabulary")
+def learning_clear(user: dict = Depends(get_current_user)):
+    removed = learning.clear_all(user["id"])
+    vocabulary_service.forget_cached_overlay(user["id"])
+    auth_store.record_audit(user["id"], "learning.cleared", str(removed))
+    return {"ok": True, "removed": removed, "generation": learning.get_generation()}
 
 
 # ---------------------------------------------------------------------------
@@ -435,13 +527,26 @@ async def consultation_socket(websocket: WebSocket, token: str = ""):
             # the UI shows concepts, risk hints and the body map immediately.
             # The full copilot plan needs the local LLM (tens of seconds on
             # CPU), so it follows as a separate message rather than blocking.
+            user = auth_store.resolve_token(token)
+            owner_id = user["id"] if user else None
             try:
+                ack_symptoms, ack_details = vocabulary_service.extract_symptoms_for_user(
+                    text, owner_id, return_details=True
+                )
+                learned = vocabulary_service.learned_overlay(owner_id) or {}
+                learned_count = sum(len(v) for v in (learned.get("phrases") or {}).values()) + len(learned.get("suppressions") or [])
                 await websocket.send_json({
                     "kind": "line_ack",
                     "speaker": "doctor" if speaker == "doctor" else "patient",
                     "transcript": text,
                     "original_transcript": text,
-                    "symptoms": extract_symptoms_from_text(text),
+                    "symptoms": ack_symptoms,
+                    "matched_phrases": ack_details,
+                    "learned_generation": learned.get("generation", 0),
+                    "learned_count": learned_count,
+                    "learned_hit": any(
+                        str(matched).endswith("(learned)") for matched in ack_details.values()
+                    ) or any(p.search(text.lower()) for p in learned.get("suppressions") or []),
                 })
             except Exception:
                 pass  # client gone; the to_thread result would also fail to send
@@ -454,6 +559,7 @@ async def consultation_socket(websocket: WebSocket, token: str = ""):
                 speaker=speaker,
                 report_text=report_text,
                 language_code=language_code,
+                owner_id=owner_id,
             )
             processed["kind"] = "analysis"
             await websocket.send_json(processed)
