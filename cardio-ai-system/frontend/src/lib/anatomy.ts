@@ -38,8 +38,8 @@ const FRONT_NEUTRAL: Hotspot[] = [
   { region: "right_arm", cx: 72.5, cy: 62, rx: 7.5, ry: 18 },
   { region: "upper_abdomen", cx: 50, cy: 74, rx: 13.5, ry: 8 },
   { region: "lower_abdomen", cx: 50, cy: 89, rx: 12.5, ry: 8 },
-  { region: "left_leg", cx: 43, cy: 128, rx: 8, ry: 26 },
-  { region: "right_leg", cx: 57, cy: 128, rx: 8, ry: 26 }
+  { region: "left_leg", cx: 38.5, cy: 130, rx: 7.5, ry: 27 },
+  { region: "right_leg", cx: 61.5, cy: 130, rx: 7.5, ry: 27 }
 ];
 
 const BACK_NEUTRAL: Hotspot[] = [
@@ -48,8 +48,8 @@ const BACK_NEUTRAL: Hotspot[] = [
   { region: "back", cx: 50, cy: 60, rx: 16, ry: 20 },
   { region: "left_arm", cx: 27.5, cy: 62, rx: 7.5, ry: 18 },
   { region: "right_arm", cx: 72.5, cy: 62, rx: 7.5, ry: 18 },
-  { region: "left_leg", cx: 43, cy: 128, rx: 8, ry: 26 },
-  { region: "right_leg", cx: 57, cy: 128, rx: 8, ry: 26 }
+  { region: "left_leg", cx: 38.5, cy: 130, rx: 7.5, ry: 27 },
+  { region: "right_leg", cx: 61.5, cy: 130, rx: 7.5, ry: 27 }
 ];
 
 const FRONT_MALE: Hotspot[] = FRONT_NEUTRAL.map((h) => {

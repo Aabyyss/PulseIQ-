@@ -75,10 +75,11 @@ function LeaderLabels({ labels, markerId }: { labels: LabelSpec[]; markerId: str
         <ArrowMarker id={markerId} />
       </defs>
       {labels.map((l) => {
-        // Left labels end at x=19 and reach leftward; right ones start at x=81.
+        // Poster discipline: text in the margin, arrow starts at the text's
+        // inner edge and lands on the structure — never swept across the body.
         const textX = l.side === "left" ? 19 : 81;
         const leadFrom = l.side === "left" ? 20.5 : 79.5;
-        const targetX = l.targetX ?? (l.side === "left" ? 34 : 66);
+        const targetX = Math.min(Math.max(l.targetX ?? 34, leadFrom), leadFrom + 24);
         return (
           <g key={l.text + l.side}>
             <text x={textX} y={l.y} textAnchor={l.side === "left" ? "end" : "start"}>
@@ -124,20 +125,20 @@ function Skeleton() {
           <path d={`M${x - 2} 86 l-1 5 M${x - 0.6} 86.5 l0 5.5 M${x + 0.8} 86.5 l0.6 5 M${x + 2} 86 l1.4 4.5`} fill="none" strokeWidth="0.7" stroke={C.bone} />
         </g>
       ))}
-      {/* pelvis */}
-      <path d="M39.5 95 Q50 90.5 60.5 95 Q59 104.5 50 105.8 Q41 104.5 39.5 95 Z" fillOpacity="0.92" />
-      {/* femur / patella / tibia+fibula */}
-      <rect x="41.6" y="105" width="2.4" height="24" rx="1.2" fillOpacity="0.85" />
-      <rect x="56" y="105" width="2.4" height="24" rx="1.2" fillOpacity="0.85" />
-      <circle cx="42.8" cy="130.5" r="1.5" fillOpacity="0.9" />
-      <circle cx="57.2" cy="130.5" r="1.5" fillOpacity="0.9" />
-      <rect x="41.9" y="132" width="1.7" height="26" rx="0.85" fillOpacity="0.75" />
-      <rect x="56.4" y="132" width="1.7" height="26" rx="0.85" fillOpacity="0.75" />
-      <rect x="44" y="132" width="0.8" height="24" rx="0.4" fillOpacity="0.6" />
-      <rect x="58.5" y="132" width="0.8" height="24" rx="0.4" fillOpacity="0.6" />
-      {/* feet rays */}
-      <path d="M40.5 158 l-1.6 6 M42.4 158.5 l-0.4 6.5 M44.3 158.5 l0.8 6 M46 158 l1.8 5.4" fill="none" strokeWidth="0.7" stroke={C.bone} />
-      <path d="M55.4 158 l-1.8 5.4 M57.1 158.5 l-0.8 6 M59 158.5 l0.4 6.5 M60.9 158 l1.6 6" fill="none" strokeWidth="0.7" stroke={C.bone} />
+      {/* pelvis with a crotch notch so the two legs read as two */}
+      <path d="M39.5 95 Q50 90.5 60.5 95 Q59 103.5 54.5 105.5 L50 113 L45.5 105.5 Q41 103.5 39.5 95 Z" fillOpacity="0.92" />
+      {/* femur / patella / tibia+fibula — centred in each thigh */}
+      <rect x="37.3" y="105" width="2.4" height="24" rx="1.2" fillOpacity="0.85" />
+      <rect x="60.3" y="105" width="2.4" height="24" rx="1.2" fillOpacity="0.85" />
+      <circle cx="38.5" cy="130.5" r="1.5" fillOpacity="0.9" />
+      <circle cx="61.5" cy="130.5" r="1.5" fillOpacity="0.9" />
+      <rect x="37.7" y="132" width="1.7" height="26" rx="0.85" fillOpacity="0.75" />
+      <rect x="60.6" y="132" width="1.7" height="26" rx="0.85" fillOpacity="0.75" />
+      <rect x="40.2" y="132" width="0.8" height="24" rx="0.4" fillOpacity="0.6" />
+      <rect x="59" y="132" width="0.8" height="24" rx="0.4" fillOpacity="0.6" />
+      {/* feet rays, one set per foot */}
+      <path d="M30.5 162 l-2 6 M33 162.5 l-0.6 6.5 M35.5 162.5 l1 6 M37.5 162 l2 5.4" fill="none" strokeWidth="0.7" stroke={C.bone} />
+      <path d="M60.5 162 l-2 5.4 M62.5 162.5 l-1 6 M65 162.5 l0.6 6.5 M67.5 162 l2 6" fill="none" strokeWidth="0.7" stroke={C.bone} />
     </g>
   );
 }
@@ -170,7 +171,7 @@ function Organs({ variant }: { variant: AnatomyVariant }) {
       <path d="M41.5 85.5 Q39.5 90 41.5 94.5 M58.5 85.5 Q60.5 90 58.5 94.5" fill="none" stroke={C.gutEdge} strokeWidth="3" strokeLinecap="round" opacity="0.85" />
       <path d="M43.5 95 Q46 92.5 48.5 95.5 Q51 98.5 53.5 95 Q56 92 58.5 95 Q56 99.5 51.5 99.8 Q46 100.2 43.5 95 Z" fill={C.gut} />
       <path d="M44 96.5 Q47 94.5 49.5 96.5 M50.5 97.5 Q53 95 55.5 97" fill="none" stroke={C.gutEdge} strokeWidth="0.5" />
-      {/* urinary bladder — female pelvis sits slightly lower */}
+      {/* urinary bladder — sits above the pubic arch, female pelvis slightly lower */}
       <path d="M46.5 100.5 Q50 99 53.5 100.5 Q53.3 104.8 50 105.6 Q46.7 104.8 46.5 100.5 Z" fill={C.bladder} transform={female ? "translate(0,0.8)" : undefined} />
       {/* male/female reproductive markers (poster style, subtle) */}
       {female ? (
@@ -191,9 +192,9 @@ function Vessels() {
       {/* carotids */}
       <path d="M47.5 40 L46.5 31" stroke={C.artery} strokeWidth="0.8" />
       <path d="M52.5 40 L53.5 31" stroke={C.artery} strokeWidth="0.8" />
-      {/* iliac → femoral → popliteal */}
-      <path d="M53 92 Q51.5 98 49.5 103 Q47.5 108 46.5 114 Q45.5 124 45 136" stroke={C.artery} strokeWidth="1" />
-      <path d="M47 92 Q49 98 51.5 103 Q54 108 55 114 Q56 124 56.5 136" stroke={C.artery} strokeWidth="1" />
+      {/* iliac → femoral → popliteal, one tree per leg */}
+      <path d="M53 92 Q52 100 55 106 Q59 112 60.5 122 Q61.5 138 62 150" stroke={C.artery} strokeWidth="1" />
+      <path d="M47 92 Q48 100 45 106 Q41 112 39.5 122 Q38.5 138 38 150" stroke={C.artery} strokeWidth="1" />
       {/* superior + inferior vena cava */}
       <path d="M44 40 Q44.5 34 46 30" stroke={C.vein} strokeWidth="1.6" />
       <path d="M44.5 44 Q45.5 56 45.5 68 Q45.5 80 46.5 92" stroke={C.vein} strokeWidth="1.6" />
@@ -203,9 +204,9 @@ function Vessels() {
       {/* brachial veins */}
       <path d="M33.5 50 Q31.5 60 33 70 Q34 76 33.5 82" stroke={C.vein} strokeWidth="0.8" />
       <path d="M66.5 50 Q68.5 60 67 70 Q66 76 66.5 82" stroke={C.vein} strokeWidth="0.8" />
-      {/* great saphenous */}
-      <path d="M44 116 Q42.5 128 44.5 142 Q45.5 152 45 160" stroke={C.vein} strokeWidth="0.9" />
-      <path d="M57.5 116 Q59 128 57 142 Q56 152 56.5 160" stroke={C.vein} strokeWidth="0.9" />
+      {/* great saphenous, one per leg */}
+      <path d="M41 116 Q39.5 130 41.5 144 Q42.5 156 42 166" stroke={C.vein} strokeWidth="0.9" />
+      <path d="M59 116 Q60.5 130 58.5 144 Q57.5 156 58 166" stroke={C.vein} strokeWidth="0.9" />
       {/* portal fan over the liver */}
       <path d="M46 66 Q49 64.5 52 65.5" stroke={C.vein} strokeWidth="0.7" opacity="0.8" />
     </g>
@@ -232,12 +233,14 @@ function BodyOutline({ variant }: { variant: AnatomyVariant }) {
         `L${50 + waist + 2} ${52 + bust}`,
         `Q${50 + waist} ${70 + bust} ${50 + hip} 90`,
         `Q${50 + hip + 1} 98 ${50 + hip - 1} 103`,
-        `L${50 + hip - 2.5} 128 Q${50 + hip - 4} 150 ${50 + hip - 5} 166`,
-        `L${50 + hip - 5.5} 181 Q${50 + hip - 8} 183.5 ${50 + hip - 11} 181`,
-        `L${50 + hip - 10} 166 Q${50 - hip + 2} 166 ${50 - hip + 2.5} 181`,
-        `Q${50 - hip - 1} 183.5 ${50 - hip - 4} 181`,
-        `L${50 - hip - 3.5} 166 Q${50 - hip - 2.5} 150 ${50 - hip - 1.5} 128`,
-        `L${50 - hip + 1} 103`,
+        // right leg: outer line down, outward foot, inner line up to the crotch
+        `L${50 + hip - 1} 104 L${50 + hip} 132 Q${50 + hip + 1} 152 ${50 + hip + 1.5} 170.5`,
+        `L${50 + hip + 6} 172.5 Q${50 + hip + 7.5} 176 ${50 + hip + 6} 180 L${50 + hip - 4} 180 L${50 + hip - 3.5} 172`,
+        `Q${50 + hip - 5} 160 ${50 + hip - 7} 145 L${50 + hip - 6.5} 124 Q${50 + hip - 6} 116 50 113`,
+        // left leg: crotch, inner line down, outward foot, outer line up
+        `L${50 - hip + 6.5} 124 Q${50 - hip + 7} 145 ${50 - hip + 5} 160 L${50 - hip + 3.5} 172`,
+        `L${50 - hip + 4} 180 L${50 - hip - 6} 180 Q${50 - hip - 7.5} 176 ${50 - hip - 6} 172.5 L${50 - hip - 1.5} 170.5`,
+        `Q${50 - hip - 2.5} 152 ${50 - hip - 1} 132 L${50 - hip + 0.5} 112 L${50 - hip + 1} 104`,
         `Q${50 - hip - 1} 98 ${50 - hip} 90`,
         `Q${50 - waist} ${70 + bust} ${50 - waist - 2} ${52 + bust}`,
         `L${50 - shoulder + 8} 43.5`,
@@ -286,33 +289,47 @@ export function AnatomyFigure({ variant }: { variant: AnatomyVariant }) {
 
 type HeartLabelSpec = {
   text: string;
-  side: "left" | "right" | "bottom";
-  y: number;
-  target: [number, number];
-  elbow?: [number, number];
+  /** Text block position; the arrow starts at the block's inner edge. */
+  tx: number;
+  ty: number;
+  anchor: "start" | "end";
+  /** Short arrow: stops a little short of the structure. */
+  ax: number;
+  ay: number;
+  /** Arrow tip on the structure itself. */
+  tip: [number, number];
 };
 
+/*
+ * Poster layout: the drawing sits centre (x 28–72); labels live in four
+ * margin columns — two per side — and every leader is a SHORT line to the
+ * nearest edge of its structure, never crossing the heart. Left column at
+ * x≈13, inner-left at x≈24, inner-right at x≈76, right column at x≈87.
+ */
 const HEART_LABELS: HeartLabelSpec[] = [
-  { text: "Superior vena cava", side: "left", y: 18, target: [36.5, 30] },
-  { text: "Right atrium", side: "left", y: 30, target: [32.5, 50] },
-  { text: "SA node", side: "left", y: 42, target: [37, 42.5] },
-  { text: "Right ventricle", side: "left", y: 54, target: [36, 70] },
-  { text: "Inferior vena cava", side: "left", y: 66, target: [44.5, 82] },
-  { text: "LAD coronary", side: "left", y: 78, target: [50.8, 60] },
-  { text: "Aorta", side: "right", y: 18, target: [61, 21] },
-  { text: "Aortic valve", side: "right", y: 30, target: [51.5, 39.5], elbow: [56, 32] },
-  { text: "Main pulmonary artery", side: "right", y: 42, target: [71, 43] },
-  { text: "Left atrium", side: "right", y: 54, target: [66, 52] },
-  { text: "Mitral valve", side: "right", y: 66, target: [55.5, 57], elbow: [60, 62] },
-  { text: "Left ventricle", side: "right", y: 78, target: [63, 74] },
-  { text: "AV node", side: "bottom", y: 97, target: [47.8, 51.5], elbow: [50, 80] }
+  // upper-left column
+  { text: "Superior vena cava", tx: 13, ty: 22, anchor: "end", ax: 14, ay: 21.5, tip: [35, 30] },
+  { text: "Right atrium", tx: 13, ty: 32, anchor: "end", ax: 14, ay: 31.5, tip: [31, 49] },
+  { text: "SA node", tx: 13, ty: 42, anchor: "end", ax: 14, ay: 41.5, tip: [36.5, 42.5] },
+  // inner-left column (short reach)
+  { text: "Right ventricle", tx: 22, ty: 60, anchor: "end", ax: 23, ay: 59.5, tip: [33, 68] },
+  { text: "Inferior vena cava", tx: 22, ty: 70, anchor: "end", ax: 23, ay: 69.5, tip: [43.5, 79] },
+  { text: "LAD coronary", tx: 22, ty: 80, anchor: "end", ax: 23, ay: 79.5, tip: [50.8, 62] },
+  // upper-right column
+  { text: "Aorta", tx: 87, ty: 22, anchor: "start", ax: 86, ay: 21.5, tip: [62, 21] },
+  { text: "Main pulmonary artery", tx: 87, ty: 32, anchor: "start", ax: 86, ay: 31.5, tip: [73, 40] },
+  { text: "Left atrium", tx: 87, ty: 42, anchor: "start", ax: 86, ay: 41.5, tip: [68.5, 52] },
+  // inner-right column (short reach)
+  { text: "Aortic valve", tx: 78, ty: 60, anchor: "start", ax: 77, ay: 59.5, tip: [50.5, 40] },
+  { text: "Mitral valve", tx: 78, ty: 70, anchor: "start", ax: 77, ay: 69.5, tip: [55, 57.5] },
+  { text: "Left ventricle", tx: 78, ty: 80, anchor: "start", ax: 77, ay: 79.5, tip: [64, 72] }
 ];
 
 export function HeartDetail() {
   return (
     <div className="space-y-2">
       <div className="rounded-lg border border-line bg-inset p-3">
-        <svg viewBox="-6 6 112 96" className="mx-auto h-[320px] w-auto" role="img" aria-label="Heart anatomy — chambers, valves, conduction system and coronary arteries">
+        <svg viewBox="-18 8 136 96" className="mx-auto h-[340px] w-auto" role="img" aria-label="Heart anatomy — chambers, valves, conduction system and coronary arteries">
           <defs>
             <radialGradient id="heartBody" cx="38%" cy="32%" r="80%">
               <stop offset="0%" stopColor="#C4574E" />
@@ -391,33 +408,20 @@ export function HeartDetail() {
             {/* circumflex */}
             <path d="M60 41 Q67 46 67.5 54" stroke="#F2C14E" strokeWidth="0.9" />
           </g>
-          {/* poster callouts: text outside the drawing, arrowed leaders in */}
-          <g fontSize="4.6" fontFamily="ui-monospace, monospace" fill="#374151">
+          {/* poster callouts: margin text, one short arrow each, no crossings */}
+          <g fontSize="4.2" fontFamily="ui-monospace, monospace" fill="#374151">
             <defs>
               <ArrowMarker id="heartArrow" />
             </defs>
-            {HEART_LABELS.map((l) => {
-              if (l.side === "bottom") {
-                return (
-                  <g key={l.text}>
-                    <text x="50" y={l.y} textAnchor="middle">{l.text}</text>
-                    <path d={`M50 ${l.y - 4} L${l.elbow ? l.elbow[0] : 50} ${l.elbow ? l.elbow[1] : 84} L${l.target[0]} ${l.target[1]}`} fill="none" stroke="#6B7280" strokeWidth="0.4" markerEnd="url(#heartArrow)" />
-                  </g>
-                );
-              }
-              const textX = l.side === "left" ? 2 : 98;
-              const leadFrom = l.side === "left" ? 3.5 : 96.5;
-              const via = l.elbow;
-              const d = via
-                ? `M${leadFrom} ${l.y - 1.4} L${via[0]} ${via[1]} L${l.target[0]} ${l.target[1]}`
-                : `M${leadFrom} ${l.y - 1.4} L${l.target[0]} ${l.target[1]}`;
-              return (
-                <g key={l.text}>
-                  <text x={textX} y={l.y} textAnchor={l.side === "left" ? "start" : "end"}>{l.text}</text>
-                  <path d={d} fill="none" stroke="#6B7280" strokeWidth="0.4" markerEnd="url(#heartArrow)" />
-                </g>
-              );
-            })}
+            {HEART_LABELS.map((l) => (
+              <g key={l.text}>
+                <text x={l.tx} y={l.ty} textAnchor={l.anchor}>{l.text}</text>
+                <line x1={l.ax} y1={l.ay} x2={l.tip[0]} y2={l.tip[1]} stroke="#6B7280" strokeWidth="0.4" markerEnd="url(#heartArrow)" />
+              </g>
+            ))}
+            <text x="50" y="99" textAnchor="middle">AV node</text>
+            {/* deep structure: dashed leader runs along the septum groove */}
+            <line x1="50" y1="95" x2="47.8" y2="51.5" stroke="#6B7280" strokeWidth="0.4" strokeDasharray="1.5 1" markerEnd="url(#heartArrow)" />
           </g>
         </svg>
       </div>
