@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   AlertCircle,
   BadgeCheck,
@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 import { PageHeader } from "@/components/app/page-header";
 import { EmptyState } from "@/components/app/empty-state";
+import { LearningPanel } from "@/components/app/learning-panel";
 import { RiskPill, type RiskLevel } from "@/components/app/risk-pill";
 import { StatTile } from "@/components/app/stat-tile";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -32,7 +33,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { BodyPainDiagram } from "@/components/BodyPainDiagram";
-import { analyzeReportImage, diagnoseText, fetchAiInsights } from "@/lib/api";
+import { analyzeReportImage, diagnoseText, fetchAiInsights, teachSuppression } from "@/lib/api";
 import { finishConsultation } from "@/lib/consultationSession";
 import {
   LANGUAGE_OPTIONS,
@@ -130,6 +131,40 @@ export function ConsultationPage() {
   } = capture;
 
   const [mode, setMode] = useState<"quick" | "full">("quick");
+
+  // Self-learning: one-line correction state for the concept chips.
+  const [correcting, setCorrecting] = useState("");
+  const [correctedNotice, setCorrectedNotice] = useState("");
+  const {
+    learnedCount,
+    lastLineReading,
+    refreshLearned,
+  } = capture;
+
+  /** Teach a suppression for this line's matched phrase, then drop the concept. */
+  const markNotASymptom = useCallback(
+    async (symptom: string, matchedPhrase: string) => {
+      setCorrecting(symptom);
+      try {
+        // matched_phrases marks learned hits with a " (learned)" display
+        // suffix — strip it so the suppression regex matches the line as
+        // actually spoken, then escape regex metacharacters.
+        const spokenPhrase = matchedPhrase.replace(/ \(learned\)$/, "");
+        await teachSuppression(
+          spokenPhrase.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"),
+          `taught from a line: ${spokenPhrase}`
+        );
+        await refreshLearned();
+        setCorrectedNotice(`Learned. "${matchedPhrase}" will no longer count as ${symptom}.`);
+        window.setTimeout(() => setCorrectedNotice(""), 5000);
+      } catch (err) {
+        setCorrectedNotice(err instanceof Error ? err.message : "Could not learn that correction.");
+      } finally {
+        setCorrecting("");
+      }
+    },
+    [refreshLearned]
+  );
 
   // Visit details — shared across both modes, used by Save visit.
   const [patientName, setPatientName] = useState("");
@@ -614,13 +649,42 @@ export function ConsultationPage() {
           {symptoms.length === 0 ? (
             <p className="text-2xs text-faint">Detected concepts appear here the moment a line is captured.</p>
           ) : (
-            symptoms.map((symptom) => (
-              <Badge key={symptom} variant="secondary" dot>
-                {symptom}
-              </Badge>
-            ))
+            symptoms.map((symptom) => {
+              const fromThisLine = lastLineReading?.symptoms.includes(symptom);
+              const matchedPhrase = fromThisLine ? lastLineReading?.matched?.[symptom] : undefined;
+              const canCorrect = Boolean(matchedPhrase && !matchedPhrase.startsWith("(learned"));
+              return (
+                <span key={symptom} className="inline-flex items-center overflow-hidden rounded-md">
+                  <Badge variant="secondary" dot>
+                    {symptom}
+                  </Badge>
+                  {canCorrect ? (
+                    <button
+                      type="button"
+                      title={`Mark "${matchedPhrase}" as not a symptom — PulseIQ stops matching it for your account`}
+                      aria-label={`Mark ${matchedPhrase} as not a symptom`}
+                      disabled={correcting === symptom}
+                      onClick={() => void markNotASymptom(symptom, matchedPhrase as string)}
+                      className="-ml-1.5 rounded-md border border-line bg-elev px-1.5 py-0.5 text-2xs text-faint transition-colors hover:border-danger/40 hover:text-danger-strong"
+                    >
+                      ×
+                    </button>
+                  ) : null}
+                </span>
+              );
+            })
           )}
+          {lastLineReading?.learnedHit ? (
+            <Badge variant="info" className="items-center">
+              {Object.values(lastLineReading.matched).some((m) => m.endsWith("(learned)"))
+                ? "learned phrase used"
+                : "suppressed by learned rule"}
+            </Badge>
+          ) : null}
         </div>
+        {correctedNotice ? (
+          <p className="mt-1 text-2xs font-medium text-ok-strong">{correctedNotice}</p>
+        ) : null}
       </CardContent>
     </Card>
   );
@@ -973,6 +1037,7 @@ export function ConsultationPage() {
               {captureCard}
               {manualCard}
               {saveCard}
+              <LearningPanel />
             </div>
             <div className="space-y-5">
               {transcriptCard}
@@ -988,6 +1053,7 @@ export function ConsultationPage() {
               {visitDetailsCard}
               {manualCard}
               {saveCard}
+              <LearningPanel />
             </div>
             <div className="space-y-5">
               {transcriptCard}
