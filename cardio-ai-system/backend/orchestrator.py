@@ -17,9 +17,13 @@ def risk_from_probability(probability: float) -> str:
     return "Low"
 
 
-def run_diagnosis_from_text(text):
+def run_diagnosis_from_text(text, symptoms=None):
+    """Screen a narrative. ``symptoms`` may carry pre-extracted findings
+    (e.g. merged with a clinician's learned vocabulary by realtime_service)
+    so the risk estimate reflects what the caller already knows."""
 
-    symptoms = extract_symptoms_from_text(text)
+    if symptoms is None:
+        symptoms = extract_symptoms_from_text(text)
 
     features = map_symptoms_to_features(symptoms)
 
