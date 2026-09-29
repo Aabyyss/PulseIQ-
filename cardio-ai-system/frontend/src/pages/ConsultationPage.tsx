@@ -500,13 +500,16 @@ export function ConsultationPage() {
             aria-label="Patient age"
             inputMode="numeric"
           />
-          <input
+          <select
             className={inputClass}
             value={patientGender}
             onChange={(e) => setPatientGender(e.target.value)}
-            placeholder="Gender"
             aria-label="Patient gender"
-          />
+          >
+            <option value="">Gender…</option>
+            <option value="Female">Female</option>
+            <option value="Male">Male</option>
+          </select>
         </div>
         <div className="grid grid-cols-2 gap-2">
           <input
@@ -736,7 +739,7 @@ export function ConsultationPage() {
           <CardDescription className="mt-1">Accumulates every location reported across the encounter.</CardDescription>
         </CardHeader>
         <CardContent>
-          <BodyPainDiagram insights={bodyInsights} />
+          <BodyPainDiagram insights={bodyInsights} gender={patientGender} />
         </CardContent>
       </Card>
 
