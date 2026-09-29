@@ -264,3 +264,58 @@ Consequence: the vocabulary test suite covers orthography variants,
 post-phrase negation and whole-word collisions; the copilot page
 shows instant concepts per line regardless of translator health, and
 the whole visit can be run without touching the keyboard.
+
+## ADR-015 · Clinician-in-the-loop learned vocabulary (self-learning)
+**Status:** Accepted (2026-09-29)
+
+Every deployment serves patients whose own words never appear in any
+dictionary — regional idioms, family phrasings, ASR quirks specific to
+one clinic's microphone. Hard-coding every variant does not scale and
+cannot anticipate a vocabulary that is local to one practice. PulseIQ
+therefore lets the clinician teach the extractor, per account:
+
+- **Teach a phrase → concept.** "This phrase means chest pain" is stored
+  and honoured by every extraction from the next line onward.
+- **Teach a suppression.** A regex whose matches never count as symptoms
+  (admin chatter, recording artifacts) — a matching line extracts as
+  nothing.
+- **One-line correction in the live UI.** Each matched concept chip carries
+  a "not a symptom" action that teaches the suppression from the encounter
+  itself.
+
+Decisions:
+
+- **Per-clinician scoping, SQL-enforced.** Learned rows carry ``owner_id``
+  and every read/write filters on it — the same isolation model as
+  screenings and consultations (ADR-012). What one clinician teaches never
+  leaks into another account; cross-account deletes are structurally 404.
+- **Separate SQLite database** (``backend/data/learned_vocabulary.db``).
+  The security-critical accounts store is never schema-coupled to
+  fast-moving learning features; the learned DB can be inspected or reset
+  independently.
+- **Overlay, not fork.** Learned phrases extend the extraction at one well-
+  defined seam — an optional ``learned`` argument — rather than mutating
+  the built-in dictionary. Built-in behaviour is byte-identical when no
+  overlay is passed, and the model/feature pipeline never sees a concept
+  outside the nine it maps (the API rejects unknown concepts).
+- **Negation is not bypassable.** Taught phrases run through the same
+  before/after negation windows as the dictionary, so "no <taught phrase>"
+  is still a denial. Learning extends recall; it cannot weaken polarity.
+- **Hot reload via generation counter.** Writes bump a ``meta.generation``
+  row; extraction overlays are cached per owner and reloaded only when the
+  generation changes (one small SELECT per line, no timers, no restart).
+- **Full auditability.** Every teach/forget is recorded in the account audit
+  log with the phrase, and learned matches are labelled "(learned)" in the
+  matched-phrase details so clinicians always see which findings came from
+  their own teaching.
+
+Rejected alternatives: global shared vocabulary (privacy + wrong for
+region-specific idioms); fine-tuning the LLM on corrections (needs GPU,
+hours to apply, opaque); background auto-learning from transcripts
+(unreviewed vocabulary in a clinical tool is a safety hazard — a human
+must authorise every learned entry).
+
+Consequence: ``backend/test_learning.py`` covers the teach→apply→forget
+round-trip, isolation, negation interaction, suppression and the REST
+surface; the consultation page exposes the correction controls and the
+vocabulary panel in both consult modes.
