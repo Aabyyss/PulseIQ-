@@ -895,25 +895,62 @@ export function ConsultationPage() {
     { title: "Next steps", icon: CheckCircle2, items: nextSteps }
   ];
 
+  const confidence = capture.planConfidence;
+  const sources = capture.suggestionSources;
+
+  const confidenceBadge = confidence ? (
+    <span
+      title={confidence.reason}
+      className={cn(
+        "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-2xs font-medium",
+        confidence.insufficient_information === "true"
+          ? "border-danger/40 bg-danger/10 text-danger-strong"
+          : confidence.confidence === "high"
+            ? "border-ok/40 bg-ok/10 text-ok-strong"
+            : confidence.confidence === "moderate"
+              ? "border-accent/40 bg-accent/10 text-accent"
+              : "border-line2 bg-elev text-muted"
+      )}
+    >
+      {confidence.insufficient_information === "true"
+        ? "Not enough information yet"
+        : `Confidence: ${confidence.confidence}`}
+    </span>
+  ) : null;
+
   const guidanceGrid = (
     <div className="grid gap-4 sm:grid-cols-2">
       {guidancePanels.map((panel) => (
         <Card key={panel.title}>
           <CardHeader className="pb-3">
-            <CardTitle className="flex items-center gap-2 text-sm">
-              <panel.icon className="h-3.5 w-3.5 text-accent" strokeWidth={1.75} />
-              {panel.title}
+            <CardTitle className="flex items-center justify-between gap-2 text-sm">
+              <span className="flex items-center gap-2">
+                <panel.icon className="h-3.5 w-3.5 text-accent" strokeWidth={1.75} />
+                {panel.title}
+              </span>
+              {panel.title === "Suggested questions" ? confidenceBadge : null}
             </CardTitle>
           </CardHeader>
           <CardContent>
             {panel.items.length === 0 ? (
               <p className="text-2xs text-faint">Awaiting input…</p>
             ) : (
-              <ul className="space-y-1.5">
+              <ul className="space-y-2.5">
                 {panel.items.map((item) => (
                   <li key={item} className="flex gap-2 text-xs leading-relaxed text-muted">
                     <span className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-line2" />
-                    {item}
+                    <span className="min-w-0">
+                      {item}
+                      {sources[item] ? (
+                        <span
+                          className="mt-0.5 block text-2xs leading-snug text-faint"
+                          title="The guideline or reason behind this suggestion"
+                        >
+                          <Sparkles className="mr-1 inline h-2.5 w-2.5" strokeWidth={2} />
+                          {sources[item]}
+                        </span>
+                      ) : null}
+                    </span>
                   </li>
                 ))}
               </ul>
