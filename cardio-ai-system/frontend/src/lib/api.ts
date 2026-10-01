@@ -63,6 +63,81 @@ export async function generateFinalReport(payload: Record<string, unknown>): Pro
   return body.report;
 }
 
+// ---------------------------------------------------------------------------
+// Report screening (reference ranges) + structured SOAP note
+// ---------------------------------------------------------------------------
+
+export type LabFlag = {
+  key: string;
+  name: string;
+  value?: number;
+  value_text?: string;
+  unit?: string;
+  reference?: string;
+  status: string;
+  severity: "critical" | "abnormal" | "normal";
+  matched_text?: string;
+  explanation?: string;
+  note?: string;
+  source?: string;
+};
+
+export type ScreenReportResult = {
+  values: LabFlag[];
+  text_flags: LabFlag[];
+  summary: { critical: number; abnormal: number; normal: number; parsed: boolean };
+  message: string;
+};
+
+export async function screenReportText(text: string): Promise<ScreenReportResult> {
+  const response = await authFetch("/api/screen-report", {
+    method: "POST",
+    body: JSON.stringify({ text }),
+  });
+  if (!response.ok) {
+    throw new Error("Report screening failed.");
+  }
+  return (await response.json()) as ScreenReportResult;
+}
+
+export type SoapNote = {
+  subjective: string[];
+  objective: string[];
+  assessment: string[];
+  plan: string[];
+  entities: {
+    medications: { name: string; dose_mg?: string | null; matched: string }[];
+    durations: string[];
+    risk_factors: string[];
+  };
+  note: string;
+};
+
+export async function fetchSoapNote(input: {
+  transcript: { speaker: string; text: string }[];
+  symptoms: string[];
+  reportText: string;
+  riskLevel: string;
+}): Promise<SoapNote> {
+  const response = await authFetch("/api/soap-note", {
+    method: "POST",
+    body: JSON.stringify({
+      transcript: input.transcript,
+      symptoms: input.symptoms,
+      report_text: input.reportText,
+      risk_level: input.riskLevel,
+    }),
+  });
+  if (!response.ok) {
+    throw new Error("SOAP note generation failed.");
+  }
+  const body = (await response.json()) as { note?: SoapNote; error?: string };
+  if (body.error || !body.note) {
+    throw new Error(body.error ?? "No note returned.");
+  }
+  return body.note;
+}
+
 export async function analyzeReportImage(imageBase64: string, mimeType: string): Promise<ReportImageAnalysis> {
   const response = await authFetch("/api/analyze-report-image", {
     method: "POST",
