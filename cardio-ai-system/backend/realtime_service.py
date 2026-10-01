@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from agents.doctor_copilot_agent import recommend_for_patient, suggest_next_questions
+from agents.attribution_agent import attribute_suggestions, plan_confidence
 from agents.causal_inference_agent import generate_counterfactuals
 from agents.evaluation_agent import evaluation_snapshot
 from agents.evidence_retrieval_agent import retrieve_evidence_snippets
@@ -15,6 +16,7 @@ from agents.pain_mapper_agent import map_symptoms_to_pain_points
 from agents.robustness_agent import robustness_checks
 from agents.uncertainty_agent import estimate_prediction_uncertainty
 from backend.ai_assistant import generate_ai_copilot_plan, translate_to_english
+from backend.medical_entities import extract_entities
 from backend.orchestrator import run_diagnosis_from_text
 from backend import vocabulary_service
 
@@ -74,6 +76,24 @@ def process_live_transcript_entry(
             # Keep deterministic fallback when API key/network/model output fails.
             pass
 
+    # Hallucination guard: every suggestion gets the guideline (or plain
+    # reason) that backs it, and the whole plan carries an honest confidence
+    # tier — including an explicit "not enough information" state.
+    confidence = plan_confidence(symptoms=symptoms, report_text=report_text, probability=probability)
+    ai_copilot["suggestion_sources"] = attribute_suggestions(
+        doctor_questions=ai_copilot.get("doctor_questions", []),
+        recommended_tests=ai_copilot.get("recommended_tests", []),
+        next_steps=ai_copilot.get("next_steps", []),
+    )
+    ai_copilot["confidence"] = confidence
+    if confidence["insufficient_information"] == "true":
+        # Say so instead of guessing: no fabricated direction, just the
+        # open question that would actually resolve the gap.
+        ai_copilot["diagnostic_impression"] = [
+            "Not enough information yet — gather the history before forming a direction."
+        ]
+        ai_copilot["safety_note"] = confidence["reason"]
+
     return {
         "speaker": normalized_speaker,
         "transcript": english_transcript,
@@ -81,6 +101,7 @@ def process_live_transcript_entry(
         "language_code": language_code,
         "report_text": report_text,
         "symptoms": symptoms,
+        "medical_entities": extract_entities(text),
         "diagnosis": diagnosis,
         "pain_points": map_symptoms_to_pain_points(symptoms),
         "cardiac_regions": cardiac_regions,
