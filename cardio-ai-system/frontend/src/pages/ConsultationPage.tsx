@@ -1002,6 +1002,95 @@ export function ConsultationPage() {
         </CardContent>
       </Card>
 
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="flex items-center gap-2 text-sm">
+            <ListChecks className="h-3.5 w-3.5 text-accent" strokeWidth={1.75} />
+            Pain characteristics
+          </CardTitle>
+          <CardDescription className="mt-1">
+            Character, duration, triggers and radiation — extracted from the patient's own words.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {(
+            [
+              ["Character", capture.painCharacteristics.character],
+              ["Duration", capture.painCharacteristics.duration],
+              ["Triggers / relief", capture.painCharacteristics.triggers],
+              ["Radiation", capture.painCharacteristics.radiation]
+            ] as [string, string[]][]
+          ).map(([label, values]) => (
+            <div key={label} className="rounded-lg border border-line bg-inset p-3">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-2xs font-semibold uppercase tracking-[0.1em] text-faint">{label}</p>
+                {values.length === 0 ? (
+                  <span className="text-2xs italic text-faint">not stated yet</span>
+                ) : null}
+              </div>
+              {values.length > 0 ? (
+                <div className="mt-1.5 flex flex-wrap gap-1.5">
+                  {values.map((value) => (
+                    <Badge key={value} variant="secondary">{value}</Badge>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          ))}
+          <p className="text-2xs leading-relaxed text-faint">
+            Empty means the transcript hasn't covered it yet — ask, don't assume.
+          </p>
+        </CardContent>
+      </Card>
+
+      {capture.medicalEntities.medications.length > 0 ||
+      capture.medicalEntities.durations.length > 0 ||
+      capture.medicalEntities.risk_factors.length > 0 ? (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-sm">
+              <BadgeCheck className="h-3.5 w-3.5 text-accent" strokeWidth={1.75} />
+              Extracted entities
+            </CardTitle>
+            <CardDescription className="mt-1">Medications, durations and risk factors heard in the transcript.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-2.5">
+            {capture.medicalEntities.medications.length > 0 ? (
+              <div>
+                <p className="label">Medications</p>
+                <div className="mt-1.5 flex flex-wrap gap-1.5">
+                  {capture.medicalEntities.medications.map((med) => (
+                    <Badge key={med.name} variant="info">
+                      {med.name}{med.dose_mg ? ` ${med.dose_mg} mg` : ""}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+            {capture.medicalEntities.risk_factors.length > 0 ? (
+              <div>
+                <p className="label">Risk factors</p>
+                <div className="mt-1.5 flex flex-wrap gap-1.5">
+                  {capture.medicalEntities.risk_factors.map((factor) => (
+                    <Badge key={factor} variant="warn" dot>{factor}</Badge>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+            {capture.medicalEntities.durations.length > 0 ? (
+              <div>
+                <p className="label">Durations</p>
+                <div className="mt-1.5 flex flex-wrap gap-1.5">
+                  {capture.medicalEntities.durations.map((duration) => (
+                    <Badge key={duration} variant="secondary">{duration}</Badge>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+          </CardContent>
+        </Card>
+      ) : null}
+
       {cardiacRegions.length > 0 ? (
         <Card>
           <CardHeader className="pb-3">
