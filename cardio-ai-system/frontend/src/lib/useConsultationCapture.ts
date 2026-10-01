@@ -176,6 +176,18 @@ export function useConsultationCapture() {
   const [patientRecommendations, setPatientRecommendations] = useState<string[]>([]);
   const [safetyNote, setSafetyNote] = useState("");
   const [cardiacRegions, setCardiacRegions] = useState<CardiacRegionEntry[]>([]);
+  // Hallucination guard: source per suggestion + honest plan confidence.
+  const [suggestionSources, setSuggestionSources] = useState<Record<string, string>>({});
+  const [planConfidence, setPlanConfidence] = useState<{
+    confidence: "low" | "moderate" | "high";
+    insufficient_information: "true" | "false";
+    reason: string;
+  } | null>(null);
+  const [medicalEntities, setMedicalEntities] = useState<{
+    medications: { name: string; dose_mg?: string | null; matched: string }[];
+    durations: string[];
+    risk_factors: string[];
+  }>({ medications: [], durations: [], risk_factors: [] });
 
   const wsRef = useRef<WebSocket | null>(null);
   const recognitionRef = useRef<SpeechRecognition | null>(null);
@@ -292,6 +304,9 @@ export function useConsultationCapture() {
       setPatientRecommendations(payload.patient_recommendations ?? []);
       setSafetyNote(payload.ai_copilot?.safety_note ?? "");
       setCardiacRegions(payload.cardiac_regions ?? []);
+      setSuggestionSources(payload.ai_copilot?.suggestion_sources ?? {});
+      setPlanConfidence(payload.ai_copilot?.confidence ?? null);
+      if (payload.medical_entities) setMedicalEntities(payload.medical_entities);
       return seq;
     };
 
@@ -441,6 +456,9 @@ export function useConsultationCapture() {
     setPatientRecommendations([]);
     setSafetyNote("");
     setCardiacRegions([]);
+    setSuggestionSources({});
+    setPlanConfidence(null);
+    setMedicalEntities({ medications: [], durations: [], risk_factors: [] });
   }, []);
 
   // ------------------------------------------------------------------
@@ -751,6 +769,9 @@ export function useConsultationCapture() {
     patientRecommendations,
     safetyNote,
     cardiacRegions,
+    suggestionSources,
+    planConfidence,
+    medicalEntities,
     // self-learning
     learnedCount,
     learnedGeneration,
