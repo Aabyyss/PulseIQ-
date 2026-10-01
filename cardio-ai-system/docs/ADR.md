@@ -319,3 +319,77 @@ Consequence: ``backend/test_learning.py`` covers the teach→apply→forget
 round-trip, isolation, negation interaction, suppression and the REST
 surface; the consultation page exposes the correction controls and the
 vocabulary panel in both consult modes.
+
+---
+
+## ADR-016 · Privacy, grounding and evaluation hardening (review wave)
+**Status:** Accepted (2026-10-02)
+
+A seven-point external review (privacy, self-learning safety, hallucination
+control, speech/NLP, report screening, pain localisation, evaluation)
+produced this wave of changes. Each point was audited against the existing
+code first; what already held was left alone, what was missing was added
+in the same rule-first, offline-capable style as the rest of the system.
+
+Decisions:
+
+- **De-identification at the chokepoint** (``backend/deidentify.py``).
+  CNIC, phone (PK + international), email and *labelled* names (``patient
+  name: …``, honorifics) are replaced with tagged placeholders before any
+  free text reaches storage (screenings, consultations) or the learned
+  vocabulary (teach phrases are de-identified too). Bare capitalised words
+  are never touched — clinical text is full of them — and redaction events
+  are written to the account audit log (``privacy.redacted``). Deliberate
+  clinician-entered filing labels (patient name field) stay as-is; the
+  record is theirs to label.
+- **Explicit recording consent in the capture card.** The microphone
+  cannot start until the clinician ticks "Patient consent obtained";
+  consent state is stored with the saved visit (``consent_obtained``) and
+  withdrawal immediately blocks restart. Audio itself is never stored —
+  the browser transcribes it — so consent covers transcription, not
+  retention.
+- **A source beside every suggestion** (``agents/attribution_agent.py``).
+  Deterministic keyword→guideline map (ACC/AHA, ESC, ACEP, OPQRST, HRS)
+  labels each doctor question, test and next step; the honest fallback
+  says "derived from this encounter" rather than faking a citation. The
+  map is rule-derived so sources are stable and verifiable — an LLM
+  asked to cite itself is exactly the hallucination channel this guards.
+- **Plan confidence with an "insufficient information" state.** Three
+  honest tiers (low/moderate/high) from corroborating concepts +
+  probability; when nothing has been detected the plan explicitly says
+  "Not enough information yet" instead of emitting a direction. Shown as
+  a badge on the Suggested-questions panel with the reason on hover.
+- **Reference-range report screening** (``backend/lab_report.py``,
+  ``POST /screen-report``). 16 cardiac-relevant analytes with unit-aware
+  bands (mg/dL vs mmol/L, ng/mL vs ng/L), 9 text-only ECG findings, and a
+  hard rule: every flag carries matched text, the reference band and a
+  plain-language explanation, sorted critical→abnormal→normal. This is
+  flagging, never diagnosis — a reference-range check a clinician can
+  overrule.
+- **Medical entity extraction + SOAP note** (``backend/medical_entities.py``).
+  Medications (with dose), durations, and negation-aware risk factors,
+  extracted in the same deterministic style as symptoms; the SOAP note is
+  a *structured restatement* of captured content, not LLM prose, so it
+  cannot invent findings. Empty encounter → the note says so.
+- **Pain characteristics (OPQRST) in the front end** (``bodyPain.ts``).
+  Character, duration, triggers/relief and radiation are regex-extracted
+  over the accumulated transcript (English + Urdu/Roman-Urdu) and shown
+  as a four-quadrant card; an empty quadrant reads "not stated yet" — the
+  UI prompts the clinician to ask rather than guessing.
+- **An offline evaluation harness** (``backend/evaluation.py``). Standard
+  WER (Levenshtein, corpus-aggregated), symptom-extraction P/R/F1 against
+  a 16-case labelled dataset (every case carries its ``source``), and a
+  correctly-scored SUS instrument. The benchmark runs with no network and
+  no LLM so numbers are reproducible; the WER sanity set is explicitly
+  marked as placeholder until real ASR output is captured.
+
+Rejected alternatives: cloud de-identification services (leaves the
+clinic network — defeats the local-first premise); LLM-written sources
+(hallucinated citations); auto-generating SOAP prose from the LLM
+(plausible-but-wrong is the failure mode the review warned about);
+storing audio for later re-analysis (retention without need — the
+review's own point); claiming Whisper-level WER without measuring it.
+
+Consequence: 56+ new/existing offline tests pass, frontend typecheck and
+build are green; the new endpoints (``/screen-report``, ``/soap-note``,
+``/extract-entities``) are auth-gated and store nothing.

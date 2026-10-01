@@ -221,13 +221,24 @@ used" badge and the × not-a-symptom correction affordance).
   "cardiac_regions": [],
   "doctor_next_questions": ["string"],
   "patient_recommendations": ["string"],
-  "ai_copilot": { "doctor_questions": [], "recommended_tests": [], "next_steps": [], "diagnostic_impression": [], "urgency": "low|moderate|high", "safety_note": "…" }
+  "medical_entities": { "medications": [{ "name", "dose_mg", "matched" }], "durations": [], "risk_factors": [] },
+  "ai_copilot": { "doctor_questions": [], "recommended_tests": [], "next_steps": [], "diagnostic_impression": [], "urgency": "low|moderate|high", "safety_note": "…",
+    "suggestion_sources": { "<exact suggestion text>": "ACC/AHA chest pain guideline — …" },
+    "confidence": { "confidence": "low|moderate|high", "insufficient_information": "true|false", "reason": "…" } }
 }
 ```
 `symptoms` unions extraction over the original and the translated line
 (ADR-014), so a degraded translation cannot erase findings. Clients that
 ignore `kind` still work: the analysis frame carries the same fields as
 before.
+
+New in ADR-016: `suggestion_sources` maps every copilot suggestion to the
+guideline (or honest fallback reason) behind it — the UI renders it under
+each bullet. `confidence` is the plan-level trust tier; when
+`insufficient_information` is `"true"` the copilot has replaced its
+diagnostic direction with an explicit "Not enough information yet" line
+rather than guessing. `medical_entities` carries medications/durations/
+risk factors extracted from the line.
 
 ---
 
@@ -409,6 +420,44 @@ Forget one taught phrase or suppression. **200** `{ "ok": true, "generation": 20
 ## DELETE /learning/vocabulary *(auth)*
 Forget everything this clinician taught.
 **200** `{ "ok": true, "removed": 7, "generation": 21 }`
+
+## POST /screen-report *(auth)*
+Reference-range screening of report text — parses lab values (16
+unit-aware analytes) and text-only ECG findings, flags
+abnormal/critical results first, and explains every flag with the
+matched text and the band it was judged against. Pure read; nothing is
+stored. Additions in this wave (ADR-016).
+
+**Request** `{ "text": "Troponin I: 0.05 ng/mL. Potassium 6.4 mmol/L. LVEF 35%." }`
+
+**200** `{ "values": [{ "key", "name", "value", "value_text", "unit",
+"reference", "status", "severity" (critical|abnormal|normal),
+"matched_text", "explanation", "note" }], "text_flags": [{ "name",
+"severity", "matched_text", "explanation" }], "summary": {
+"critical", "abnormal", "normal", "parsed" }, "message" }`
+**401** unauthenticated · **200** with `"error": "text is required"` on empty input
+
+## POST /soap-note *(auth)*
+Structured SOAP note built strictly from the encounter content —
+Subjective/Objective from transcript entities and report context,
+Assessment carries the screening band plus a not-a-diagnosis
+qualifier. Deterministic, not LLM-generated, so it cannot invent
+findings.
+
+**Request** `{ "transcript": [{ "speaker", "text" }] | "free text…",
+"symptoms": ["chest pain"], "report_text": "…", "risk_level": "Medium" }`
+
+**200** `{ "note": { "subjective": [...], "objective": [...],
+"assessment": [...], "plan": [...], "entities": { "medications",
+"durations", "risk_factors" }, "note" } }`
+
+## POST /extract-entities *(auth)*
+Medications (with dose), duration expressions and negation-aware risk
+factors found in a transcript. Not stored.
+
+**Request** `{ "text": "On aspirin 75 mg, diabetic, chest pain for 3 days" }`
+**200** `{ "entities": { "medications": [{ "name", "dose_mg",
+"matched" }], "durations": [...], "risk_factors": [...] } }`
 
 ## Non-goals
 - No pagination or filtering; lists are capped (200 entries, newest first;

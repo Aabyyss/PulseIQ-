@@ -59,11 +59,32 @@ inside the local database and are excluded from exports and logs.
 4. Consultation records may contain patient names/ages — they are owner-
    scoped like screenings and never logged.
 
+## Privacy of encounter text (ADR-016)
+
+1. **De-identification before storage.** Free text that reaches a store
+   (screening `text`, consultation `transcript`/`report_text`, taught
+   vocabulary phrases) passes through `backend/deidentify.py` first:
+   CNIC, phone (PK + international), email and *labelled* names are
+   replaced with tagged placeholders (`[REDACTED CNIC]`, …). Bare
+   capitalised clinical words are never touched. Deliberate filing
+   labels (the patient-name field the clinician types) stay — they are
+   the clinician's own record key, not spoken content.
+2. **Redaction is audited.** When anything was removed, a
+   `privacy.redacted` entry lands in the account audit log
+   (`GET /auth/audit`) with counts per category.
+3. **Recording requires explicit consent.** The capture card blocks the
+   microphone until "Patient consent obtained" is ticked; consent state
+   is stored with the saved visit (`consent_obtained`). Audio is never
+   recorded or stored — the browser transcribes in real time — so there
+   is no audio at rest to encrypt or leak.
+4. **New egress or retention of encounter text needs an ADR.**
+
 ## Data handling rules
 
 1. **No logging of narrative text, transcripts, or report payloads.** The
    screening request/response cycle persists only into the owner-scoped
-   history tables — never to log files or console.
+   history tables — never to log files or console. (What does persist is
+   de-identified per the Privacy section above.)
 2. **Client persistence is bounded.** localStorage holds only the session
    token and cached user profile (cleared on sign-out/401). History no
    longer lives in the browser — it is server-side per account.
