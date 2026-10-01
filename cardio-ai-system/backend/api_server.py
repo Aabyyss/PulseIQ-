@@ -15,6 +15,7 @@ from backend.ai_assistant import (
     get_active_provider,
 )
 from backend.realtime_service import process_live_transcript_entry
+from backend.deidentify import deidentify, deidentify_transcript
 from backend import vocabulary_service
 from backend import learned_vocabulary as learning
 from agents.nlp_symptom_agent import extract_symptoms_from_text
@@ -202,6 +203,15 @@ def diagnose(data: dict, user: dict = Depends(get_current_user)):
         return {"error": "text is required"}
 
     result = run_diagnosis_from_text(text)
+    # Privacy: the live analysis sees the original wording, but what gets
+    # persisted below is de-identified first (CNIC/phone/email/labeled names).
+    stored_text, redactions = deidentify(text)
+    if redactions:
+        # Audit trail: privacy reviewers can see de-identification happened.
+        auth_store.record_audit(
+            user["id"], "privacy.redacted",
+            ", ".join(f"{k}={v}" for k, v in sorted(redactions.items())),
+        )
     # Self-learning: re-extract with the clinician's learned vocabulary and
     # union the findings so taught phrases influence screening exactly as
     # they do live capture.
@@ -220,7 +230,7 @@ def diagnose(data: dict, user: dict = Depends(get_current_user)):
     try:
         saved = auth_store.add_screening(
             user["id"],
-            {**result, "text": text.strip(), "patient_name": (data or {}).get("patient_name", "")},
+            {**result, "text": stored_text.strip(), "patient_name": (data or {}).get("patient_name", "")},
         )
         result["id"] = saved["id"]
         result["createdAt"] = saved["createdAt"]
@@ -290,9 +300,17 @@ def learning_list(user: dict = Depends(get_current_user)):
 
 @app.post("/learning/teach")
 def learning_teach(payload: TeachPhraseRequest, user: dict = Depends(get_current_user)):
-    """Teach: this phrase means this concept — for my account only."""
+    """Teach: this phrase means this concept — for my account only.
+
+    The phrase is de-identified first: a taught phrase is derived from what
+    a patient said, so it must never carry a name or number into the
+    vocabulary store (which is shared across sessions of this account).
+    """
+    clean_phrase, _ = deidentify(payload.phrase)
+    if not clean_phrase.strip():
+        raise HTTPException(status_code=422, detail="Phrase is empty after de-identification.")
     try:
-        row = learning.teach_phrase(user["id"], payload.concept, payload.phrase, payload.origin)
+        row = learning.teach_phrase(user["id"], payload.concept, clean_phrase, payload.origin)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     vocabulary_service.forget_cached_overlay(user["id"])
@@ -309,6 +327,7 @@ def learning_suppress(payload: TeachSuppressionRequest, user: dict = Depends(get
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     vocabulary_service.forget_cached_overlay(user["id"])
     auth_store.record_audit(user["id"], "learning.suppressed", payload.pattern[:80])
+
     return {"item": row, "generation": learning.get_generation()}
 
 
@@ -390,7 +409,26 @@ def history_screenings_clear(user: dict = Depends(get_current_user)):
 
 @app.post("/consultations")
 def consultations_create(payload: dict, user: dict = Depends(get_current_user)):
-    record = auth_store.add_consultation(user["id"], payload or {})
+    """Save a visit. Transcript lines are de-identified before storage.
+
+    Patient name / age entered deliberately by the clinician are their own
+    filing label and stay as-is; the free-text transcript is what can leak
+    identifiers spoken in the room.
+    """
+    data = dict(payload or {})
+    redacted = False
+    if isinstance(data.get("lines"), list):
+        data["lines"] = deidentify_transcript(data["lines"])
+        redacted = redacted or any(
+            "[REDACTED" in str(ln.get("text", ""))
+            for ln in data["lines"] if isinstance(ln, dict)
+        )
+    if isinstance(data.get("report_text"), str):
+        data["report_text"], counts = deidentify(data["report_text"])
+        redacted = redacted or bool(counts)
+    if redacted:
+        auth_store.record_audit(user["id"], "privacy.redacted", "consultation save")
+    record = auth_store.add_consultation(user["id"], data)
     return {"item": record}
 
 
