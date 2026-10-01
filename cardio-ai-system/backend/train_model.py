@@ -2,6 +2,10 @@ import pickle
 import time
 
 import pandas as pd
+from agents.sklearn_compat import ensure_sklearn_importable
+
+ensure_sklearn_importable()
+
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score, roc_auc_score
 from sklearn.model_selection import StratifiedKFold, cross_val_score, train_test_split

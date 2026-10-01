@@ -2,6 +2,14 @@ import os
 import pickle
 
 import pandas as pd
+
+# Host Application Control policies can block sklearn's libsvm extension;
+# probe once and degrade inertly so RandomForest inference still loads
+# (the blocked file is never executed). See agents/sklearn_compat.py.
+from agents.sklearn_compat import ensure_sklearn_importable
+
+ensure_sklearn_importable()
+
 import shap
 
 # Load trained model (path resolved relative to this file, not cwd)
