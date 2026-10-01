@@ -3,9 +3,11 @@ import type { RiskLevel } from "@/components/app/risk-pill";
 import { getToken } from "@/lib/auth";
 import {
   deriveLocalClinicalGuidance,
+  extractPainCharacteristics,
   inferBodyPainInsights,
   mergeInsights,
-  type BodyPainInsight
+  type BodyPainInsight,
+  type PainCharacteristics
 } from "@/lib/bodyPain";
 import { getConsultationSocketCandidates } from "@/lib/realtime";
 import { fetchLearnedVocabulary } from "@/lib/api";
@@ -160,6 +162,12 @@ export function useConsultationCapture() {
   const [lines, setLines] = useState<TranscriptLine[]>([]);
   const [symptoms, setSymptoms] = useState<string[]>([]);
   const [bodyInsights, setBodyInsights] = useState<BodyPainInsight[]>([]);
+  const [painCharacteristics, setPainCharacteristics] = useState<PainCharacteristics>({
+    character: [],
+    duration: [],
+    triggers: [],
+    radiation: []
+  });
   const [riskLevel, setRiskLevel] = useState<RiskLevel>("Low");
   const [doctorQuestions, setDoctorQuestions] = useState<string[]>([]);
   const [recommendedTests, setRecommendedTests] = useState<string[]>([]);
@@ -197,6 +205,9 @@ export function useConsultationCapture() {
     const allText = linesRef.current.map((line) => line.text).join(" ");
     const incoming = inferBodyPainInsights(allText, reportTextRef.current);
     setBodyInsights((prev) => mergeInsights(prev, incoming, allText));
+    // OPQRST characteristics follow the same accumulate-over-full-transcript
+    // rule so a later line never wipes earlier answers.
+    setPainCharacteristics(extractPainCharacteristics(`${allText} ${reportTextRef.current}`));
   }, []);
 
   // Self-learning state — refreshed from line acks and the vocabulary API.
@@ -422,6 +433,7 @@ export function useConsultationCapture() {
     setListeningHint("");
     setAwaitingCopilot(false);
     setRiskLevel("Low");
+    setPainCharacteristics({ character: [], duration: [], triggers: [], radiation: [] });
     setDoctorQuestions([]);
     setRecommendedTests([]);
     setDiagnosticImpression([]);
@@ -731,6 +743,7 @@ export function useConsultationCapture() {
     symptoms,
     riskLevel,
     bodyInsights,
+    painCharacteristics,
     doctorQuestions,
     recommendedTests,
     diagnosticImpression,
