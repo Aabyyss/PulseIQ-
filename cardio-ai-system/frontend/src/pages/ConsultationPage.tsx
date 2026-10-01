@@ -132,6 +132,32 @@ export function ConsultationPage() {
 
   const [mode, setMode] = useState<"quick" | "full">("quick");
 
+  // Patient consent must be explicitly granted before the mic may start;
+  // the recorded consent also travels with the saved visit (Area 1).
+  const [consentGiven, setConsentGiven] = useState(false);
+  const [consentNotice, setConsentNotice] = useState("");
+  const handleConsentToggle = useCallback(() => {
+    setConsentGiven((prev) => {
+      const next = !prev;
+      setConsentNotice(
+        next
+          ? ""
+          : "Consent withdrawn — recording stays off until consent is confirmed again."
+      );
+      return next;
+    });
+  }, []);
+  const handleMicToggle = useCallback(() => {
+    if (!isListening && !consentGiven) {
+      setConsentNotice(
+        "Confirm the patient consents to recording before starting the microphone."
+      );
+      return;
+    }
+    setConsentNotice("");
+    toggleListening();
+  }, [isListening, consentGiven, toggleListening]);
+
   // Self-learning: one-line correction state for the concept chips.
   const [correcting, setCorrecting] = useState("");
   const [correctedNotice, setCorrectedNotice] = useState("");
@@ -242,7 +268,8 @@ export function ConsultationPage() {
           patientGender: patientGender.trim() || "—",
           visitDate,
           doctorName: doctorName.trim() || "—",
-          chiefComplaint: chiefComplaint.trim() || symptoms.join(", ") || "—"
+          chiefComplaint: chiefComplaint.trim() || symptoms.join(", ") || "—",
+          consentObtained: consentGiven
         },
         riskLevel,
         lines,
@@ -380,11 +407,30 @@ export function ConsultationPage() {
           <p className="text-2xs text-faint">Output is normalised to English.</p>
         </div>
 
+        <label className="flex cursor-pointer items-start gap-2.5 rounded-lg border border-line bg-inset px-3 py-2.5">
+          <input
+            type="checkbox"
+            checked={consentGiven}
+            onChange={handleConsentToggle}
+            className="mt-0.5 h-3.5 w-3.5 shrink-0 accent-[var(--color-accent,#6d9ee8)]"
+            aria-label="Patient consents to recording"
+          />
+          <span className="text-2xs leading-relaxed text-muted">
+            <span className="font-medium text-fg">Patient consent obtained</span> — the patient agrees to this
+            consultation being recorded and analysed on this device. Audio is transcribed in the browser; transcripts
+            are de-identified before storage.
+          </span>
+        </label>
+        {consentNotice ? (
+          <p className="text-2xs font-medium leading-relaxed text-danger-strong">{consentNotice}</p>
+        ) : null}
+
         <Button
-          onClick={toggleListening}
+          onClick={handleMicToggle}
           variant={isListening ? "destructive" : "default"}
           size="lg"
           className={cn("w-full", isListening && "animate-ring-pulse")}
+          title={!consentGiven && !isListening ? "Confirm patient consent first" : undefined}
         >
           {isListening ? (
             <MicOff className="h-4 w-4" strokeWidth={1.9} />

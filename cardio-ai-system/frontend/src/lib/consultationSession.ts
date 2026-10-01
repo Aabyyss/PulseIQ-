@@ -12,6 +12,8 @@ export type VisitMeta = {
   visitDate: string;
   doctorName: string;
   chiefComplaint: string;
+  /** Patient consented to recording/analysis — stored with the visit. */
+  consentObtained?: boolean;
 };
 
 export type SaveVisitResult = {
@@ -101,6 +103,7 @@ export async function finishConsultation(input: {
       spoken_language: input.spokenLanguage,
       transcript: input.lines.map((line) => ({ speaker: line.speaker, text: line.text, timestamp: line.timestamp })),
       report,
+      consent_obtained: input.meta.consentObtained ?? false,
       created_at: new Date().toISOString()
     });
     saved = Boolean(result);
