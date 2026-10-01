@@ -33,7 +33,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { BodyPainDiagram } from "@/components/BodyPainDiagram";
-import { analyzeReportImage, diagnoseText, fetchAiInsights, teachSuppression } from "@/lib/api";
+import { analyzeReportImage, diagnoseText, fetchAiInsights, fetchSoapNote, screenReportText, teachSuppression, type ScreenReportResult, type SoapNote } from "@/lib/api";
 import { finishConsultation } from "@/lib/consultationSession";
 import {
   LANGUAGE_OPTIONS,
@@ -255,6 +255,58 @@ export function ConsultationPage() {
   const [imageAnalysis, setImageAnalysis] = useState<ReportImageAnalysis | null>(null);
   const [imageLoading, setImageLoading] = useState(false);
   const [imageError, setImageError] = useState("");
+
+  // Reference-range report screening (lab values against normal bands).
+  const [labResult, setLabResult] = useState<ScreenReportResult | null>(null);
+  const [labLoading, setLabLoading] = useState(false);
+  const [labError, setLabError] = useState("");
+
+  // Structured SOAP note from the captured encounter.
+  const [soapNote, setSoapNote] = useState<SoapNote | null>(null);
+  const [soapLoading, setSoapLoading] = useState(false);
+  const [soapError, setSoapError] = useState("");
+
+  async function handleScreenReport() {
+    const source = reportText.trim() || screenText.trim();
+    if (!source) {
+      setLabError("Paste report values (e.g. “Troponin I: 0.05 ng/mL”) into the report context box first.");
+      return;
+    }
+    setLabError("");
+    setLabLoading(true);
+    setLabResult(null);
+    try {
+      setLabResult(await screenReportText(source));
+    } catch {
+      setLabError("Report screening needs the backend running on localhost:8000.");
+    } finally {
+      setLabLoading(false);
+    }
+  }
+
+  async function handleSoapNote() {
+    if (lines.length === 0) {
+      setSoapError("Capture the encounter first — the SOAP note is built from what was said.");
+      return;
+    }
+    setSoapError("");
+    setSoapLoading(true);
+    setSoapNote(null);
+    try {
+      setSoapNote(
+        await fetchSoapNote({
+          transcript: lines.map((line) => ({ speaker: line.speaker, text: line.text })),
+          symptoms,
+          reportText,
+          riskLevel
+        })
+      );
+    } catch {
+      setSoapError("SOAP note needs the backend running on localhost:8000.");
+    } finally {
+      setSoapLoading(false);
+    }
+  }
 
   async function handleSaveVisit() {
     if (saving) return;
@@ -515,9 +567,70 @@ export function ConsultationPage() {
             value={reportText}
             onChange={(e) => setReportText(e.target.value)}
             rows={3}
-            placeholder="e.g. Troponin elevated, anterior ST elevation, reduced EF on echo"
+            placeholder="e.g. Troponin I: 0.05 ng/mL, LDL 168 mg/dL, LVEF 35%"
             className="min-h-[80px]"
           />
+          <Button type="button" variant="outline" size="sm" onClick={handleScreenReport} disabled={labLoading}>
+            {labLoading ? (
+              <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <ScanLine className="h-3.5 w-3.5" strokeWidth={1.9} />
+            )}
+            {labLoading ? "Screening…" : "Check against reference ranges"}
+          </Button>
+          {labError ? (
+            <Alert variant="destructive">
+              <AlertCircle />
+              <AlertTitle>Report screening</AlertTitle>
+              <AlertDescription>{labError}</AlertDescription>
+            </Alert>
+          ) : null}
+          {labResult ? (
+            <div className="animate-fade-up space-y-2 rounded-lg border border-line bg-inset p-3">
+              <p className="text-2xs font-medium leading-relaxed text-muted">{labResult.message}</p>
+              {[...labResult.text_flags, ...labResult.values].map((flag) => (
+                <div
+                  key={flag.key}
+                  className={cn(
+                    "rounded-md border p-2.5",
+                    flag.severity === "critical"
+                      ? "border-danger/50 bg-danger/[0.07]"
+                      : flag.severity === "abnormal"
+                        ? "border-warn/50 bg-warn/[0.06]"
+                        : "border-line bg-elev/50"
+                  )}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-xs font-medium text-fg">
+                      {flag.name}
+                      {flag.value_text ? (
+                        <span className="num ml-1.5 text-muted">{flag.value_text} {flag.unit ?? ""}</span>
+                      ) : null}
+                    </p>
+                    <Badge variant={flag.severity === "critical" ? "destructive" : flag.severity === "abnormal" ? "warn" : "ok"} dot>
+                      {flag.status.replace(/_/g, " ")}
+                    </Badge>
+                  </div>
+                  {flag.reference ? (
+                    <p className="mt-0.5 text-2xs text-faint">Reference: {flag.reference}</p>
+                  ) : null}
+                  {flag.explanation ? (
+                    <p className="mt-1 text-2xs leading-relaxed text-muted">{flag.explanation}</p>
+                  ) : null}
+                  {flag.matched_text ? (
+                    <p className="mt-1 truncate text-2xs italic text-faint" title={flag.matched_text}>
+                      From: “{flag.matched_text}”
+                    </p>
+                  ) : null}
+                </div>
+              ))}
+              {!labResult.summary.parsed ? null : (
+                <p className="pt-1 text-2xs leading-relaxed text-faint">
+                  Flags are reference-range checks, not diagnoses — interpret with the clinical picture.
+                </p>
+              )}
+            </div>
+          ) : null}
         </div>
       </CardContent>
     </Card>
@@ -601,6 +714,43 @@ export function ConsultationPage() {
           {saving ? "Saving visit…" : savedId !== null ? "Visit saved" : "Save visit & export PDF"}
         </Button>
         {voiceNotice ? <p className="text-2xs font-medium text-accent">{voiceNotice}</p> : null}
+        <Button type="button" variant="outline" className="w-full" onClick={handleSoapNote} disabled={soapLoading}>
+          {soapLoading ? (
+            <LoaderCircle className="h-4 w-4 animate-spin" />
+          ) : (
+            <Sparkles className="h-4 w-4" strokeWidth={1.9} />
+          )}
+          {soapLoading ? "Structuring note…" : "Generate SOAP note"}
+        </Button>
+        {soapError ? (
+          <Alert variant="destructive">
+            <AlertCircle />
+            <AlertTitle>SOAP note</AlertTitle>
+            <AlertDescription>{soapError}</AlertDescription>
+          </Alert>
+        ) : null}
+        {soapNote ? (
+          <div className="animate-fade-up space-y-2.5 rounded-lg border border-line bg-inset p-3">
+            {(
+              [
+                ["S — Subjective", soapNote.subjective],
+                ["O — Objective", soapNote.objective],
+                ["A — Assessment", soapNote.assessment],
+                ["P — Plan", soapNote.plan]
+              ] as [string, string[]][]
+            ).map(([section, items]) => (
+              <div key={section}>
+                <p className="label">{section}</p>
+                <ul className="mt-1 space-y-0.5">
+                  {items.map((item) => (
+                    <li key={item} className="text-2xs leading-relaxed text-muted">• {item}</li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+            <p className="border-t border-line pt-2 text-2xs italic leading-relaxed text-faint">{soapNote.note}</p>
+          </div>
+        ) : null}
         <p className="text-2xs leading-relaxed text-faint">
           One click downloads the structured report as a PDF and stores the visit in your records — transcript, detected
           concepts, guidance and body map included. A patient name makes it findable on the Patients page.
