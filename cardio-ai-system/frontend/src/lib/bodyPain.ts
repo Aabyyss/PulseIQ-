@@ -17,6 +17,84 @@ export type BodyPainInsight = {
   urgency: "low" | "moderate" | "high";
 };
 
+/**
+ * OPQRST-lite pain characteristics — the details the review called out as
+ * clinically decisive: character, duration, triggers/relief and radiation.
+ * Extracted by regex over the accumulated transcript (English + common
+ * Urdu/Roman-Urdu phrasings), so it appears the moment the patient says it.
+ */
+export type PainCharacteristics = {
+  character: string[];
+  duration: string[];
+  triggers: string[];
+  radiation: string[];
+};
+
+const CHARACTER_PATTERNS: { label: string; pattern: RegExp }[] = [
+  { label: "Pressure / tightness", pattern: /\b(?:pressure|tightness|tight|squeezing|heaviness|heavy|crushing|band-like)\b/ },
+  { label: "Burning", pattern: /\b(?:burning|acid|jalan|heartburn)\b/ },
+  { label: "Sharp / stabbing", pattern: /\b(?:sharp|stabbing|knife|piercing|catching)\b/ },
+  { label: "Aching / dull", pattern: /\b(?:ache|aching|dull|throbbing|pounding)\b/ },
+  { label: "Cramping", pattern: /\b(?:cramp|cramping|spasm)\b/ },
+  { label: "Numbness / tingling", pattern: /\b(?:numb|numbness|tingling|pins and needles|jhanjhanahat)\b/ },
+  { label: "Breathlessness", pattern: /\b(?:breathless|shortness of breath|saans ki takleef|dhak dhak)\b/ },
+];
+
+const DURATION_PATTERNS: { label: string; pattern: RegExp }[] = [
+  { label: "Constant", pattern: /\b(?:constant|continuous|non-stop|continuously|always)\b/ },
+  { label: "Comes and goes", pattern: /\b(?:comes and goes|comes and goes|intermittent|on and off|episodes?|recurring|occasional)\b/ },
+  { label: "Seconds to minutes", pattern: /\b\d+(?:\.\d+)?\s*(?:second|sec|min|minute)s\b|\bfew minutes\b/ },
+  { label: "Hours", pattern: /\b\d+(?:\.\d+)?\s*hours?\b|\bfor hours\b/ },
+  { label: "Days or longer", pattern: /\b\d+(?:\.\d+)?\s*days?\b|\bfor weeks?\b|\bfor months?\b|\bsince (?:yesterday|last)/ },
+];
+
+const TRIGGER_PATTERNS: { label: string; pattern: RegExp }[] = [
+  { label: "Exertion / climbing stairs", pattern: /\b(?:exertion|exertional|climbing|stairs|walking fast|exercise|running|effort|mehnat)\b/ },
+  { label: "Rest relieves", pattern: /\b(?:relieved by rest|eases? with rest|better with rest|rest (?:helps|relieves)|rest karne se)\b/ },
+  { label: "Breathing triggers", pattern: /\b(?:worse (?:when |while )?breathing|on deep breath|pleuritic|breathing deeply|saans lene par)\b/ },
+  { label: "Lying flat", pattern: /\b(?:lying flat|when lying down|flat on (?:my |the )?back|sone par)\b/ },
+  { label: "Meals / food", pattern: /\b(?:after (?:meals?|eating|food)|worse (?:after|post) (?:meal|food)|khanay k baad)\b/ },
+  { label: "Stress or emotion", pattern: /\b(?:stress|anxiety|angry|emotional|tension)\b/ },
+  { label: "Cold / weather", pattern: /\b(?:cold (?:weather|air)|winter|mausam ki thand)\b/ },
+  { label: "Palpation / movement", pattern: /\b(?:tender to touch|when pressed|on pressing|touch karne par|movement)\b/ },
+];
+
+const RADIATION_PATTERNS: { label: string; pattern: RegExp }[] = [
+  { label: "Left arm", pattern: /\b(?:left (?:arm|hand)|baen bazu|down (?:the )?left arm)\b/ },
+  { label: "Both arms / shoulders", pattern: /\b(?:both arms|either arm|(?:left|right) shoulder|bayen dayan kandha)\b/ },
+  { label: "Jaw / neck", pattern: /\b(?:jaw|throat|gardan|chabba|neck (?:pain|ache|radiation))\b/ },
+  { label: "Back", pattern: /\b(?:between (?:the )?shoulder blades|upper back|mere back|kamar|dorsum)\b/ },
+  { label: "Epigastrium / stomach", pattern: /\b(?:epigastr|upper stomach|pet k upper|below (?:the )?breastbone|sternum)\b/ },
+];
+
+function collectPatterns(
+  text: string,
+  table: { label: string; pattern: RegExp }[]
+): string[] {
+  return table.filter((entry) => entry.pattern.test(text)).map((entry) => entry.label);
+}
+
+/**
+ * Extract pain characteristics from the accumulated text. Returns only the
+ * classes actually mentioned — an empty array means "not stated yet", which
+ * the UI shows as a prompt for the clinician to ask, never as a guess.
+ */
+export function extractPainCharacteristics(text: string): PainCharacteristics {
+  const raw = `${text}`.toLowerCase();
+  const normalised = /[\u0600-\u06ff]/.test(raw) ? normalizeUrduText(raw) : raw;
+  return {
+    character: collectPatterns(normalised, CHARACTER_PATTERNS),
+    duration: collectPatterns(normalised, DURATION_PATTERNS),
+    triggers: collectPatterns(normalised, TRIGGER_PATTERNS),
+    radiation: collectPatterns(normalised, RADIATION_PATTERNS),
+  };
+}
+
+/** Has anything about character/duration/triggers/radiation been said? */
+export function painCharacteristicsComplete(c: PainCharacteristics): boolean {
+  return c.character.length + c.duration.length + c.triggers.length + c.radiation.length > 0;
+}
+
 export type LocalClinicalGuidance = {
   doctorQuestions: string[];
   recommendedTests: string[];
