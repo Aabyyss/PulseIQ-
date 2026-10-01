@@ -16,6 +16,8 @@ from backend.ai_assistant import (
 )
 from backend.realtime_service import process_live_transcript_entry
 from backend.deidentify import deidentify, deidentify_transcript
+from backend.lab_report import screen_report_text
+from backend.medical_entities import build_soap_note, extract_entities
 from backend import vocabulary_service
 from backend import learned_vocabulary as learning
 from agents.nlp_symptom_agent import extract_symptoms_from_text
@@ -448,6 +450,60 @@ def consultation_delete(consultation_id: int, user: dict = Depends(get_current_u
 def consultations_clear(user: dict = Depends(get_current_user)):
     auth_store.clear_consultations(user["id"])
     return {"ok": True}
+
+
+@app.post("/soap-note")
+def soap_note(data: dict, user: dict = Depends(get_current_user)):
+    """Structured SOAP note derived strictly from the encounter content.
+
+    Subjective/objective come from what was captured (transcript entities,
+    symptom concepts, report context); assessment carries the screening
+    band with an explicit not-a-diagnosis qualifier. Nothing is generated
+    by an LLM, so it cannot invent findings.
+    """
+    payload = data or {}
+    transcript = payload.get("transcript", "")
+    if isinstance(transcript, list):  # list of {speaker,text} lines
+        transcript = " ".join(
+            str(ln.get("text", "")) for ln in transcript if isinstance(ln, dict)
+        )
+    if not isinstance(transcript, str):
+        transcript = str(transcript)
+    symptoms = payload.get("symptoms") or []
+    if not isinstance(symptoms, list):
+        symptoms = []
+    note = build_soap_note(
+        transcript=transcript,
+        symptoms=[str(s) for s in symptoms],
+        report_text=str(payload.get("report_text", "") or ""),
+        risk_level=str(payload.get("risk_level", "Low") or "Low"),
+    )
+    return {"note": note}
+
+
+@app.post("/extract-entities")
+def extract_entities_endpoint(data: dict, user: dict = Depends(get_current_user)):
+    """Medications, durations and risk factors in a transcript (no storage)."""
+    text = (data or {}).get("text", "")
+    if not isinstance(text, str) or not text.strip():
+        return {"error": "text is required"}
+    return {"entities": extract_entities(text)}
+
+
+@app.post("/screen-report")
+def screen_report(data: dict, user: dict = Depends(get_current_user)):
+    """Reference-range screening of report text (labs, ECG statements).
+
+    Flags abnormal and critical values first, each with the exact matched
+    text, the reference band it was judged against, and a plain-language
+    explanation. Nothing is stored — this is a pure read of the text you
+    send. The clinician stays the decision-maker: the output is findings,
+    not diagnoses.
+    """
+    text = (data or {}).get("text", "")
+    if not isinstance(text, str) or not text.strip():
+        return {"error": "text is required"}
+    return screen_report_text(text)
 
 
 @app.post("/ai-insights")
