@@ -42,6 +42,11 @@ export type RealtimeConsultationEvent = {
   }[];
   doctor_next_questions: string[];
   patient_recommendations: string[];
+  medical_entities?: {
+    medications: { name: string; dose_mg?: string | null; matched: string }[];
+    durations: string[];
+    risk_factors: string[];
+  };
   ai_copilot?: {
     doctor_questions: string[];
     recommended_tests: string[];
@@ -49,6 +54,14 @@ export type RealtimeConsultationEvent = {
     diagnostic_impression: string[];
     urgency: "low" | "moderate" | "high";
     safety_note: string;
+    /** Guideline/reason behind each exact suggestion string. */
+    suggestion_sources?: Record<string, string>;
+    /** Honest plan-level confidence, including the not-enough-info state. */
+    confidence?: {
+      confidence: "low" | "moderate" | "high";
+      insufficient_information: "true" | "false";
+      reason: string;
+    };
   };
   uncertainty?: {
     confidence_score: number;
