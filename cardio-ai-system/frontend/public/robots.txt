@@ -1,0 +1,15 @@
+# PulseIQ — local-first clinical workspace.
+# The app runs on the clinician's own machine; nothing here is secret,
+# but private workspace routes should not be indexed.
+User-agent: *
+Allow: /
+Disallow: /login
+Disallow: /history
+Disallow: /notes
+Disallow: /patients
+Disallow: /security
+Disallow: /agents
+Disallow: /consultation
+Disallow: /thank-you
+
+Sitemap: http://localhost:5173/sitemap.xml
