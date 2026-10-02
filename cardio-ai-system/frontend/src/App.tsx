@@ -15,6 +15,7 @@ import { TermsPage } from "@/pages/TermsPage";
 import { ThankYouPage } from "@/pages/ThankYouPage";
 import { useAuth } from "@/lib/auth";
 import { IDLE_LOCK_MS, useIdleAutoLock } from "@/lib/idle-lock";
+import { StorageNotice } from "@/components/app/storage-notice";
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const { user, ready, signOut } = useAuth();
@@ -81,6 +82,8 @@ function AuthGate({ children }: { children: React.ReactNode }) {
 
 export default function App() {
   return (
+    <>
+      <StorageNotice />
       <Routes>
       <Route path="/login" element={<LoginPage />} />
       {/* Public legal pages — reachable without signing in. */}
@@ -134,5 +137,6 @@ export default function App() {
         }
       />
       </Routes>
+    </>
   );
 }
