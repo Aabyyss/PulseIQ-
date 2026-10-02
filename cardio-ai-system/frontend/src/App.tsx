@@ -10,6 +10,8 @@ import { PatientsPage } from "@/pages/PatientsPage";
 import { SecurityPage } from "@/pages/SecurityPage";
 import { ResearchAgentsPage } from "@/pages/ResearchAgentsPage";
 import { NotFoundPage } from "@/pages/NotFoundPage";
+import { PrivacyPage } from "@/pages/PrivacyPage";
+import { TermsPage } from "@/pages/TermsPage";
 import { useAuth } from "@/lib/auth";
 import { IDLE_LOCK_MS, useIdleAutoLock } from "@/lib/idle-lock";
 
@@ -80,6 +82,23 @@ export default function App() {
   return (
       <Routes>
       <Route path="/login" element={<LoginPage />} />
+      {/* Public legal pages — reachable without signing in. */}
+      <Route
+        path="/privacy"
+        element={
+          <AppShell>
+            <PrivacyPage />
+          </AppShell>
+        }
+      />
+      <Route
+        path="/terms"
+        element={
+          <AppShell>
+            <TermsPage />
+          </AppShell>
+        }
+      />
       <Route
         path="/guidance"
         element={
