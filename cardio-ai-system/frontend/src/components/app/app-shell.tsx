@@ -16,6 +16,7 @@ import { LogoMark, Wordmark } from "@/components/app/logo";
 import { ThemeToggle } from "@/components/app/theme-toggle";
 import { initialsOf, useAuth } from "@/lib/auth";
 import { providerLabel, useEngineStatus } from "@/lib/engine";
+import { CONTACT_URL, SITE_NAME } from "@/lib/site";
 import { cn } from "@/lib/utils";
 
 interface NavItem {
@@ -263,6 +264,38 @@ function MobileNav() {
   );
 }
 
+/**
+ * Slim site footer: legal pages plus the real contact address (the public
+ * project repository). Keeps privacy/terms reachable from every screen.
+ */
+function SiteFooter() {
+  return (
+    <footer className="border-t border-line bg-canvas/60 px-4 py-5 sm:px-6 lg:px-10">
+      <div className="mx-auto flex w-full max-w-[1240px] flex-col items-start justify-between gap-3 sm:flex-row sm:items-center">
+        <p className="text-2xs text-faint">
+          {SITE_NAME} · runs entirely on this device · no cookies, no tracking
+        </p>
+        <nav aria-label="Site" className="flex items-center gap-4 text-2xs">
+          <Link to="/privacy" className="text-faint transition-colors hover:text-muted">
+            Privacy policy
+          </Link>
+          <Link to="/terms" className="text-faint transition-colors hover:text-muted">
+            Terms of use
+          </Link>
+          <a
+            href={CONTACT_URL}
+            target="_blank"
+            rel="noreferrer"
+            className="text-faint transition-colors hover:text-muted"
+          >
+            Contact
+          </a>
+        </nav>
+      </div>
+    </footer>
+  );
+}
+
 export function AppShell({ children }: { children: React.ReactNode }) {
   const { pathname } = useLocation();
 
@@ -281,9 +314,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
       <div className="flex min-w-0 flex-1 flex-col">
         <Topbar title={active.label} />
-        <main id="main" className="mx-auto w-full max-w-[1240px] flex-1 px-4 pb-28 pt-6 sm:px-6 lg:px-10 lg:pb-16 lg:pt-8">
+        <main id="main" className="mx-auto w-full max-w-[1240px] flex-1 px-4 pb-28 pt-6 sm:px-6 lg:px-10 lg:pb-8 lg:pt-8">
           {children}
         </main>
+        <SiteFooter />
       </div>
 
       <MobileNav />
