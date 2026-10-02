@@ -15,6 +15,7 @@ import { TermsPage } from "@/pages/TermsPage";
 import { ThankYouPage } from "@/pages/ThankYouPage";
 import { useAuth } from "@/lib/auth";
 import { IDLE_LOCK_MS, useIdleAutoLock } from "@/lib/idle-lock";
+import { PageViewTracker } from "@/lib/analytics";
 import { StorageNotice } from "@/components/app/storage-notice";
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
@@ -83,6 +84,7 @@ function AuthGate({ children }: { children: React.ReactNode }) {
 export default function App() {
   return (
     <>
+      <PageViewTracker />
       <StorageNotice />
       <Routes>
       <Route path="/login" element={<LoginPage />} />
