@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { usePageMeta } from "@/lib/usePageMeta";
 import {
   AlertCircle,
@@ -98,6 +99,7 @@ export function ConsultationPage() {
     "Consultation",
     "Live consultation capture: symptoms, risk, body map and guideline-sourced guidance update as you speak."
   );
+  const navigate = useNavigate();
   const capture = useConsultationCapture();
   const {
     speaker,
@@ -344,6 +346,9 @@ export function ConsultationPage() {
         setSaveError(
           "The report downloaded, but saving to your records failed. Check that the backend is running and try Save again."
         );
+      } else {
+        // Saved cleanly → confirmation page with the follow-up actions.
+        navigate("/thank-you", { replace: false });
       }
     } catch (err) {
       setSaveError(err instanceof Error ? err.message : "Saving the visit failed. Try again once the engine is reachable.");

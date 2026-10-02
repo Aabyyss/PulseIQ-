@@ -12,6 +12,7 @@ import { ResearchAgentsPage } from "@/pages/ResearchAgentsPage";
 import { NotFoundPage } from "@/pages/NotFoundPage";
 import { PrivacyPage } from "@/pages/PrivacyPage";
 import { TermsPage } from "@/pages/TermsPage";
+import { ThankYouPage } from "@/pages/ThankYouPage";
 import { useAuth } from "@/lib/auth";
 import { IDLE_LOCK_MS, useIdleAutoLock } from "@/lib/idle-lock";
 
@@ -125,6 +126,7 @@ export default function App() {
               <Route path="/patients" element={<PatientsPage />} />
               <Route path="/security" element={<SecurityPage />} />
               <Route path="/agents" element={<ResearchAgentsPage />} />
+              <Route path="/thank-you" element={<ThankYouPage />} />
               {/* Unknown in-app route → custom 404 instead of a silent bounce. */}
               <Route path="*" element={<NotFoundPage />} />
             </Routes>
