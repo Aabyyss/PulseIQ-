@@ -9,6 +9,7 @@ import { NotesPage } from "@/pages/NotesPage";
 import { PatientsPage } from "@/pages/PatientsPage";
 import { SecurityPage } from "@/pages/SecurityPage";
 import { ResearchAgentsPage } from "@/pages/ResearchAgentsPage";
+import { NotFoundPage } from "@/pages/NotFoundPage";
 import { useAuth } from "@/lib/auth";
 import { IDLE_LOCK_MS, useIdleAutoLock } from "@/lib/idle-lock";
 
@@ -42,9 +43,42 @@ function LoadingScreen() {
   );
 }
 
+/**
+ * Gate for the authed workspace. Unknown paths get the custom 404 regardless
+ * of sign-in state (a typo shouldn't bounce you to the login form); known
+ * private paths keep the sign-in-or-redirect behaviour.
+ */
+const PRIVATE_PREFIXES = [
+  "/consultation",
+  "/diagnose",
+  "/live",
+  "/workflow",
+  "/history",
+  "/notes",
+  "/patients",
+  "/security",
+  "/agents",
+  "/thank-you"
+];
+
+function AuthGate({ children }: { children: React.ReactNode }) {
+  const { pathname } = useLocation();
+  const known =
+    pathname === "/" || PRIVATE_PREFIXES.some((prefix) => pathname.startsWith(prefix));
+
+  if (!known) {
+    return (
+      <AppShell>
+        <NotFoundPage />
+      </AppShell>
+    );
+  }
+  return <RequireAuth>{children}</RequireAuth>;
+}
+
 export default function App() {
   return (
-    <Routes>
+      <Routes>
       <Route path="/login" element={<LoginPage />} />
       <Route
         path="/guidance"
@@ -57,7 +91,7 @@ export default function App() {
       <Route
         path="*"
         element={
-          <RequireAuth>
+          <AuthGate>
             <Routes>
               <Route path="/" element={<HomePage />} />
               {/* The consultation workspace: quick (audio-first) and full modes on one screen. */}
@@ -72,11 +106,12 @@ export default function App() {
               <Route path="/patients" element={<PatientsPage />} />
               <Route path="/security" element={<SecurityPage />} />
               <Route path="/agents" element={<ResearchAgentsPage />} />
-              <Route path="*" element={<Navigate to="/" replace />} />
+              {/* Unknown in-app route → custom 404 instead of a silent bounce. */}
+              <Route path="*" element={<NotFoundPage />} />
             </Routes>
-          </RequireAuth>
+          </AuthGate>
         }
       />
-    </Routes>
+      </Routes>
   );
 }
