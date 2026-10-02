@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
+import { usePageMeta } from "@/lib/usePageMeta";
 import { LoaderCircle, NotebookPen, Plus, Save, Search } from "lucide-react";
 import { PageHeader } from "@/components/app/page-header";
 import { EmptyState } from "@/components/app/empty-state";
@@ -49,6 +50,11 @@ function formatStamp(iso: string) {
 }
 
 export function NotesPage() {
+  usePageMeta(
+    "My notes",
+    "Private clinician notes, kept per account and searchable alongside your consultations."
+  );
+
   const [notes, setNotes] = useState<ClinicianNote[]>([]);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");

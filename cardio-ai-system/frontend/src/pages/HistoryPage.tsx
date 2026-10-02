@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
+import { usePageMeta } from "@/lib/usePageMeta";
 import {
   Activity,
   Clock,
@@ -64,6 +65,11 @@ function formatStamp(iso: string) {
 }
 
 export function HistoryPage() {
+  usePageMeta(
+    "History & visits",
+    "Every screening and saved consultation, with re-exportable PDF reports and per-patient trails."
+  );
+
   const [history, setHistory] = useState<DiagnosisHistoryItem[]>([]);
   const [consultations, setConsultations] = useState<ConsultationRecord[]>([]);
   const [loading, setLoading] = useState(true);

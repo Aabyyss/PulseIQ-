@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { usePageMeta } from "@/lib/usePageMeta";
 import {
   AlertCircle,
   BadgeCheck,
@@ -93,6 +94,10 @@ function SpeakerControl({
 }
 
 export function ConsultationPage() {
+  usePageMeta(
+    "Consultation",
+    "Live consultation capture: symptoms, risk, body map and guideline-sourced guidance update as you speak."
+  );
   const capture = useConsultationCapture();
   const {
     speaker,

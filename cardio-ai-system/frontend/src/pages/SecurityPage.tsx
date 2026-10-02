@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { usePageMeta } from "@/lib/usePageMeta";
 import {
   AlertCircle,
   Check,
@@ -63,6 +64,11 @@ function formatStamp(iso: string) {
 }
 
 export function SecurityPage() {
+  usePageMeta(
+    "Security",
+    "Sessions, password changes and the privacy audit log for your PulseIQ account."
+  );
+
   const [sessions, setSessions] = useState<Session[] | null>(null);
   const [audit, setAudit] = useState<AuditEntry[] | null>(null);
   const [currentPw, setCurrentPw] = useState("");

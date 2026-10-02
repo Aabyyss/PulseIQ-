@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { PageHeader } from "@/components/app/page-header";
+import { usePageMeta } from "@/lib/usePageMeta";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 
@@ -123,6 +124,11 @@ function SectionCard({
 }
 
 export function GuidancePage() {
+  usePageMeta(
+    "Guidance",
+    "Every PulseIQ workflow end to end, plus the clinical principles and safety limits behind the tool."
+  );
+
   return (
     <div className="space-y-8">
       <PageHeader

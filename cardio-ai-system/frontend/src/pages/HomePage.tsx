@@ -1,4 +1,5 @@
 import { Link } from "react-router-dom";
+import { usePageMeta } from "@/lib/usePageMeta";
 import {
   Activity,
   ArrowRight,
@@ -58,6 +59,11 @@ const CAPABILITIES = [
 ];
 
 export function HomePage() {
+  usePageMeta(
+    "Overview",
+    "PulseIQ turns a patient's own words into an explained cardiac risk estimate with the questions and tests a clinician would reach for next."
+  );
+
   return (
     <div className="space-y-10">
       {/* Hero */}

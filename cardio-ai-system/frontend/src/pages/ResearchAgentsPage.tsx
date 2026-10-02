@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { usePageMeta } from "@/lib/usePageMeta";
 import { AlertCircle, Boxes, Cpu } from "lucide-react";
 import { fetchResearchAgents } from "@/lib/api";
 import type { ResearchAgent } from "@/lib/types";
@@ -9,6 +10,11 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 
 export function ResearchAgentsPage() {
+  usePageMeta(
+    "Agent registry",
+    "The registry of research agents PulseIQ can run over a case, with their status and outputs."
+  );
+
   const [agents, setAgents] = useState<ResearchAgent[]>([]);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);

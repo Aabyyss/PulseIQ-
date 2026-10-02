@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { usePageMeta } from "@/lib/usePageMeta";
 import {
   ArrowLeft,
   ClipboardList,
@@ -64,6 +65,11 @@ function formatDate(iso: string) {
 }
 
 export function PatientsPage() {
+  usePageMeta(
+    "Patients",
+    "Per-patient records: screenings, saved visits and notes grouped into one timeline."
+  );
+
   const [patients, setPatients] = useState<PatientSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");

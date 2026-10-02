@@ -1,5 +1,6 @@
 import { FormEvent, useState } from "react";
 import { Link, Navigate, useLocation } from "react-router-dom";
+import { usePageMeta } from "@/lib/usePageMeta";
 import { AlertCircle, Clock, LoaderCircle, Lock, Mail, Stethoscope, UserRound } from "lucide-react";
 import { EcgTrace } from "@/components/app/ecg-trace";
 import { LogoMark, Wordmark } from "@/components/app/logo";
@@ -15,6 +16,11 @@ const inputClass =
   "h-10 w-full rounded-lg border border-line bg-inset pl-9 pr-3 text-sm text-fg shadow-[inset_0_1px_2px_rgba(0,0,0,0.35)] transition-colors placeholder:text-faint hover:border-line2 focus:border-accent/45";
 
 export function LoginPage() {
+  usePageMeta(
+    "Sign in",
+    "Sign in to your PulseIQ workspace — cardiac screening, live consultation capture and structured reporting, entirely on this device."
+  );
+
   const { user, ready, signIn, signUp } = useAuth();
   const { state } = useLocation() as { state?: { from?: string; idle?: boolean } };
   const [mode, setMode] = useState<Mode>("signin");
