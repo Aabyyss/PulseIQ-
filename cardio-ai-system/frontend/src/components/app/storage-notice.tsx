@@ -8,6 +8,12 @@ const DISMISS_KEY = "pulseiq.storageNotice.v1";
  * First-visit notice in place of a cookie banner: PulseIQ sets no cookies —
  * auth is a bearer token in local storage — so the notice says exactly that
  * and points at the privacy policy. Dismissal is remembered locally.
+ *
+ * Positioning: floating bottom-right only where it provably clears centred
+ * page content (≥640px wide AND ≥850px tall). On narrower or shorter
+ * viewports it drops into normal flow (position: static) at the top of the
+ * document, so it can never sit on top of a primary action like the Sign in
+ * button — the two media branches are disjoint so their margins never race.
  */
 export function StorageNotice() {
   const [visible, setVisible] = useState(() => {
@@ -33,7 +39,7 @@ export function StorageNotice() {
     <aside
       role="region"
       aria-label="Data storage notice"
-      className="fixed inset-x-3 bottom-[calc(env(safe-area-inset-bottom)+4.5rem)] z-50 mx-auto max-w-xl rounded-xl border border-line bg-panel/95 p-4 shadow-panel backdrop-blur-md sm:inset-x-auto sm:right-5 sm:bottom-5 sm:mx-0"
+      className="fixed inset-x-3 bottom-[calc(env(safe-area-inset-bottom)+4.5rem)] z-50 mx-auto max-w-xl rounded-xl border border-line bg-panel/95 p-4 shadow-panel backdrop-blur-md sm:inset-x-auto sm:right-5 sm:bottom-5 max-sm:static max-sm:m-[12px] [@media(min-width:640px)_and_(max-height:849px)]:static [@media(min-width:640px)_and_(max-height:849px)]:m-[12px_auto]"
     >
       <div className="flex items-start gap-3">
         <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-line bg-inset">
