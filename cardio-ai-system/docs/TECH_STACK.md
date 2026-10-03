@@ -44,7 +44,7 @@ scikit-learn — check `models/heart_model_meta.json` → `sklearn_version`
 | lucide-react | ^0.468.0 |
 | jspdf | ^2.5.2 |
 | class-variance-authority / clsx / tailwind-merge | ^0.7 / ^2.1 / ^2.5 |
-| playwright-core (dev, UI audit) | ^1.63.0 |
+| playwright-core (dev, UI audit + E2E) | ^1.63.0 |
 
 `bun.lock` exists but **npm is the package manager of record**
 (`package-lock.json` + CI `npm ci`).
@@ -59,6 +59,7 @@ scikit-learn — check `models/heart_model_meta.json` → `sklearn_version`
 | Typecheck | `cd frontend && npm run typecheck` |
 | Production build | `cd frontend && npm run build` |
 | UI audit | `cd frontend && npm run ui-audit` |
+| E2E journey (login → save visit → thank-you) | `cd frontend && npm run e2e` (starts servers if down) |
 | Makefile equivalents | `make help` (see `Makefile`) |
 
 ## Environment enforcement files

@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "ui-audit": "node ../scripts/ui-audit.cjs"
+    "ui-audit": "node ../scripts/ui-audit.cjs",
+    "e2e": "node ../scripts/e2e-save-visit.cjs"
   },
   "dependencies": {
     "@radix-ui/react-alert-dialog": "^1.1.2",
