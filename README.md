@@ -151,11 +151,22 @@ cardio-ai-system/
 └── setup.ps1 · run-*.ps1 · Start-PulseIQ.cmd
 ```
 
+## 🧪 Quality gates
+
+| Gate | Runs | What it proves |
+|---|---|---|
+| Backend pipeline | CI · every push | 8 clinical test scripts (symptom text → expected risk band, negation, feature mapping, explainability) — exits nonzero on failure |
+| Frontend typecheck & build | CI · every push | `tsc -b` plus a production Vite build |
+| UI contrast & layout audit | CI · every push | WCAG AA contrast of every text node at 1440/390 px, plus horizontal-overflow, clipped-text and tap-target sweeps of 8 routes × 4 viewports — any violation fails the run |
+| Lint | local | `npm run lint` — zero errors |
+| E2E journey | local | `npm run e2e` — Playwright walks sign-in → dictation → save → thank-you → history against real servers and fails on any console error or failed API call |
+
 ## 🤝 Contributing
 
 Issues and pull requests are welcome. Good first areas: more symptom vocabulary, additional
-capture languages, and extending the agent registry. Run `npm run typecheck && npm run build`
-in `cardio-ai-system/frontend` before submitting.
+capture languages, and extending the agent registry. Run
+`npm run typecheck && npm run lint && npm run build` in `cardio-ai-system/frontend` before
+submitting — `npm run e2e` and `npm run ui-audit` cover the full journey and the UI gates.
 
 ## ⚠️ Scope
 

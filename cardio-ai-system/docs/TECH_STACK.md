@@ -57,9 +57,11 @@ scikit-learn — check `models/heart_model_meta.json` → `sklearn_version`
 | Backend tests | `.venv/Scripts/python -m pytest backend -q` |
 | Frontend dev | `cd frontend && npm run dev` → :5173 |
 | Typecheck | `cd frontend && npm run typecheck` |
+| Lint | `cd frontend && npm run lint` (zero errors) |
 | Production build | `cd frontend && npm run build` |
 | UI audit | `cd frontend && npm run ui-audit` |
 | E2E journey (login → save visit → thank-you) | `cd frontend && npm run e2e` (starts servers if down) |
+| Demo video | `node scripts/record-demo.cjs` (needs :8000 + :5173) then `.venv/Scripts/python.exe scripts/convert_demo.py` |
 | Makefile equivalents | `make help` (see `Makefile`) |
 
 ## Environment enforcement files
