@@ -29,6 +29,7 @@ html:not(.dark) .bg-canvas\/95 { background-color: rgba(255, 255, 255, 0.95); }
 
 html:not(.dark) .bg-panel { background-color: #fcfbfe; }
 html:not(.dark) .bg-panel\/70 { background-color: rgba(252, 251, 254, 0.7); }
+html:not(.dark) .bg-panel\/95 { background-color: rgba(252, 251, 254, 0.95); }
 html:not(.dark) .bg-elev { background-color: #f5f2fb; }
 html:not(.dark) .bg-elev\/60 { background-color: rgba(245, 242, 251, 0.6); }
 html:not(.dark) .bg-elev\/50 { background-color: rgba(245, 242, 251, 0.5); }

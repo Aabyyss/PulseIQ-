@@ -76,7 +76,7 @@ export function StorageNotice() {
           type="button"
           onClick={dismiss}
           aria-label="Dismiss storage notice"
-          className="shrink-0 rounded-md p-1 text-faint transition-colors hover:bg-elev hover:text-fg"
+          className="shrink-0 rounded-md p-1.5 text-faint transition-colors hover:bg-elev hover:text-fg"
         >
           <X className="h-3.5 w-3.5" strokeWidth={1.9} />
         </button>
