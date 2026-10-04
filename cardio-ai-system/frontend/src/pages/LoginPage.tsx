@@ -8,7 +8,6 @@ import { ThemeToggle } from "@/components/app/theme-toggle";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/auth";
-import { cn } from "@/lib/utils";
 
 type Mode = "signin" | "signup";
 

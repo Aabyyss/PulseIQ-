@@ -4,7 +4,6 @@ import {
   ArrowLeft,
   ClipboardList,
   FileText,
-  LoaderCircle,
   NotebookPen,
   Printer,
   Search,

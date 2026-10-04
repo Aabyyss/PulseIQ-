@@ -106,16 +106,9 @@ export type LocalClinicalGuidance = {
  * codepoints are unified with the Urdu ones and vowel marks are
  * dropped, so the same dictated word written differently still matches.
  */
-const URDU_CHAR_MAP: Record<string, string> = {
-  "\u0622": "\u0627",
-  "\u0623": "\u0627",
-  "\u0625": "\u0627",
-  "\u064a": "\u06cc",
-  "\u0649": "\u06cc",
-  "\u0647": "\u06c1",
-  "\u0629": "\u06c1"
-};
-const URDU_STRIP_RE = /[\u064b-\u0652\u0670\u0640\u200c\u200d\u200e\u200f]/g;
+// \u200c-\u200f is written as a range: listing ZWJ (\u200d) as its own
+// class atom between two other atoms is a "joined character sequence".
+const URDU_STRIP_RE = /[\u064b-\u0652\u0670\u0640\u200c-\u200f]/g;
 
 function normalizeUrduText(text: string): string {
   return text

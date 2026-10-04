@@ -26,7 +26,7 @@ import {
 import { PageHeader } from "@/components/app/page-header";
 import { EmptyState } from "@/components/app/empty-state";
 import { LearningPanel } from "@/components/app/learning-panel";
-import { RiskPill, type RiskLevel } from "@/components/app/risk-pill";
+import { RiskPill } from "@/components/app/risk-pill";
 import { StatTile } from "@/components/app/stat-tile";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -169,7 +169,6 @@ export function ConsultationPage() {
   const [correcting, setCorrecting] = useState("");
   const [correctedNotice, setCorrectedNotice] = useState("");
   const {
-    learnedCount,
     lastLineReading,
     refreshLearned,
   } = capture;
