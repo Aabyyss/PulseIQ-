@@ -459,6 +459,64 @@ factors found in a transcript. Not stored.
 **200** `{ "entities": { "medications": [{ "name", "dose_mg",
 "matched" }], "durations": [...], "risk_factors": [...] } }`
 
+## POST /medication-review *(auth)*
+Medication options and safety review for one encounter (ADR-017). Deterministic
+rules over a curated cardiac drug table — no LLM — producing indication-driven
+options, allergy/condition/laboratory blocks, interaction screening against the
+documented medications, and an explicit list of what was *not* supplied. Nothing
+is stored.
+
+**Request** — at least one of `text`, `report_text` or patient context:
+```json
+{
+  "text": "crushing chest pain radiating to the left arm, sweaty, allergic to aspirin",
+  "report_text": "Troponin I: 0.09 ng/mL. Potassium 5.8 mmol/L. eGFR 28. LVEF 30%",
+  "age": "68",
+  "sex": "male",
+  "conditions": ["hypertension", "prior MI"],
+  "allergies": ["aspirin"],
+  "current_medications": ["warfarin", "metoprolol 25 mg"],
+  "labs": { "platelets": 90 }
+}
+```
+| field | notes |
+|---|---|
+| text / report_text | narrative and lab/ECG text; concepts, mentioned medications and allergy phrases are extracted from them |
+| conditions | free text or canonical tags — history phrasing ("stent 2023", "previous MI", "asthma") is mapped to tags |
+| current_medications | names or common brand names (Disprin, Concor, Crestor, Xarelto…), used for interaction screening and "already documented" detection |
+| labs | optional numeric additions/overrides (e.g. platelets, which the report parser does not cover) merged with values parsed from `report_text` |
+
+**200**
+```json
+{
+  "symptoms": ["sweating", "chest pain"],
+  "diagnosis": { "…the /diagnose payload with risk_level…" },
+  "medications": {
+    "pathway": { "urgency": "emergency|urgent|routine", "statement": "…", "rationale": ["…"] },
+    "indications": [ { "name": "suspected_acs", "triggered_by": "chest pain reported (suspected acute coronary syndrome)" } ],
+    "patient_profile": { "age": 68, "sex": "male", "conditions": ["prior_mi"], "condition_text": [], "allergies": ["aspirin"], "current_medications": [], "current_medication_classes": [], "labs_considered": { "renal_severe": 28 } },
+    "recommendations": [ { "drug": "Aspirin", "drug_class": "antiplatelet", "status": "recommended|alternative|already-documented", "priority": 1, "indications": ["suspected_acs"], "triggered_by": ["chest pain reported (…)"], "dose_note": "…", "monitoring": ["…"], "review_flags": ["…"], "evidence": "ACC/AHA chest pain guideline — …", "action": "…" } ],
+    "contraindicated": [ { "drug": "Metformin", "drug_class": "biguanide", "status": "contraindicated|review-before-use", "severity": "absolute|relative", "blocks": [ { "kind": "allergy|condition|lab", "severity": "…", "trigger": "renal_severe", "note": "eGFR <30 mL/min — metformin is contraindicated." } ], "already_documented": false, "note": "…", "evidence": "…" } ],
+    "allergy_alerts": [ { "drug": "Aspirin", "drug_class": "antiplatelet", "matched_terms": ["aspirin"], "action": "…", "alternative": "For suspected ACS/PCI, a P2Y12 inhibitor alone is the usual aspirin-free route…" } ],
+    "interaction_alerts": [ { "pair": ["p2y12", "anticoagulant"], "drugs": ["clopidogrel", "anticoagulant"], "severity": "major|moderate", "note": "…", "action": "…" } ],
+    "monitoring_plan": ["Potassium and creatinine at 1–2 weeks"],
+    "missing_information": ["No drug allergies recorded — ask before prescribing (this blocks allergy screening)."],
+    "summary": "6 option(s) offered, 7 blocked or flagged for review, 2 interaction(s) flagged — based on 6 captured indication(s).",
+    "disclaimer": "Decision support only — these are options for a qualified clinician to review…"
+  },
+  "extracted": { "entities": { "medications": [], "durations": [], "risk_factors": [] }, "allergies_from_text": ["aspirin"], "labs_used": { "potassium": 5.8, "troponin": 0.09 } }
+}
+```
+Every option and every block names the captured fact behind it (`triggered_by`,
+`blocks[].trigger`), each allergy block ships with an alternative route, and only
+one RAAS strategy is offered (an ARB alongside an ACE inhibitor comes back as
+`status: "alternative"`). Values that were never supplied — allergies, age,
+current medications, eGFR, potassium — are listed in `missing_information`
+rather than assumed. `pathway.urgency` escalates on the screening band or a
+raised troponin regardless of the medication list.
+
+**401** unauthenticated · **200** `{"error": "text, report_text or patient context is required"}` on an empty request
+
 ## Non-goals
 - No pagination or filtering; lists are capped (200 entries, newest first;
   learned vocabulary is capped at 500 entries per clinician).
