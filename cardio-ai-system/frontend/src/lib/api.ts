@@ -6,6 +6,7 @@ import type {
   LearnedPhrase,
   LearnedSuppression,
   LearnedVocabulary,
+  MedicationReview,
   ReportImageAnalysis,
   ResearchAgent,
 } from "@/lib/types";
@@ -151,6 +152,72 @@ export async function analyzeReportImage(imageBase64: string, mimeType: string):
     throw new Error(body.error ?? "No analysis returned.");
   }
   return body.analysis;
+}
+
+// ---------------------------------------------------------------------------
+// Medication recommendation & safety review
+// ---------------------------------------------------------------------------
+
+export type MedicationReviewInput = {
+  /** Narrative / transcript of the encounter. */
+  text: string;
+  /** Lab report text — parsed into the renal, potassium and troponin gates. */
+  reportText: string;
+  age: string;
+  sex: string;
+  /** "" leaves the status unknown, which the review reports as a gap. */
+  pregnancy: "" | "yes" | "no";
+  /** Free text; commas separate entries. */
+  conditions: string;
+  allergies: string;
+  currentMedications: string;
+};
+
+function splitList(value: string): string[] {
+  return value
+    .split(/[,;\n]/)
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+}
+
+export async function reviewMedications(input: MedicationReviewInput): Promise<MedicationReview> {
+  const response = await authFetch("/api/medication-review", {
+    method: "POST",
+    body: JSON.stringify({
+      text: input.text,
+      report_text: input.reportText,
+      age: input.age.trim(),
+      sex: input.sex,
+      pregnancy: input.pregnancy === "" ? undefined : input.pregnancy === "yes",
+      conditions: splitList(input.conditions),
+      allergies: splitList(input.allergies),
+      current_medications: splitList(input.currentMedications),
+    }),
+  });
+  if (response.status === 401) {
+    throw new Error("Your session has expired. Please sign in again.");
+  }
+  if (!response.ok) {
+    throw new Error("Medication review failed.");
+  }
+  const body = (await response.json()) as {
+    symptoms?: string[];
+    diagnosis?: DiagnosisResponse | null;
+    medications?: MedicationReview;
+    extracted?: { labs_used: Record<string, number> };
+    error?: string;
+  };
+  // The endpoint wraps the review alongside the screening result; the page
+  // works with the review itself plus the context that produced it.
+  if (body.error || !body.medications) {
+    throw new Error(body.error ?? "No medication review returned.");
+  }
+  return {
+    ...body.medications,
+    symptoms: body.symptoms ?? [],
+    diagnosis: body.diagnosis ?? null,
+    extracted: body.extracted,
+  };
 }
 
 // ---------------------------------------------------------------------------
