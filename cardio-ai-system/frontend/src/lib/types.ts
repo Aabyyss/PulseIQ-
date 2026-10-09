@@ -117,6 +117,84 @@ export type FinalReport = {
   red_flags: string[];
 };
 
+// Medication recommendation & safety review (POST /medication-review)
+export type MedicationRecommendation = {
+  drug: string;
+  drug_class: string;
+  status: "recommended" | "alternative" | "already-documented";
+  priority: number;
+  indications: string[];
+  triggered_by: string[];
+  dose_note: string;
+  monitoring: string[];
+  review_flags: string[];
+  evidence: string;
+  action: string;
+};
+
+export type MedicationBlock = {
+  kind: "allergy" | "condition" | "lab";
+  severity: "absolute" | "relative";
+  trigger: string;
+  note: string;
+};
+
+export type MedicationContraindication = {
+  drug: string;
+  drug_class: string;
+  status: "contraindicated" | "review-before-use";
+  severity: "absolute" | "relative";
+  blocks: MedicationBlock[];
+  already_documented: boolean;
+  note: string;
+  evidence: string;
+};
+
+export type MedicationAllergyAlert = {
+  drug: string;
+  drug_class: string;
+  matched_terms: string[];
+  action: string;
+  alternative: string;
+};
+
+export type MedicationInteractionAlert = {
+  pair: string[];
+  drugs: string[];
+  severity: "major" | "moderate";
+  note: string;
+  action: string;
+};
+
+export type MedicationReview = {
+  pathway: { urgency: "emergency" | "urgent" | "routine"; statement: string; rationale: string[] };
+  indications: { name: string; triggered_by: string }[];
+  patient_profile: {
+    age: number | null;
+    sex: string | null;
+    conditions: string[];
+    condition_text: string[];
+    allergies: string[];
+    current_medications: string[];
+    current_medication_classes: string[];
+    /** null = not recorded (which is itself reported under missing_information). */
+    pregnancy: boolean | null;
+    labs_considered: Record<string, number>;
+  };
+  recommendations: MedicationRecommendation[];
+  contraindicated: MedicationContraindication[];
+  allergy_alerts: MedicationAllergyAlert[];
+  interaction_alerts: MedicationInteractionAlert[];
+  monitoring_plan: string[];
+  missing_information: string[];
+  summary: string;
+  disclaimer: string;
+  symptoms?: string[];
+  diagnosis?: DiagnosisResponse | null;
+  extracted?: { labs_used: Record<string, number> };
+  error?: string;
+};
+
 export type ReportImageAnalysis = {
   summary: string;
   key_findings: string[];
