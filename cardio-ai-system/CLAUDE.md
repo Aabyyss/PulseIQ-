@@ -7,7 +7,7 @@ consistent with the architecture documented in `docs/`.
 
 Local-first clinical screening workspace: FastAPI backend (port 8000) +
 React 18/Vite frontend (port 5173). No database, no auth, no API keys
-required. Rules-driven 17-agent pipeline + optional LLM tier.
+required. Rules-driven 18-agent pipeline + optional LLM tier.
 
 ## Non-negotiables
 
@@ -40,7 +40,7 @@ backend/api_server.py        routes + CORS + WS loop        (edit routes here)
 backend/orchestrator.py      5-stage pipeline               (pipeline changes here)
 backend/ai_assistant.py      3-tier LLM + local fallbacks   (LLM features here)
 backend/realtime_service.py  per-line WS fusion             (copilot behaviour here)
-agents/*.py                  17 rule-grounded modules       (one concern per file)
+agents/*.py                  18 rule-grounded modules       (one concern per file)
 models/                      heart_model.pkl + metadata     (never hand-edit)
 data/heart.csv               training data                  (training only)
 frontend/src/pages/          route screens
