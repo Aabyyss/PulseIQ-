@@ -5,6 +5,7 @@ import { ConsultationPage } from "@/pages/ConsultationPage";
 import { HistoryPage } from "@/pages/HistoryPage";
 import { HomePage } from "@/pages/HomePage";
 import { GuidancePage } from "@/pages/GuidancePage";
+import { MedicationsPage } from "@/pages/MedicationsPage";
 import { NotesPage } from "@/pages/NotesPage";
 import { PatientsPage } from "@/pages/PatientsPage";
 import { SecurityPage } from "@/pages/SecurityPage";
@@ -55,6 +56,7 @@ function LoadingScreen() {
  */
 const PRIVATE_PREFIXES = [
   "/consultation",
+  "/medications",
   "/diagnose",
   "/live",
   "/workflow",
@@ -126,6 +128,7 @@ export default function App() {
               <Route path="/live" element={<Navigate to="/consultation" replace />} />
               <Route path="/workflow/start" element={<Navigate to="/consultation" replace />} />
               <Route path="/workflow/session" element={<Navigate to="/consultation" replace />} />
+              <Route path="/medications" element={<MedicationsPage />} />
               <Route path="/history" element={<HistoryPage />} />
               <Route path="/notes" element={<NotesPage />} />
               <Route path="/patients" element={<PatientsPage />} />
