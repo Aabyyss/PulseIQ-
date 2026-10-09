@@ -97,7 +97,34 @@ Per inbound line, in order:
 The connection is one loop per session; any single line that raises still
 returns an `{"error": …}` frame so the UI keeps running.
 
-## 5. Persistence & state flow
+## 5. Medication review (POST /medication-review)
+
+```
+{text, report_text, age, sex, conditions[], allergies[],
+ current_medications[], labs{}}
+   │
+   ├─ extract_symptoms_from_text        (nlp_symptom_agent, via orchestrator)
+   ├─ extract_entities                  (medical_entities: medications, risk factors)
+   ├─ extract_allergy_mentions          (pharmacology_agent: "allergic to …")
+   ├─ screen_report_text → labs{}       (lab_report: eGFR, K+, Hb, LDL, LVEF, troponin)
+   ├─ run_diagnosis_from_text           (same 5-stage pipeline as §1 → risk band)
+   └─ review_medications                (pharmacology_agent: options, blocks, interactions)
+   ▼
+{symptoms, diagnosis, medications{pathway, indications, recommendations,
+ contraindicated, allergy_alerts, interaction_alerts, monitoring_plan,
+ missing_information, summary, disclaimer}, extracted{}}
+```
+
+The API layer owns extraction: it unions the caller's conditions/allergies with
+what the narrative states, and flattens the report parser's unit-aware values
+into the numeric shape the agent expects (troponin is only compared when it is
+reported in ng/mL — an abnormal flag in another unit is passed through as an
+explicit marker instead). The orchestrator owns symptom extraction and banding,
+so a medication review is banded exactly like `/diagnose`. Missing inputs (no
+allergies, no age, no eGFR/potassium) are returned in `missing_information`
+rather than assumed, and nothing is written to the database.
+
+## 6. Persistence & state flow
 
 ```
 Screening:  React state ──► localStorage (max 20) ──► /history charts
@@ -110,7 +137,7 @@ Model:      data/heart.csv ──► train_model.py ──► models/heart_model
 No identifiers, narratives, or transcripts ever persist server-side; the
 backend is stateless per request. See [`SECURITY.md`](SECURITY.md).
 
-## 6. Storage & "ERD" notes
+## 7. Storage & "ERD" notes
 
 There is no relational database. The only schema-like structures are:
 
