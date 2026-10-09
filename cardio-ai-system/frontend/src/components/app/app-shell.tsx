@@ -5,6 +5,7 @@ import {
   History,
   LayoutGrid,
   NotebookPen,
+  Pill,
   ShieldCheck,
   Stethoscope,
   Users,
@@ -31,6 +32,7 @@ interface NavItem {
 const NAV: NavItem[] = [
   { to: "/", label: "Overview", short: "Overview", icon: LayoutGrid, group: "Workspace", end: true },
   { to: "/consultation", label: "Consultation", short: "Consult", icon: Stethoscope, group: "Workspace" },
+  { to: "/medications", label: "Medication review", short: "Meds", icon: Pill, group: "Workspace" },
   { to: "/history", label: "History & visits", short: "History", icon: History, group: "Records" },
   { to: "/notes", label: "My notes", short: "Notes", icon: NotebookPen, group: "Records" },
   { to: "/patients", label: "Patients", short: "Patients", icon: Users, group: "Records" },
