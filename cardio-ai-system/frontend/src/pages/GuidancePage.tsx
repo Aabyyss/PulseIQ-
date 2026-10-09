@@ -5,6 +5,7 @@ import {
   GraduationCap,
   History,
   NotebookPen,
+  Pill,
   ShieldCheck,
   Stethoscope
 } from "lucide-react";
@@ -27,6 +28,19 @@ const WORKFLOWS = [
       "Full consult shows the same live transcript plus the patient-details form; both modes stay in sync.",
       "Assess a narrative any time on the same screen for a scored risk estimate, and upload a report image to pull out findings.",
       "Save visit downloads the structured PDF and stores the record in your account in one click; History → Consultations keeps every visit re-exportable."
+    ]
+  },
+  {
+    icon: Pill,
+    title: "Medication review",
+    steps: [
+      "Open Medication review, then record the encounter: the narrative (or transcript), the report text, and the patient context — age, sex, conditions and past history, allergies and everything they currently take.",
+      "Plain phrasing works. \"Previous MI\", \"stent 2023\", \"asthma\", \"peptic ulcer\", \"pregnant\" are all recognised, and lab lines are read as numbers (eGFR, potassium, haemoglobin, LDL, LVEF, troponin).",
+      "Every option comes back with the fact that triggered it (\"Because: LVEF 30%\") plus a dose note, what to monitor and the guideline behind it.",
+      "Blocked agents arrive with the reason — allergy, condition/history or laboratory value — and an allergy block always names the alternative route instead of leaving a hole.",
+      "Interactions are screened against the documented medication list, and drugs the patient already takes are marked \"already on record — verify dose, indication and adherence\" rather than offered again.",
+      "Anything you did not supply is listed under \"What is missing\" — the review reports gaps instead of assuming them, and only one RAAS strategy is ever offered at once.",
+      "Emergency presentations are escalated by the pathway banner regardless of the medication list, and nothing on this page is stored."
     ]
   },
   {
@@ -88,6 +102,10 @@ const FAQ = [
   {
     q: "Can I control the copilot by voice?",
     a: "Yes. While listening, say \"save visit\" to finish and store the encounter, or \"clear transcript\" to start over - in Urdu, \"save karo\" works too. Spoken commands are never added to the transcript."
+  },
+  {
+    q: "Does PulseIQ prescribe or dose medication?",
+    a: "No. The Medication review page suggests options and flags unsafe ones — allergy conflicts, condition and laboratory blocks, interactions with what the patient already takes — and each entry states the captured fact behind it plus what to monitor. Doses are protocol-anchored notes for the clinician to prescribe, nothing is adjusted automatically, and the page stores nothing. It is decision support you can see through; selecting, dosing and documenting remain clinical decisions."
   },
   {
     q: "Where is my data stored?",
