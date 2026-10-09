@@ -393,3 +393,57 @@ review's own point); claiming Whisper-level WER without measuring it.
 Consequence: 56+ new/existing offline tests pass, frontend typecheck and
 build are green; the new endpoints (``/screen-report``, ``/soap-note``,
 ``/extract-entities``) are auth-gated and store nothing.
+
+## ADR-017 · Medication recommendation and safety review (pharmacology agent)
+**Status:** Accepted (2026-10-10)
+
+The pipeline answered "how urgent is this presentation?" but not the next
+question a clinician asks: *which drugs are reasonable here, and which are
+unsafe for this patient?* Trainees running the demo asked for exactly that —
+options that respect the conditions, the past history, the allergies and the
+current medication list.
+
+Decision: an 18th rule-grounded agent (``agents/pharmacology_agent.py``) with a
+thin orchestrator entry (``run_medication_review``), an auth-gated endpoint
+(``POST /medication-review``) and a workspace page (``/medications``). The agent
+is deterministic and offline like every other agent: a curated cardiac drug
+table, a condition/history vocabulary, allergy matching by drug *and* drug
+class, numeric laboratory gates (eGFR, creatinine, potassium, sodium,
+haemoglobin, platelets, LDL, LVEF, troponin), an interaction table and a
+monitoring plan.
+
+Rules that keep the output reviewable rather than authoritative:
+
+- **Every entry names its trigger.** An option carries ``triggered_by``
+  ("history of myocardial infarction", "LVEF 30%"); a block carries
+  ``blocks[].trigger`` with kind allergy / condition / lab. Nothing appears
+  because a model felt like it.
+- **An allergy resolves the therapy question.** Blocking aspirin returns the
+  aspirin-free route (P2Y12 inhibitor per protocol) instead of leaving a hole.
+- **One RAAS strategy at a time.** Because ACE inhibitor + ARB is a harmful
+  combination, the ARB comes back as ``status: "alternative"`` when the ACE
+  inhibitor is offered, so the pair is never presented in parallel.
+- **Blocked agents the patient already takes are called out** ("already
+  documented — review and consider stopping with the prescriber"), because the
+  dangerous finding in practice is often a drug the patient should not be on.
+- **Missing facts are reported, not assumed.** No allergy list, no age, no
+  current medications, no eGFR/potassium → explicit ``missing_information``
+  entries; a patient of childbearing age with unknown pregnancy status is a gap.
+- **Escalation is independent of the drug list.** ``pathway.urgency`` is
+  emergency on the High band or a raised troponin, so a tidy medication list can
+  never soften an ACS presentation.
+
+Rejected alternatives: LLM-written medication advice (the plausible-but-wrong
+failure mode ADR-016 guards against — a plausible drug recommendation is worse
+than none); calling a commercial drug-interaction API (breaks the
+never-require-network rule, adds a licence and a data-sharing question, and the
+common cardiac interactions fit a reviewable local table); auto-dosing (doses
+stay protocol-anchored text in ``dose_note`` for the clinician to prescribe);
+folding the review into the ``/diagnose`` payload (silently changes an existing
+contract and forces every screening to carry patient context it does not have).
+
+Consequence: the backend suite is 81 tests (24 new directional cases — allergy
+blocks, asthma blocks beta-blockade, eGFR 26 blocks metformin, hyperkalaemia
+blocks RAAS blockade and MRAs, pregnancy blocks statin/ACE inhibitor,
+antiplatelet + anticoagulant is a major interaction, missing input is reported);
+no new dependency; nothing stored; the endpoint returns 401 unauthenticated.
