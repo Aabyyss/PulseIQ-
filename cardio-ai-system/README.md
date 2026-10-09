@@ -22,7 +22,7 @@ frontend and model.**
 | Path | Contents |
 |---|---|
 | `backend/` | FastAPI server, training script (with the inverted-label fix), pipeline checks |
-| `agents/` | 17 rule-grounded clinical modules — guidelines, uncertainty, causality, fairness, explainability… |
+| `agents/` | 18 rule-grounded clinical modules — guidelines, uncertainty, causality, fairness, pharmacology, explainability… |
 | `frontend/` | React 18 + Vite + TypeScript application (see its [own README](frontend/README.md)) |
 | `models/` | Trained model and metadata |
 | `data/` | Public heart dataset |
