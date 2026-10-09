@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 
 from backend import auth_store, rate_limit
 from backend.auth import get_current_user
-from backend.orchestrator import run_diagnosis_from_text
+from backend.orchestrator import run_diagnosis_from_text, run_medication_review
 from backend.ai_assistant import (
     analyze_report_image,
     generate_ai_insights,
@@ -18,6 +18,7 @@ from backend.realtime_service import process_live_transcript_entry
 from backend.deidentify import deidentify, deidentify_transcript
 from backend.lab_report import screen_report_text
 from backend.medical_entities import build_soap_note, extract_entities
+from agents.pharmacology_agent import extract_allergy_mentions
 from backend import vocabulary_service
 from backend import learned_vocabulary as learning
 from agents.nlp_symptom_agent import extract_symptoms_from_text
@@ -504,6 +505,117 @@ def screen_report(data: dict, user: dict = Depends(get_current_user)):
     if not isinstance(text, str) or not text.strip():
         return {"error": "text is required"}
     return screen_report_text(text)
+
+
+def _labs_from_report(report_text: str, extra: dict | None = None) -> dict:
+    """Numeric lab findings for the medication safety gates.
+
+    Reuses the reference-range screener so the values are unit-aware, then
+    flattens them into the ``{analyte: number}`` shape the pharmacology agent
+    expects. Troponin is only trusted as ng/mL (the unit its threshold is
+    expressed in); an abnormal flag from any other unit is passed through as
+    an explicit marker instead of comparing unlike units.
+    """
+    labs: dict[str, float] = {}
+    if isinstance(report_text, str) and report_text.strip():
+        for value in screen_report_text(report_text).get("values", []):
+            key = value.get("key", "")
+            try:
+                number = float(value["value"])
+            except (TypeError, ValueError, KeyError):
+                continue
+            if key in ("troponin_i", "troponin_t"):
+                if str(value.get("unit") or "").lower() == "ng/ml":
+                    labs["troponin"] = number
+                elif value.get("severity") in ("critical", "abnormal"):
+                    labs["troponin_flag"] = 1.0
+                continue
+            labs[key] = number
+    for key, raw in (extra or {}).items():
+        try:
+            labs[str(key)] = float(raw)
+        except (TypeError, ValueError):
+            continue
+    return labs
+
+
+@app.post("/medication-review")
+def medication_review(data: dict, user: dict = Depends(get_current_user)):
+    """Medication options and safety review for one encounter.
+
+    Everything is derived from what the caller supplies: the narrative and
+    report text give concepts, mentioned medications and laboratory values;
+    the patient form gives conditions/history, allergies, current medications
+    and age. Blocks are allergy-, condition- and lab-driven; interactions are
+    checked against the documented list. Facts that were not supplied are
+    reported back instead of assumed, and nothing is stored.
+    """
+    payload = data or {}
+    text = payload.get("text", "")
+    report_text = payload.get("report_text", "")
+    if not isinstance(text, str):
+        text = ""
+    if not isinstance(report_text, str):
+        report_text = ""
+
+    narrative = f"{text}\n{report_text}".strip()
+    entities = extract_entities(narrative)
+
+    def _string_list(value) -> list[str]:
+        if value is None:
+            return []
+        if isinstance(value, str):
+            return [value]
+        if isinstance(value, list):
+            return [str(item) for item in value if str(item).strip()]
+        return [str(value)]
+
+    if not narrative and not any(
+        payload.get(key) for key in ("conditions", "allergies", "current_medications")
+    ):
+        return {"error": "text, report_text or patient context is required"}
+
+    conditions = _string_list(payload.get("conditions"))
+    for factor in entities["risk_factors"]:
+        if factor not in conditions:
+            conditions.append(factor)
+
+    allergies = _string_list(payload.get("allergies"))
+    for term in extract_allergy_mentions(narrative):
+        if term not in allergies:
+            allergies.append(term)
+    current = _string_list(payload.get("current_medications"))
+    for medication in entities["medications"]:
+        name = str(medication.get("name", ""))
+        if name and name not in [c.lower() for c in current]:
+            current.append(name)
+
+    try:
+        age = int(payload.get("age")) if str(payload.get("age", "")).strip() else None
+    except (TypeError, ValueError):
+        age = None
+
+    labs = _labs_from_report(report_text, payload.get("labs") if isinstance(payload.get("labs"), dict) else None)
+
+    result = run_medication_review(
+        text=text,
+        report_text=report_text,
+        patient={
+            "age": age,
+            "sex": payload.get("sex") or None,
+            "conditions": conditions,
+            "allergies": allergies,
+            "current_medications": current,
+            "labs": labs,
+            "pregnancy": payload.get("pregnancy") if isinstance(payload.get("pregnancy"), bool) else None,
+        },
+    )
+    result["extracted"] = {
+        "entities": entities,
+        "allergies_from_text": extract_allergy_mentions(narrative),
+        "labs_used": labs,
+    }
+    return result
 
 
 @app.post("/ai-insights")
