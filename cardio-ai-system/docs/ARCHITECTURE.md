@@ -36,8 +36,8 @@
 │        └──► realtime_service.py  per-line fusion for the live copilot (WS)               │
 │                 └──► agents/pain_mapper_agent.py · agents/heart_region_agent.py          │
 │                                                                                  │      │
-│  17 rule-grounded modules in agents/ — each isolated, replaceable, dictionary-          │
-│  driven (guidelines, uncertainty, causality, fairness, robustness, …)                   │
+│  18 rule-grounded modules in agents/ — each isolated, replaceable, dictionary-          │
+│  driven (guidelines, uncertainty, causality, fairness, pharmacology, …)                 │
 └──────────────────────────────────────────────────────────────────────────────────────────┘
         │                        │
         ▼                        ▼
@@ -56,8 +56,8 @@ browser's localStorage (last 20 screenings). See §5.
 | Auth & storage | `backend/auth_store.py` | SQLite store: users (PBKDF2), hashed session tokens, owner-scoped screenings & consultations | api_server |
 | Auth dependency | `backend/auth.py` | Bearer-token resolution → `get_current_user`; 401 shape, WS `?token=` support | auth_store |
 | API | `backend/api_server.py` | Route handlers, auth routes, CORS, validation of required fields, WS loop | Orchestrator, AI assistant, realtime service, auth_store |
-| Orchestration | `backend/orchestrator.py` | The 5-stage pipeline: extract → map → predict → band → return | NLP, mapper, prediction agents |
-| Clinical agents | `agents/*.py` | 17 isolated rule-grounded modules (symptom vocab, feature tiers, pain map, regions, …) | Each other via orchestrator / realtime service only |
+| Orchestration | `backend/orchestrator.py` | The 5-stage pipeline: extract → map → predict → band → return, plus `run_medication_review` (same banding, pharmacology agent) | NLP, mapper, prediction, pharmacology agents |
+| Clinical agents | `agents/*.py` | 18 isolated rule-grounded modules (symptom vocab, feature tiers, pain map, regions, medication safety, …) | Each other via orchestrator / realtime service only |
 | Reasoning | `backend/ai_assistant.py` | LLM strategy with mandatory local fallback; prompts, JSON parsing, provider probing | Ollama / Gemini / built-in rules |
 | Realtime | `backend/realtime_service.py` | Per-transcript-line fusion: translation, diagnosis, pain map, copilot plan | Orchestrator, ai_assistant, pain/region agents |
 | Model artifact | `models/heart_model.pkl` | Trained RandomForest (300 trees) over 13 features | Loaded once at import by prediction agent |
@@ -93,9 +93,11 @@ browser's localStorage (last 20 screenings). See §5.
   unauthenticated visitors are redirected to `/login` (registration and
   sign-in share the page). Session restored from a stored bearer token via
   `GET /auth/me`.
-- **Routes**: `/login` (public) · `/` overview · `/diagnose` · `/live` ·
-  `/workflow/start` · `/workflow/session` · `/history` · `/agents`,
-  wildcard → `/`.
+- **Routes**: public `/login`, `/guidance`, `/privacy`, `/terms` · authed
+  `/` overview · `/consultation` · `/medications` · `/history` · `/notes` ·
+  `/patients` · `/security` · `/agents` · `/thank-you`; the older `/diagnose`,
+  `/live` and `/workflow/*` paths forward to `/consultation`, and unknown paths
+  get the custom 404.
 - **Shell**: `components/app/app-shell.tsx` renders nav + mobile tab bar +
   per-user footer chip with sign-out.
 - **UI kit**: shadcn-style primitives under `components/ui` (Radix + CVA +
@@ -138,3 +140,6 @@ patient-derived content once real records exist — treat it as PHI (see
   retrain (see `DATA_FLOW.md` §3).
 - New agent → one file in `agents/`, register in the realtime service or
   orchestrator, and add an entry in `API_SPEC.md` consumers if exposed.
+- New drug, interaction or lab gate → the tables in
+  `agents/pharmacology_agent.py` (`DRUGS`, `INTERACTIONS`, `MED_ALIASES`);
+  the review endpoint itself does not change.
