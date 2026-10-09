@@ -4,6 +4,7 @@ import {
   Activity,
   ArrowRight,
   History,
+  Pill,
   ServerCog,
   ShieldCheck,
   Stethoscope
@@ -27,6 +28,14 @@ const ACTIONS = [
     title: "Run a consultation",
     detail: "Speak or type in nine languages — concepts, risk, body map and guidance update live; say \"save visit\" to finish hands-free.",
     cta: "Open consultation"
+  },
+  {
+    to: "/medications",
+    icon: Pill,
+    title: "Check the medication plan",
+    detail:
+      "Options, allergy and condition blocks, laboratory gates and interactions — each naming the fact behind it, with the gaps you have not recorded called out.",
+    cta: "Open medication review"
   },
   {
     to: "/history",
