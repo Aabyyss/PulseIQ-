@@ -30,8 +30,15 @@ The dev server proxies `/api/*` (including the `/ws` WebSocket) to `http://local
 | `/live` | Live consultation copilot: realtime speech-to-text, chat transcript, doctor prompts, body pain map |
 | `/workflow/start` | Guided consultation workflow overview |
 | `/workflow/session` | Full consultation capture: visit details, voice, pain map, PDF export |
+| `/medications` | Medication review: options, allergy/condition/lab blocks and interactions from the encounter, conditions, history, allergies and current medications |
+| `/notes` | Private per-patient notes |
+| `/patients` | Per-patient timeline (screenings, note, saved visits) |
+| `/security` | Active sessions and account activity |
 | `/history` | Locally stored screening history with stats |
 | `/agents` | Research agent registry |
+
+The legacy `/diagnose`, `/live` and `/workflow/*` paths forward to
+`/consultation`.
 
 ## Optional AI upgrades
 
