@@ -81,32 +81,43 @@ directions.
 Per inbound line, in order:
 
 ```
-{speaker, text, report_text, language_code}
+{speaker, text, report_text, language_code, transcript, patient{}}
    │
    ├─ translate_to_english        (LLM if non-en, else passthrough)
    ├─ run_diagnosis_from_text     (same 5-stage pipeline as §1)
    ├─ map_symptoms_to_pain_points (pain_mapper_agent)
    ├─ cardiac_regions             (heart_region_agent)
-   └─ generate_ai_copilot_plan    (questions, tests, next steps, urgency)
+   ├─ generate_ai_copilot_plan    (questions, tests, next steps, urgency)
+   └─ medication_review_for_encounter  (the §5 rules, over the whole encounter)
    ▼
 {speaker, transcript, original_transcript, language_code, report_text,
  symptoms, diagnosis, pain_points, cardiac_regions,
- doctor_next_questions, patient_recommendations, ai_copilot}
+ doctor_next_questions, patient_recommendations, ai_copilot, medication_review}
 ```
 
 The connection is one loop per session; any single line that raises still
 returns an `{"error": …}` frame so the UI keeps running.
 
-## 5. Medication review (POST /medication-review)
+`transcript` is everything said before this line (the UI sends what it displays,
+i.e. the translated lines) and `patient` is the visit header recorded on the
+consultation screen. The server joins them with its translation of the current
+line and runs the medication screen over the result, so the safety card moves
+with each spoken line. The review is *not* kept in the connection — the next
+line rebuilds it from the encounter, so clearing the transcript clears the
+screen (ADR-018).
+
+## 5. Medication review (POST /medication-review, and every live WS line)
 
 ```
 {text, report_text, age, sex, conditions[], allergies[],
  current_medications[], labs{}}
    │
-   ├─ extract_symptoms_from_text        (nlp_symptom_agent, via orchestrator)
-   ├─ extract_entities                  (medical_entities: medications, risk factors)
-   ├─ extract_allergy_mentions          (pharmacology_agent: "allergic to …")
-   ├─ screen_report_text → labs{}       (lab_report: eGFR, K+, Hb, LDL, LVEF, troponin)
+   ├─ build_medication_context          (encounter_context: one assembly, both paths)
+   │     ├─ extract_entities            (medical_entities: medications, risk factors)
+   │     ├─ detect_conditions           (pharmacology_agent: condition vocabulary)
+   │     ├─ extract_allergy_mentions    (pharmacology_agent: "allergic to …")
+   │     ├─ labs_for_review → labs{}    (lab_report: unit-aware eGFR, K+, Hb, LDL, LVEF, troponin)
+   │     └─ extract_symptoms_from_text  (nlp_symptom_agent: the narrative's vocabulary)
    ├─ run_diagnosis_from_text           (same 5-stage pipeline as §1 → risk band)
    └─ review_medications                (pharmacology_agent: options, blocks, interactions)
    ▼
@@ -115,14 +126,16 @@ returns an `{"error": …}` frame so the UI keeps running.
  missing_information, summary, disclaimer}, extracted{}}
 ```
 
-The API layer owns extraction: it unions the caller's conditions/allergies with
-what the narrative states, and flattens the report parser's unit-aware values
-into the numeric shape the agent expects (troponin is only compared when it is
+The union rules live once, in `backend/encounter_context.py`, and are shared with
+the live loop (§4): the recorded visit details are unioned with what the
+narrative states, and the report parser's unit-aware values are flattened into
+the numeric shape the agent expects (troponin is only compared when it is
 reported in ng/mL — an abnormal flag in another unit is passed through as an
-explicit marker instead). The orchestrator owns symptom extraction and banding,
-so a medication review is banded exactly like `/diagnose`. Missing inputs (no
-allergies, no age, no eGFR/potassium) are returned in `missing_information`
-rather than assumed, and nothing is written to the database.
+explicit marker instead; caller-supplied `labs{}` override the parsed ones). The
+orchestrator owns symptom extraction and banding, so a medication review is
+banded exactly like `/diagnose`. Missing inputs (no allergies, no age, no
+eGFR/potassium) are returned in `missing_information` rather than assumed, and
+nothing is written to the database.
 
 ## 6. Persistence & state flow
 

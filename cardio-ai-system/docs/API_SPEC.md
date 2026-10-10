@@ -180,11 +180,22 @@ or missing token is rejected with close code **4401** before accept.
 
 **Client → server**
 ```json
-{ "speaker": "patient|doctor", "text": "…", "report_text": "accumulated note", "language_code": "en-US" }
+{ "speaker": "patient|doctor", "text": "…", "report_text": "accumulated note", "language_code": "en-US",
+  "transcript": "everything said before this line",
+  "patient": { "age": "68", "sex": "male", "conditions": ["prior MI"], "allergies": ["aspirin"], "current_medications": ["warfarin"], "pregnancy": false } }
 ```
 `speaker` defaults `patient`; blank `text` gets `{"error": "text is required"}`.
 `language_code` accepts any of the UI locales: en-US, ur-PK, hi-IN, ar-SA,
 ko-KR, fr-FR, es-ES, de-DE, zh-CN.
+
+`transcript` and `patient` are optional, and exist for the live medication
+safety screen (ADR-018). `transcript` is the encounter so far *without* this
+line; the server appends its own translation of `text`, so the screen reads the
+whole encounter rather than one line — omit it (or clear the transcript) and the
+review reflects only this line. `patient` carries the visit details recorded on
+the consultation screen; blank or omitted fields are **reported as gaps**
+instead of being treated as "none", and an absent `pregnancy` means *not
+recorded*, not *not pregnant*.
 
 **Server → client, frame 1 — `line_ack` (instant, no LLM):**
 ```json
@@ -222,6 +233,7 @@ used" badge and the × not-a-symptom correction affordance).
   "doctor_next_questions": ["string"],
   "patient_recommendations": ["string"],
   "medical_entities": { "medications": [{ "name", "dose_mg", "matched" }], "durations": [], "risk_factors": [] },
+  "medication_review": { …the `medications` block from POST /medication-review… },
   "ai_copilot": { "doctor_questions": [], "recommended_tests": [], "next_steps": [], "diagnostic_impression": [], "urgency": "low|moderate|high", "safety_note": "…",
     "suggestion_sources": { "<exact suggestion text>": "ACC/AHA chest pain guideline — …" },
     "confidence": { "confidence": "low|moderate|high", "insufficient_information": "true|false", "reason": "…" } }
@@ -239,6 +251,13 @@ each bullet. `confidence` is the plan-level trust tier; when
 diagnostic direction with an explicit "Not enough information yet" line
 rather than guessing. `medical_entities` carries medications/durations/
 risk factors extracted from the line.
+
+New in ADR-018: `medication_review` is the `POST /medication-review` payload
+rebuilt for this line — options, allergy/condition/laboratory blocks,
+interaction alerts, `missing_information` and the urgency band — from the
+recorded visit details above plus every line spoken so far. It is recomputed
+from the encounter on each line instead of being accumulated in connection
+state, so a cleared transcript clears the screen; nothing is stored.
 
 ---
 
