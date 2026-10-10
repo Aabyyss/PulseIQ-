@@ -3,7 +3,9 @@ import { useNavigate } from "react-router-dom";
 import { usePageMeta } from "@/lib/usePageMeta";
 import {
   AlertCircle,
+  AlertTriangle,
   BadgeCheck,
+  Ban,
   CheckCircle2,
   HeartPulse,
   ImageUp,
@@ -13,9 +15,11 @@ import {
   MapPin,
   Mic,
   MicOff,
+  Pill,
   Radio,
   Save,
   ScanLine,
+  ShieldAlert,
   Send,
   Sparkles,
   Stethoscope,
@@ -54,6 +58,12 @@ const EXAMPLES = [
 
 const inputClass =
   "h-9 w-full rounded-lg border border-line bg-inset px-3 text-sm text-fg transition-colors placeholder:text-faint hover:border-line2 focus:border-accent/45";
+
+const URGENCY_TONE = {
+  emergency: "destructive",
+  urgent: "warn",
+  routine: "ok"
+} as const;
 
 /**
  * Speaker control: Auto lets the copilot attribute each line from the
@@ -100,7 +110,30 @@ export function ConsultationPage() {
     "Live consultation capture: symptoms, risk, body map and guideline-sourced guidance update as you speak."
   );
   const navigate = useNavigate();
-  const capture = useConsultationCapture();
+
+  // Patient details — declared before the capture hook because every spoken
+  // line is screened against them: the medication safety review is rebuilt
+  // from this visit's recorded facts, and a field filled mid-consultation
+  // applies to the next line rather than waiting for a reconnect.
+  const [patientName, setPatientName] = useState("");
+  const [patientAge, setPatientAge] = useState("");
+  const [patientGender, setPatientGender] = useState("");
+  const [visitDate, setVisitDate] = useState(new Date().toISOString().slice(0, 10));
+  const [doctorName, setDoctorName] = useState("");
+  const [chiefComplaint, setChiefComplaint] = useState("");
+  const [allergies, setAllergies] = useState("");
+  const [conditions, setConditions] = useState("");
+  const [currentMedications, setCurrentMedications] = useState("");
+  const [pregnancy, setPregnancy] = useState<"" | "yes" | "no">("");
+
+  const capture = useConsultationCapture(() => ({
+    age: patientAge,
+    sex: patientGender,
+    conditions,
+    allergies,
+    currentMedications,
+    pregnancy
+  }));
   const {
     speaker,
     setSpeaker,
@@ -134,7 +167,8 @@ export function ConsultationPage() {
     diagnosticImpression,
     nextSteps,
     safetyNote,
-    cardiacRegions
+    cardiacRegions,
+    medicationReview
   } = capture;
 
   const [mode, setMode] = useState<"quick" | "full">("quick");
@@ -198,13 +232,8 @@ export function ConsultationPage() {
     [refreshLearned]
   );
 
-  // Visit details — shared across both modes, used by Save visit.
-  const [patientName, setPatientName] = useState("");
-  const [patientAge, setPatientAge] = useState("");
-  const [patientGender, setPatientGender] = useState("");
-  const [visitDate, setVisitDate] = useState(new Date().toISOString().slice(0, 10));
-  const [doctorName, setDoctorName] = useState("");
-  const [chiefComplaint, setChiefComplaint] = useState("");
+  // Visit details live at the top of the component (the capture hook reads
+  // them); only the save state belongs here.
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
   const [savedId, setSavedId] = useState<number | null>(null);
@@ -649,7 +678,10 @@ export function ConsultationPage() {
     <Card>
       <CardHeader>
         <CardTitle>Patient details</CardTitle>
-        <CardDescription>Head the exported report. Everything else on this page is already captured.</CardDescription>
+        <CardDescription>
+          Head the exported report and sharpen the live medication safety screen — allergies, history and current
+          medications are screened against every line as it is spoken. Fields left blank are reported as gaps.
+        </CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
         <input
@@ -701,6 +733,39 @@ export function ConsultationPage() {
           onChange={(e) => setChiefComplaint(e.target.value)}
           placeholder="Chief complaint (auto: detected concepts)"
           aria-label="Chief complaint"
+        />
+        <div className="grid grid-cols-2 gap-2">
+          <input
+            className={inputClass}
+            value={allergies}
+            onChange={(e) => setAllergies(e.target.value)}
+            placeholder="Allergies (aspirin…)"
+            aria-label="Known allergies"
+          />
+          <select
+            className={inputClass}
+            value={pregnancy}
+            onChange={(e) => setPregnancy(e.target.value as "" | "yes" | "no")}
+            aria-label="Pregnancy status"
+          >
+            <option value="">Pregnancy status…</option>
+            <option value="no">Not pregnant</option>
+            <option value="yes">Pregnant / breastfeeding</option>
+          </select>
+        </div>
+        <input
+          className={inputClass}
+          value={conditions}
+          onChange={(e) => setConditions(e.target.value)}
+          placeholder="Conditions & history (prior MI, stent 2023, asthma…)"
+          aria-label="Conditions and history"
+        />
+        <input
+          className={inputClass}
+          value={currentMedications}
+          onChange={(e) => setCurrentMedications(e.target.value)}
+          placeholder="Current medications (names or brands)"
+          aria-label="Current medications"
         />
       </CardContent>
     </Card>
@@ -973,6 +1038,142 @@ export function ConsultationPage() {
     </div>
   );
 
+  // Live medication safety screen: the same deterministic rules as the
+  // Medication review page, recomputed server-side for every line from the
+  // visit details recorded above plus everything said so far — so a drug named
+  // out loud, a condition mentioned in passing or a lab value read from the
+  // note changes the screen while the consultation is still happening.
+  const medicationSafetyCard = (
+    <Card>
+      <CardHeader className="pb-3">
+        <CardTitle className="flex items-center gap-2 text-sm">
+          <Pill className="h-3.5 w-3.5 text-accent" strokeWidth={1.75} />
+          Medication safety
+          {awaitingCopilot ? <LoaderCircle className="h-3 w-3 animate-spin text-faint" strokeWidth={2} /> : null}
+        </CardTitle>
+        <CardDescription className="mt-1">
+          Options, blocks and interactions for this patient, rebuilt with every line from what has been said and the
+          details recorded above. Nothing here is stored.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {!medicationReview ? (
+          <p className="text-2xs italic leading-relaxed text-faint">
+            {awaitingCopilot
+              ? "Reading the encounter — the safety screen arrives with the copilot analysis."
+              : "Record a symptom, drug, condition, allergy or laboratory line and the screen fills from the encounter."}
+          </p>
+        ) : (
+          <>
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge variant={URGENCY_TONE[medicationReview.pathway.urgency]} dot>
+                {medicationReview.pathway.urgency}
+              </Badge>
+              <span className="text-2xs text-muted">
+                {medicationReview.recommendations.length} option(s) · {medicationReview.contraindicated.length} blocked ·{" "}
+                {medicationReview.interaction_alerts.length} interaction(s)
+              </span>
+            </div>
+
+            {medicationReview.allergy_alerts.map((alert) => (
+              <Alert key={alert.drug} variant="destructive">
+                <Ban />
+                <AlertTitle>
+                  {alert.drug} blocked — reported allergy: {alert.matched_terms.join(", ")}
+                </AlertTitle>
+                <AlertDescription>{alert.alternative}</AlertDescription>
+              </Alert>
+            ))}
+
+            {medicationReview.contraindicated.slice(0, 2).map((item) => (
+              <Alert
+                key={item.drug}
+                variant={item.severity === "absolute" ? "destructive" : "warning"}
+              >
+                <ShieldAlert />
+                <AlertTitle className="flex flex-wrap items-center gap-2">
+                  {item.drug}
+                  <Badge variant={item.severity === "absolute" ? "destructive" : "warn"}>
+                    {item.severity === "absolute" ? "Do not use" : "Review first"}
+                  </Badge>
+                  {item.already_documented ? <Badge variant="secondary">already documented</Badge> : null}
+                </AlertTitle>
+                <AlertDescription>
+                  {item.blocks[0] ? <p>{item.blocks[0].note}</p> : <p>{item.note}</p>}
+                  {item.already_documented ? (
+                    <p className="mt-1">Already on this list — review and consider stopping, don't re-start.</p>
+                  ) : null}
+                </AlertDescription>
+              </Alert>
+            ))}
+            {medicationReview.contraindicated.length > 2 ? (
+              <p className="text-2xs text-faint">
+                + {medicationReview.contraindicated.length - 2} more blocked — open Medication review for the full list.
+              </p>
+            ) : null}
+
+            {medicationReview.interaction_alerts.slice(0, 2).map((alert) => (
+              <Alert
+                key={alert.pair.join("-")}
+                variant={alert.severity === "major" ? "destructive" : "warning"}
+              >
+                <AlertTriangle />
+                <AlertTitle className="flex flex-wrap items-center gap-2">
+                  {alert.pair.map((side) => side.replace(/_/g, " ")).join(" + ")}
+                  <Badge variant={alert.severity === "major" ? "destructive" : "warn"}>{alert.severity}</Badge>
+                </AlertTitle>
+                <AlertDescription>{alert.note}</AlertDescription>
+              </Alert>
+            ))}
+            {medicationReview.interaction_alerts.length > 2 ? (
+              <p className="text-2xs text-faint">
+                + {medicationReview.interaction_alerts.length - 2} more interaction(s).
+              </p>
+            ) : null}
+
+            {medicationReview.recommendations.length ? (
+              <div>
+                <p className="label">Options so far</p>
+                <div className="mt-1.5 flex flex-wrap gap-1.5">
+                  {medicationReview.recommendations.slice(0, 4).map((rec) => (
+                    <Badge
+                      key={rec.drug}
+                      variant={rec.status === "already-documented" ? "secondary" : "info"}
+                      title={[rec.dose_note, ...rec.triggered_by.map((reason) => `Because: ${reason}`)].join("\n")}
+                    >
+                      {rec.drug}
+                      {rec.status === "already-documented" ? " (on record)" : ""}
+                    </Badge>
+                  ))}
+                  {medicationReview.recommendations.length > 4 ? (
+                    <span className="self-center text-2xs text-faint">
+                      +{medicationReview.recommendations.length - 4} more
+                    </span>
+                  ) : null}
+                </div>
+              </div>
+            ) : null}
+
+            {medicationReview.missing_information.length ? (
+              <ul className="space-y-1 border-t border-line pt-2.5">
+                {medicationReview.missing_information.slice(0, 3).map((line) => (
+                  <li key={line} className="flex gap-1.5 text-2xs leading-relaxed text-faint">
+                    <Info className="mt-px h-2.5 w-2.5 shrink-0" strokeWidth={2} />
+                    {line}
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+
+            <p className="border-t border-line pt-2 text-2xs italic leading-relaxed text-faint">
+              {medicationReview.disclaimer}
+            </p>
+          </>
+        )}
+      </CardContent>
+    </Card>
+  );
+
   const bodyMapColumn = (
     <div className="space-y-5">
       <Card>
@@ -1051,6 +1252,8 @@ export function ConsultationPage() {
           </p>
         </CardContent>
       </Card>
+
+      {medicationSafetyCard}
 
       {capture.medicalEntities.medications.length > 0 ||
       capture.medicalEntities.durations.length > 0 ||
