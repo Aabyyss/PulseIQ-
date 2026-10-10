@@ -17,6 +17,7 @@ from backend.ai_assistant import (
 from backend.realtime_service import process_live_transcript_entry
 from backend.deidentify import deidentify, deidentify_transcript
 from backend.encounter_context import build_medication_context
+from backend.fhir_export import build_fhir_bundle
 from backend.lab_report import screen_report_text
 from backend.medical_entities import build_soap_note, extract_entities
 from backend import vocabulary_service
@@ -554,6 +555,31 @@ def medication_review(data: dict, user: dict = Depends(get_current_user)):
         "labs_used": context["labs"],
     }
     return result
+
+
+@app.post("/fhir-export")
+def fhir_export(data: dict, user: dict = Depends(get_current_user)):
+    """One encounter's structured findings as a FHIR R4 Bundle (ADR-019).
+
+    Takes the same visit fields the workspace already holds (patient details,
+    narrative, report text, risk band, optional final report) and returns an
+    EHR-shaped ``Bundle`` of Patient / Practitioner / Encounter / Condition /
+    Observation / AllergyIntolerance / MedicationStatement / DetectedIssue /
+    DocumentReference resources. Deterministic and offline — no LLM, and
+    nothing is stored; the response reports what could not be represented
+    (``missing_information``) and what was derived (``caveats``) instead of
+    inventing values.
+    """
+    payload = data or {}
+    has_content = any(
+        payload.get(key) for key in (
+            "text", "report_text", "patient_name", "patient_age", "conditions",
+            "allergies", "current_medications", "symptom_notes", "symptoms", "report",
+        )
+    )
+    if not has_content:
+        return {"error": "text, report_text or patient context is required"}
+    return build_fhir_bundle(payload)
 
 
 @app.post("/ai-insights")
