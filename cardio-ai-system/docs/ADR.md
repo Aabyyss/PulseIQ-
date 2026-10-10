@@ -447,3 +447,65 @@ blocks, asthma blocks beta-blockade, eGFR 26 blocks metformin, hyperkalaemia
 blocks RAAS blockade and MRAs, pregnancy blocks statin/ACE inhibitor,
 antiplatelet + anticoagulant is a major interaction, missing input is reported);
 no new dependency; nothing stored; the endpoint returns 401 unauthenticated.
+
+## ADR-018 · Live medication safety screen inside the consultation loop
+**Status:** Accepted (2026-10-11)
+
+ADR-017 shipped the medication review as a page: the clinician types the
+encounter, submits, reads the options and the blocks. But the question it answers
+— *which drugs are reasonable here, and which are unsafe for this patient?* — is
+asked **during** the consultation, not after it. A patient who says "and I am
+allergic to aspirin" on the fourth line, a lab note that reads "eGFR 26", or a
+condition mentioned in passing all change the answer while the clinician is
+still talking.
+
+Decision: the same deterministic review is now part of every live copilot line.
+Each ``analysis`` frame on ``WS /ws/consultation`` carries a
+``medication_review`` field, rebuilt from (a) the visit details the clinician
+recorded on the consultation screen — age, sex, conditions/history, allergies,
+current medications, pregnancy — and (b) everything said so far. It rides on the
+existing frame rather than a second endpoint, and the frontend renders it as a
+"Medication safety" card beside the body map: a field filled mid-consultation
+applies to the next line without a reconnect.
+
+Rules that keep the live screen honest:
+
+- **One set of union rules.** The context a review is judged against (recorded
+  facts ∪ extracted entities ∪ condition vocabulary ∪ allergy phrases ∪
+  unit-aware labs from the report text ∪ narrative symptoms) lives in
+  ``backend/encounter_context.build_medication_context``, used by both
+  ``POST /medication-review`` and the live loop. Two assemblies would eventually
+  disagree about the same patient — the worst possible outcome for a safety
+  screen, and the reason the endpoint's own extraction moved there too.
+- **Stateless recomputation beats remembered state.** The review is rebuilt from
+  the encounter text the client sends, not accumulated in a per-connection
+  buffer: a cleared transcript therefore clears the screen instead of leaving
+  stale findings behind, and a reconnecting client gets the same answer.
+- **Gaps stay gaps.** Blank form fields are omitted from the wire payload rather
+  than sent as "none", and an unset pregnancy select means *not recorded*, not
+  *not pregnant* — the review reports them in ``missing_information`` instead of
+  screening against an assumed healthy patient.
+- **The screen can never soften the presentation.** ``pathway.urgency`` still
+  escalates on the diagnosis band or a raised troponin, independent of the drug
+  list (ADR-017).
+- **Nothing new is required.** No new endpoint, no new dependency, nothing
+  stored; the field is additive, so a client that ignores ``medication_review``
+  keeps working.
+
+Rejected alternatives: a ``POST /medication-review`` call per spoken line from
+browser (two round-trips per line, and the same visit details would travel twice
+in two different shapes); caching the review per socket session and patching it
+incrementally (state that can drift from the recorded facts, and it survives a
+cleared transcript as stale advice); an LLM-written live safety note (the
+plausible-but-wrong failure mode ADR-016/017 reject — a hallucinated allergy
+clearance is the worst output this system could produce); auto-prescribing from
+live options (doses stay protocol-anchored text for the clinician).
+
+Consequence: 13 new directional cases in
+``backend/test_live_medication_review.py`` — a recorded allergy blocks before a
+single line is spoken, an allergy/condition/medication said out loud counts with
+the form empty, later lines add without erasing earlier findings, a cleared
+transcript leaves nothing stale, report values from the visit note reach the
+laboratory gates, and the socket frame carries the review (LLM tier stubbed) —
+bringing the backend suite to 94 tests. The page and the live loop serve the same
+rules; nothing stored; no new dependency.
