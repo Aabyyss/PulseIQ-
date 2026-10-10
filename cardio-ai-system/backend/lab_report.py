@@ -456,3 +456,36 @@ def screen_report_text(text: str) -> dict[str, Any]:
         "summary": {"critical": critical, "abnormal": abnormal, "normal": normal, "parsed": parsed},
         "message": message,
     }
+
+
+def labs_for_review(text: str, extra: dict[str, Any] | None = None) -> dict[str, float]:
+    """Numeric findings flattened for the medication safety gates.
+
+    Reuses :func:`screen_report_text` so the numbers stay unit-aware, then
+    flattens them into the ``{analyte: number}`` shape the pharmacology agent
+    expects. Troponin is only trusted as ng/mL (the unit its threshold is
+    expressed in); an abnormal flag from any other unit is passed through as
+    an explicit marker instead of comparing unlike units. ``extra`` is applied
+    last, so a caller-supplied value wins over the parsed one.
+    """
+    labs: dict[str, float] = {}
+    if isinstance(text, str) and text.strip():
+        for value in screen_report_text(text).get("values", []):
+            key = str(value.get("key", ""))
+            try:
+                number = float(value["value"])
+            except (TypeError, ValueError, KeyError):
+                continue
+            if key in ("troponin_i", "troponin_t"):
+                if str(value.get("unit") or "").lower() == "ng/ml":
+                    labs["troponin"] = number
+                elif value.get("severity") in ("critical", "abnormal"):
+                    labs["troponin_flag"] = 1.0
+                continue
+            labs[key] = number
+    for key, raw in (extra or {}).items():
+        try:
+            labs[str(key)] = float(raw)
+        except (TypeError, ValueError):
+            continue
+    return labs
