@@ -13,12 +13,56 @@ from agents.knowledge_graph_agent import link_medical_entities
 from agents.multimodal_fusion_agent import fuse_modalities
 from agents.nlp_symptom_agent import extract_symptoms_from_text
 from agents.pain_mapper_agent import map_symptoms_to_pain_points
+from agents.pharmacology_agent import review_medications
 from agents.robustness_agent import robustness_checks
 from agents.uncertainty_agent import estimate_prediction_uncertainty
 from backend.ai_assistant import generate_ai_copilot_plan, translate_to_english
+from backend.encounter_context import build_medication_context
 from backend.medical_entities import extract_entities
 from backend.orchestrator import run_diagnosis_from_text
 from backend import vocabulary_service
+
+
+def medication_review_for_encounter(
+    encounter_text: str,
+    report_text: str = "",
+    patient: dict | None = None,
+    symptoms: list[str] | None = None,
+    risk_level: str | None = None,
+) -> dict:
+    """Medication review for a live encounter, accumulated across its lines.
+
+    ``encounter_text`` is everything said so far (the API layer supplies the
+    already-translated lines plus the current one), so each spoken line can
+    change the options, blocks and interactions without the caller keeping any
+    pharmacology state itself. ``patient`` carries the visit details the
+    clinician recorded — age, sex, conditions/history, allergies, current
+    medications and optionally pregnancy. The union rules live in
+    :mod:`backend.encounter_context`, shared with ``POST /medication-review``,
+    so the page and the live screen judge the same patient identically.
+
+    Nothing is stored; the review is recomputed from the encounter every time.
+    """
+    context = build_medication_context(encounter_text, report_text, patient, symptoms)
+    recorded_risk = patient.get("risk_level") if isinstance(patient, dict) else None
+
+    review = review_medications(
+        symptoms=context["symptoms"],
+        conditions=context["conditions"],
+        allergies=context["allergies"],
+        current_medications=context["current_medications"],
+        age=context["age"],
+        sex=context["sex"],
+        risk_level=risk_level if risk_level in ("Low", "Medium", "High") else recorded_risk,
+        labs=context["labs"],
+        pregnancy=context["pregnancy"],
+    )
+    review["extracted"] = {
+        "entities": context["entities"],
+        "allergies_from_text": context["allergies_from_text"],
+        "labs_used": context["labs"],
+    }
+    return review
 
 
 def process_live_transcript_entry(
@@ -27,10 +71,17 @@ def process_live_transcript_entry(
     report_text: str = "",
     language_code: str = "en-US",
     owner_id: int | None = None,
+    patient: dict | None = None,
+    transcript: str = "",
 ) -> dict:
     normalized_speaker = "doctor" if speaker == "doctor" else "patient"
     original_transcript = text
     english_transcript = translate_to_english(text=text, language_hint=language_code)
+    # Everything said before this line, already translated by the caller; the
+    # medication safety screen reads the whole encounter, not one line.
+    encounter_text = "\n".join(
+        part for part in ((transcript or "").strip(), english_transcript.strip()) if part
+    )
 
     # The dictionary matches English and Urdu directly, so extraction runs
     # on BOTH the original and the translated text and the findings are
@@ -94,6 +145,14 @@ def process_live_transcript_entry(
         ]
         ai_copilot["safety_note"] = confidence["reason"]
 
+    medication_review = medication_review_for_encounter(
+        encounter_text=encounter_text,
+        report_text=report_text,
+        patient=patient,
+        symptoms=symptoms,
+        risk_level=risk_level,
+    )
+
     return {
         "speaker": normalized_speaker,
         "transcript": english_transcript,
@@ -102,6 +161,7 @@ def process_live_transcript_entry(
         "report_text": report_text,
         "symptoms": symptoms,
         "medical_entities": extract_entities(text),
+        "medication_review": medication_review,
         "diagnosis": diagnosis,
         "pain_points": map_symptoms_to_pain_points(symptoms),
         "cardiac_regions": cardiac_regions,
