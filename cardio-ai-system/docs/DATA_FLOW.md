@@ -137,7 +137,34 @@ banded exactly like `/diagnose`. Missing inputs (no allergies, no age, no
 eGFR/potassium) are returned in `missing_information` rather than assumed, and
 nothing is written to the database.
 
-## 6. Persistence & state flow
+## 6. FHIR export (POST /fhir-export)
+
+```
+{patient_name, age, gender, visit_date, doctor_name, chief_complaint,
+ text, report_text, risk_level, symptom_notes[], conditions[], allergies[],
+ current_medications[], pregnancy, report{}}
+   │
+   ├─ build_medication_context  (encounter_context: the §5 union, one assembly)
+   ├─ screen_report_text        (lab_report: unit-aware values → Observations)
+   ├─ detect_conditions         (pharmacology_agent: history → problem list)
+   ├─ SYMPTOM_TO_ENTITIES       (knowledge_graph_agent: SNOMED/UMLS for symptoms)
+   ├─ review_medications        (pharmacology_agent → DetectedIssue resources)
+   └─ build_soap_note           (medical_entities: note text for DocumentReference)
+   ▼
+{resourceType: "Bundle", type: "collection", entry[]}
+Patient · Practitioner · Encounter · Condition · Observation ·
+AllergyIntolerance · MedicationStatement · DetectedIssue · DocumentReference
+```
+
+Everything the builder infers is marked as such (``provisional`` symptoms,
+``unconfirmed`` history, a ``survey`` risk band, ``preliminary`` DetectedIssues),
+quantities carry unit *text* rather than a guessed UCUM code, gaps and derived
+values come back in ``missing_information`` / ``caveats``, and the same input
+always produces the same bundle. The file is rendered on the clinician's machine
+and downloaded by their browser — nothing is pushed to an EHR and no terminology
+server is contacted (ADR-019).
+
+## 7. Persistence & state flow
 
 ```
 Screening:  React state ──► localStorage (max 20) ──► /history charts
@@ -150,7 +177,7 @@ Model:      data/heart.csv ──► train_model.py ──► models/heart_model
 No identifiers, narratives, or transcripts ever persist server-side; the
 backend is stateless per request. See [`SECURITY.md`](SECURITY.md).
 
-## 7. Storage & "ERD" notes
+## 8. Storage & "ERD" notes
 
 There is no relational database. The only schema-like structures are:
 

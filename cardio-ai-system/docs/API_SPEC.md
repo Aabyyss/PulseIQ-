@@ -536,9 +536,81 @@ raised troponin regardless of the medication list.
 
 **401** unauthenticated · **200** `{"error": "text, report_text or patient context is required"}` on an empty request
 
+## POST /fhir-export *(auth)*
+One encounter's structured findings as a FHIR R4 ``Bundle`` (ADR-019) — the
+EHR-shaped hand-off the competitive assessment asked for. Deterministic and
+offline: no LLM, no terminology server, nothing stored, and no new dependency.
+
+**Request** — the same visit fields the workspace already holds. At least one of
+the narrative, the report text or the patient context is required:
+```json
+{
+  "patient_name": "Demo Patient", "patient_age": "68", "patient_gender": "Male",
+  "visit_date": "2026-10-11", "doctor_name": "Dr. Demo",
+  "chief_complaint": "crushing chest pain",
+  "text": "crushing chest pain radiating to the left arm, sweaty",
+  "report_text": "Troponin I: 0.09 ng/mL. Potassium 6.1 mmol/L.",
+  "risk_level": "High",
+  "symptom_notes": ["chest pain", "sweating"],
+  "conditions": ["hypertension", "prior MI"],
+  "allergies": ["aspirin"],
+  "current_medications": ["warfarin 5 mg"],
+  "pregnancy": false,
+  "report": { …the /final-report payload, optional… }
+}
+```
+| field | notes |
+|---|---|
+| text / report_text | narrative and laboratory text; concepts, conditions, medications, allergy phrases and unit-aware values are derived from them — the same extraction the live copilot uses |
+| conditions | free text or canonical tags; history phrasing is mapped to canonical problems, and unrecognised entries are exported as written |
+| allergies / current_medications | recorded lists; placeholders ("none", "NKDA") are never emitted as clinical records |
+| pregnancy | `true`/`false` when recorded; absent means *not recorded* |
+| report | when supplied, its sections become the documented consultation note instead of the deterministic SOAP note |
+
+**200**
+```json
+{
+  "bundle": {
+    "resourceType": "Bundle", "type": "collection", "timestamp": "2026-10-11T09:30:00Z",
+    "meta": { "tag": [{ "system": "urn:pulseiq:source", "code": "pulseiq-export" }] },
+    "entry": [ { "fullUrl": "urn:uuid:…", "resource": { "resourceType": "Patient", "id": "…" } } ]
+  },
+  "fhir_version": "4.0.1",
+  "resource_counts": { "Patient": 1, "Practitioner": 1, "Encounter": 1, "Condition": 3, "Observation": 3 },
+  "missing_information": ["No drug allergy recorded — allergy screening could not be represented."],
+  "caveats": ["Patient.birthDate is the year derived from the recorded age (68) — accurate to about ±1 year, not a recorded date of birth."],
+  "medication_summary": "6 option(s) offered, 7 blocked or flagged for review — based on 2 captured indication(s).",
+  "disclaimer": "Decision-support export from PulseIQ. Resources are unconfirmed and must be reviewed by a clinician before being filed in an EHR."
+}
+```
+Resources emitted, and what keeps each one reviewable:
+
+| resource | represents | the marker that stops it reading as fact |
+|---|---|---|
+| Patient | the recorded name, administrative gender and a birth year derived from the recorded age | `birthDate` is year-only and the derivation is listed in `caveats`; `gender: "unknown"` when not stated |
+| Practitioner | the clinician named on the visit | — |
+| Encounter | the visit itself (ambulatory, `period.start`, `reasonCode` = chief complaint) | — |
+| Condition | reported symptoms (SNOMED/UMLS from the curated knowledge-graph map) and recorded history | `verificationStatus: provisional` (symptoms, noted "not a diagnosis") / `unconfirmed` (history, text-only code) |
+| Observation | laboratory values from `report_text` (quantity, unit text, reference range, interpretation) plus the screening risk band | the band is a `survey` Observation whose code says decision-support |
+| AllergyIntolerance | each reported drug allergy | `verificationStatus: unconfirmed`, `criticality: unable-to-assess` |
+| MedicationStatement | the documented current medications | `status: active` — recorded, not prescribed here |
+| DetectedIssue | the medication safety findings (allergy conflicts, condition/laboratory blocks, interactions) | `status: preliminary`, `severity` `high`/`moderate`, mitigation = the alternative route |
+| DocumentReference | the consultation note as a base64 `text/plain` attachment | `docStatus: preliminary` |
+
+Coding is deliberately conservative: symptoms carry the SNOMED/UMLS codes this
+repository already curates, everything else is `text` only (no guessed
+SNOMED/ICD-10/LOINC), and quantities carry unit *text* without a UCUM code. The
+DocumentReference holds the deterministic SOAP note (or the supplied final
+report) — never the transcript.
+
+**401** unauthenticated · **200** `{"error": "text, report_text or patient context is required"}` on an empty request
+
 ## Non-goals
 - No pagination or filtering; lists are capped (200 entries, newest first;
   learned vocabulary is capped at 500 entries per clinician).
 - No batch endpoints; one narrative / one WS frame per call.
 - No cross-account access of any kind; there are no admin endpoints.
+- No EHR write-back and no external terminology service: `/fhir-export` returns a
+  file the clinician chooses to hand to a system. Nothing is pushed anywhere and
+  no code is fetched from a terminology server.
 - The SPA at `:5173` is served by Vite, not by the API.

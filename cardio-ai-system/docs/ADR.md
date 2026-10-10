@@ -509,3 +509,84 @@ transcript leaves nothing stale, report values from the visit note reach the
 laboratory gates, and the socket frame carries the review (LLM tier stubbed) —
 bringing the backend suite to 94 tests. The page and the live loop serve the same
 rules; nothing stored; no new dependency.
+
+## ADR-019 · FHIR R4 export of the structured findings
+**Status:** Accepted (2026-10-11)
+
+Every other output here is a dead end: a PDF for a human, a SOAP note on screen,
+a saved visit only this app can read. The competitive assessment named the
+zero-cost fix — *"FHIR JSON export (Condition / Observation / DocumentReference
+resources) so the data is EHR-shaped and demonstrable without a hospital
+system."* A clinician who cannot hand the findings to their record system keeps
+typing them in by hand, and a demo cannot show what an interoperable hand-off
+would look like.
+
+Decision: ``backend/fhir_export.py`` turns one encounter's structured findings
+into a FHIR R4 ``Bundle`` (type ``collection``), exposed unchanged by the
+auth-gated, stateless ``POST /fhir-export`` and downloaded from the consultation
+screen as ``application/fhir+json``. The bundle carries the trio the assessment
+named plus every resource this codebase already holds facts for: **Patient**,
+**Practitioner**, **Encounter**, **Condition**, **Observation**,
+**AllergyIntolerance**, **MedicationStatement**, **DetectedIssue** and
+**DocumentReference**. It is built from the same modules the rest of the pipeline
+uses (``encounter_context``, ``screen_report_text``, ``detect_conditions``,
+``review_medications``, ``build_soap_note``), so the export cannot disagree with
+what the workspace shows.
+
+Rules that keep the export honest:
+
+- **Only curated codes are emitted.** The one terminological source in this
+  codebase is ``agents/knowledge_graph_agent`` (SNOMED + UMLS for the nine
+  symptom concepts), so reported symptoms carry those codings. History terms
+  and laboratory values are text-first: a ``CodeableConcept`` with ``text`` and
+  no ``coding``. Guessing a SNOMED/ICD-10 code for "hypertension" or a LOINC
+  code for potassium from memory would silently mis-code a problem list — the
+  plausible-but-wrong failure this project exists to avoid (ADR-016/017).
+- **Decision support stays visible.** Symptoms are ``provisional`` Conditions
+  noted as reported rather than diagnosed; history is ``unconfirmed``; the
+  screening band is a ``survey`` Observation whose code says decision-support;
+  the medication safety findings are ``preliminary`` ``DetectedIssue`` resources
+  with severity and mitigation. A reviewer can tell what was observed from what
+  was suggested without reading the code.
+- **Gaps are reported, not filled.** ``missing_information`` names what could not
+  be represented (no age, no allergy list, no laboratory text, text-only
+  conditions) and ``caveats`` names what was derived (a birth year from a
+  recorded age, accurate to about ±1 year). The UI shows both next to the
+  download instead of quietly shipping a confident-looking bundle.
+- **No invented units.** Quantities carry unit text only; UCUM codes are
+  deliberately absent rather than guessed, and the reference range travels as
+  ``referenceRange[].text`` exactly as the screener printed it.
+- **The raw recording stays out.** The ``DocumentReference`` carries the
+  deterministic consultation note (or the final report when one was generated),
+  never the transcript — so the existing de-identification, retention and
+  "note bodies are excluded from exports" rules are unchanged.
+- **An export, not an integration.** The file is rendered on the clinician's own
+  machine and downloaded by their browser; nothing is pushed to an EHR, no
+  terminology server is contacted, no new dependency is added (stdlib only), and
+  nothing is stored server-side. ``SECURITY.md``'s "new egress needs an ADR" rule
+  is satisfied by this record, which is why the caveat text is part of the API
+  response rather than the Bundle.
+
+Rejected alternatives: a live EHR/FHIR write-back (needs a hospital system, its
+API contract and a credentials story — the assessment already prices that as
+infrastructure, not code); ``Application/fhir+json`` POST to a public validation
+server for tests (network dependency in an offline-first project); authoring a
+full terminology table for history and laboratory codes (a licensing and
+correctness problem sold as a feature); putting the transcript in a
+``DocumentReference`` attachment (egress of the raw encounter for no clinical
+gain); emitting one ``Composition``-style document instead of a resource Bundle
+(less useful to an importing system, and it would have to re-encode the
+findings the agents already produce).
+
+Consequence: 24 new cases in ``backend/test_fhir_export.py`` — referential
+completeness of every ``Reference``, Patient demographics with the age-derived
+birth year and its caveat, one Condition per canonical problem with history
+text-only, SNOMED-coded provisional symptom Conditions, laboratory Observations
+with units/interpretation/reference range, ``unknown`` gender for unrecognised
+values, placeholders like "NKDA" never becoming an ``AllergyIntolerance``,
+active ``MedicationStatement``s, ``DetectedIssue`` severity and mitigation for
+allergy/renal/interaction findings, the DocumentReference round-trip, and that
+the exported document does not embed the transcript — bringing the backend suite
+to 118 tests. The frontend adds an "Export FHIR JSON" action and shows the
+resource counts, gaps and caveats next to it; ``docs/API_SPEC.md`` and
+``docs/DATA_FLOW.md`` describe the contract.

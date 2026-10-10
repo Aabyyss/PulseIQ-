@@ -41,6 +41,7 @@ backend/orchestrator.py      5-stage pipeline               (pipeline changes he
 backend/ai_assistant.py      3-tier LLM + local fallbacks   (LLM features here)
 backend/realtime_service.py  per-line WS fusion             (copilot behaviour here)
 backend/encounter_context.py shared medication context      (both review paths)
+backend/fhir_export.py       FHIR R4 bundle builder        (EHR-shaped export)
 agents/*.py                  18 rule-grounded modules       (one concern per file)
 models/                      heart_model.pkl + metadata     (never hand-edit)
 data/heart.csv               training data                  (training only)

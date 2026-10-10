@@ -46,7 +46,7 @@
 ```
 
 **No database exists.** Everything is stateless per request; persistence is the
-browser's localStorage (last 20 screenings). See §6.
+browser's localStorage (last 20 screenings). See §7.
 
 ## 2. Layers & responsibilities
 
@@ -61,6 +61,7 @@ browser's localStorage (last 20 screenings). See §6.
 | Reasoning | `backend/ai_assistant.py` | LLM strategy with mandatory local fallback; prompts, JSON parsing, provider probing | Ollama / Gemini / built-in rules |
 | Realtime | `backend/realtime_service.py` | Per-transcript-line fusion: translation, diagnosis, pain map, copilot plan, live medication screen | Orchestrator, ai_assistant, pain/region agents, encounter context |
 | Encounter context | `backend/encounter_context.py` | The facts a medication review is judged against (recorded visit details ∪ entities ∪ conditions ∪ allergies ∪ unit-aware labs ∪ narrative symptoms), assembled once for both the endpoint and the live loop | lab_report, medical_entities, pharmacology/nlp agents |
+| Export | `backend/fhir_export.py` | One encounter's findings as a FHIR R4 Bundle (Patient, Practitioner, Encounter, Condition, Observation, AllergyIntolerance, MedicationStatement, DetectedIssue, DocumentReference) for an EHR-shaped hand-off | encounter_context, lab_report, medical_entities, pharmacology/knowledge-graph agents |
 | Model artifact | `models/heart_model.pkl` | Trained RandomForest (300 trees) over 13 features | Loaded once at import by prediction agent |
 | Training | `backend/train_model.py` | Retrain from `data/heart.csv`, flip inverted target, assert directionality, write metadata | data/, models/ |
 

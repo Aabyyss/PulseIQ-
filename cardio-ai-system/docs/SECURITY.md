@@ -95,6 +95,26 @@ inside the local database and are excluded from exports and logs.
 4. **Images** (`/analyze-report-image`) are base64 in the request body,
    forwarded only to the active vision tier, never stored.
 
+## Exports (ADR-019)
+
+- The PDF report and the FHIR JSON bundle are rendered **on demand, on the
+  clinician's own machine**, and handed to the browser's own download. Nothing
+  is pushed to an EHR, a terminology server or any other service, neither export
+  is stored server-side, and no external code list is fetched.
+- The FHIR bundle carries the visit's structured findings (demographics,
+  problems, laboratory values, allergies, documented medications, medication
+  safety findings) plus the consultation note text — the deterministic SOAP note,
+  or the generated final report when one exists. It never contains the
+  transcript, and note bodies (`/notes`) stay excluded as before.
+- Anything the export inferred is marked preliminary
+  (`Condition.verificationStatus` provisional/unconfirmed,
+  `DetectedIssue.status: preliminary`, `DocumentReference.docStatus:
+  preliminary`) and carries the decision-support disclaimer, so an importing
+  system can tell an unconfirmed export from a filed record. Gaps and derived
+  values travel in the API response (not inside the Bundle).
+- This is the ADR that new egress requires: a future export that adds encounter
+  text, identifiers or network destinations needs its own record.
+
 ## Network & CORS stance (ADR-005)
 
 ```python
@@ -142,7 +162,8 @@ allow_origins=["*"], allow_credentials=False, allow_methods=["*"], allow_headers
 # Full regression (all suites):
 for t in test_orchestrator test_nlp_agent test_feature_mapper \
          test_prediction_agent test_full_pipeline \
-         test_explainability_agent test_auth; do
+         test_explainability_agent test_auth \
+         test_live_medication_review test_fhir_export; do
   .venv/Scripts/python.exe backend/$t.py || echo "FAIL: $t"
 done
 ```
