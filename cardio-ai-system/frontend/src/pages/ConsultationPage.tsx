@@ -19,6 +19,7 @@ import {
   Radio,
   Save,
   ScanLine,
+  Share2,
   ShieldAlert,
   Send,
   Sparkles,
@@ -41,6 +42,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { BodyPainDiagram } from "@/components/BodyPainDiagram";
 import { analyzeReportImage, diagnoseText, fetchAiInsights, fetchSoapNote, screenReportText, teachSuppression, type ScreenReportResult, type SoapNote } from "@/lib/api";
 import { finishConsultation } from "@/lib/consultationSession";
+import { exportFhirBundle, type FhirExportOutcome } from "@/lib/fhirExport";
 import {
   LANGUAGE_OPTIONS,
   useConsultationCapture,
@@ -301,6 +303,11 @@ export function ConsultationPage() {
   const [soapLoading, setSoapLoading] = useState(false);
   const [soapError, setSoapError] = useState("");
 
+  // FHIR export: the same findings as a Bundle for an EHR to import.
+  const [fhirExporting, setFhirExporting] = useState(false);
+  const [fhirError, setFhirError] = useState("");
+  const [fhirOutcome, setFhirOutcome] = useState<FhirExportOutcome | null>(null);
+
   async function handleScreenReport() {
     const source = reportText.trim() || screenText.trim();
     if (!source) {
@@ -340,6 +347,36 @@ export function ConsultationPage() {
       setSoapError("SOAP note needs the backend running on localhost:8000.");
     } finally {
       setSoapLoading(false);
+    }
+  }
+
+  async function handleFhirExport() {
+    setFhirError("");
+    setFhirOutcome(null);
+    setFhirExporting(true);
+    try {
+      setFhirOutcome(
+        await exportFhirBundle({
+          patientName: patientName.trim(),
+          patientAge: patientAge.trim(),
+          patientGender: patientGender.trim(),
+          visitDate,
+          doctorName: doctorName.trim(),
+          chiefComplaint: chiefComplaint.trim() || symptoms.join(", "),
+          narrative: lines.map((line) => line.text).join("\n"),
+          reportText,
+          riskLevel,
+          symptoms,
+          conditions,
+          allergies,
+          currentMedications,
+          pregnancy
+        })
+      );
+    } catch {
+      setFhirError("FHIR export needs the backend running on localhost:8000.");
+    } finally {
+      setFhirExporting(false);
     }
   }
 
@@ -796,6 +833,51 @@ export function ConsultationPage() {
           )}
           {soapLoading ? "Structuring note…" : "Generate SOAP note"}
         </Button>
+        <Button
+          type="button"
+          variant="outline"
+          className="w-full"
+          onClick={handleFhirExport}
+          disabled={fhirExporting}
+          title="Download the structured findings as a FHIR R4 Bundle (Patient, Encounter, Condition, Observation, AllergyIntolerance, MedicationStatement, DetectedIssue, DocumentReference)"
+        >
+          {fhirExporting ? (
+            <LoaderCircle className="h-4 w-4 animate-spin" />
+          ) : (
+            <Share2 className="h-4 w-4" strokeWidth={1.9} />
+          )}
+          {fhirExporting ? "Building FHIR bundle…" : "Export FHIR JSON"}
+        </Button>
+        {fhirError ? (
+          <Alert variant="destructive">
+            <AlertCircle />
+            <AlertTitle>FHIR export</AlertTitle>
+            <AlertDescription>{fhirError}</AlertDescription>
+          </Alert>
+        ) : null}
+        {fhirOutcome ? (
+          <div className="animate-fade-up space-y-1.5 rounded-lg border border-line bg-inset p-3">
+            <p className="text-xs font-medium text-fg">
+              {fhirOutcome.fileName} downloaded —{" "}
+              {Object.entries(fhirOutcome.counts)
+                .map(([resourceType, count]) => `${count} ${resourceType}`)
+                .join(", ")}
+            </p>
+            {fhirOutcome.missing.map((gap) => (
+              <p key={gap} className="text-2xs leading-relaxed text-faint">
+                Not represented: {gap}
+              </p>
+            ))}
+            {fhirOutcome.caveats.map((caveat) => (
+              <p key={caveat} className="text-2xs leading-relaxed text-faint">
+                Caveat: {caveat}
+              </p>
+            ))}
+            <p className="border-t border-line pt-1.5 text-2xs italic leading-relaxed text-faint">
+              {fhirOutcome.disclaimer}
+            </p>
+          </div>
+        ) : null}
         {soapError ? (
           <Alert variant="destructive">
             <AlertCircle />
