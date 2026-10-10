@@ -11,7 +11,45 @@ import {
 } from "@/lib/bodyPain";
 import { getConsultationSocketCandidates } from "@/lib/realtime";
 import { fetchLearnedVocabulary } from "@/lib/api";
-import type { RealtimeConsultationEvent } from "@/lib/types";
+import type { MedicationReview, RealtimeConsultationEvent } from "@/lib/types";
+
+/**
+ * The visit details that make the live medication safety screen specific to
+ * this patient. Read fresh on every line, so filling a field mid-consultation
+ * changes the next update instead of waiting for a reconnect.
+ */
+export type LiveVisitContext = {
+  age?: string;
+  sex?: string;
+  conditions?: string;
+  allergies?: string;
+  currentMedications?: string;
+  pregnancy?: "" | "yes" | "no";
+};
+
+function splitList(value?: string): string[] {
+  return (value ?? "")
+    .split(/[,;\n]/)
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+}
+
+/**
+ * Wire shape of that context. Empty fields are omitted rather than sent as
+ * "none": a gap the review can report is worth more than a false negative,
+ * and an unset pregnancy select means "not recorded", not "not pregnant".
+ */
+function buildLivePatientContext(visit?: LiveVisitContext) {
+  if (!visit) return undefined;
+  return {
+    age: (visit.age ?? "").trim() || undefined,
+    sex: (visit.sex ?? "").trim() || undefined,
+    conditions: splitList(visit.conditions),
+    allergies: splitList(visit.allergies),
+    current_medications: splitList(visit.currentMedications),
+    pregnancy: visit.pregnancy === "yes" ? true : visit.pregnancy === "no" ? false : undefined
+  };
+}
 
 export type TranscriptLine = {
   id: string;
@@ -141,7 +179,10 @@ function detectSpeaker(text: string, fallback: "doctor" | "patient"): "doctor" |
  * waiting for the LLM. The full copilot plan arrives separately as an
  * analysis event once the local model finishes.
  */
-export function useConsultationCapture() {
+export function useConsultationCapture(getVisitContext?: () => LiveVisitContext) {
+  const visitContextRef = useRef(getVisitContext);
+  visitContextRef.current = getVisitContext;
+
   const [speaker, setSpeakerState] = useState<"doctor" | "patient">("patient");
   const [autoSpeaker, setAutoSpeakerState] = useState(true);
   const [language, setLanguageState] = useState("en-US");
@@ -188,6 +229,9 @@ export function useConsultationCapture() {
     durations: string[];
     risk_factors: string[];
   }>({ medications: [], durations: [], risk_factors: [] });
+  // Live medication safety screen — recomputed server-side per line from the
+  // encounter so far plus this visit's recorded details.
+  const [medicationReview, setMedicationReview] = useState<MedicationReview | null>(null);
 
   const wsRef = useRef<WebSocket | null>(null);
   const recognitionRef = useRef<SpeechRecognition | null>(null);
@@ -307,6 +351,7 @@ export function useConsultationCapture() {
       setSuggestionSources(payload.ai_copilot?.suggestion_sources ?? {});
       setPlanConfidence(payload.ai_copilot?.confidence ?? null);
       if (payload.medical_entities) setMedicalEntities(payload.medical_entities);
+      setMedicationReview(payload.medication_review ?? null);
       return seq;
     };
 
@@ -400,6 +445,11 @@ export function useConsultationCapture() {
       setLastHeard(trimmed);
       setError("");
 
+      // What was said before this line, as the clinician sees it (already
+      // translated line by line). The server appends its own translation of
+      // this line, so the medication screen reads the whole encounter — and a
+      // cleared transcript sends nothing, which is exactly what it means.
+      const priorTranscript = linesRef.current.map((line) => line.text).join("\n");
       // Attribute the line: auto-detected from the wording, or the manual
       // toggle when auto-detection is switched off.
       const lineSpeaker = autoSpeakerRef.current
@@ -425,7 +475,9 @@ export function useConsultationCapture() {
           speaker: lineSpeaker,
           text: trimmed,
           report_text: reportTextRef.current,
-          language_code: languageRef.current
+          language_code: languageRef.current,
+          transcript: priorTranscript,
+          patient: buildLivePatientContext(visitContextRef.current?.())
         })
       );
     },
@@ -459,6 +511,7 @@ export function useConsultationCapture() {
     setSuggestionSources({});
     setPlanConfidence(null);
     setMedicalEntities({ medications: [], durations: [], risk_factors: [] });
+    setMedicationReview(null);
   }, []);
 
   // ------------------------------------------------------------------
@@ -772,6 +825,7 @@ export function useConsultationCapture() {
     suggestionSources,
     planConfidence,
     medicalEntities,
+    medicationReview,
     // self-learning
     learnedCount,
     learnedGeneration,
