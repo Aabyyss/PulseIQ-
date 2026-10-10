@@ -201,6 +201,22 @@ export type MedicationReview = {
   error?: string;
 };
 
+// FHIR R4 export (POST /fhir-export) — the structured findings as an
+// EHR-shaped Bundle (ADR-019).
+export type FhirExportResult = {
+  /** A FHIR R4 Bundle of Patient / Encounter / Condition / Observation … resources. */
+  bundle: Record<string, unknown>;
+  fhir_version: string;
+  resource_counts: Record<string, number>;
+  /** What the export could not represent (no age, no allergy list, …). */
+  missing_information: string[];
+  /** What the export derived rather than observed (e.g. birth year from age). */
+  caveats: string[];
+  medication_summary?: string;
+  disclaimer: string;
+  error?: string;
+};
+
 export type ReportImageAnalysis = {
   summary: string;
   key_findings: string[];
