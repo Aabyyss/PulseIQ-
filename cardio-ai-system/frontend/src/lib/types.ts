@@ -47,6 +47,12 @@ export type RealtimeConsultationEvent = {
     durations: string[];
     risk_factors: string[];
   };
+  /**
+   * Live medication safety screen (ADR-018): rebuilt from the visit details
+   * and every line spoken so far, so options, blocks and interactions move
+   * with the consultation instead of being recomputed at the end.
+   */
+  medication_review?: MedicationReview;
   ai_copilot?: {
     doctor_questions: string[];
     recommended_tests: string[];
