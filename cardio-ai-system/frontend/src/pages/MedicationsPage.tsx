@@ -12,6 +12,7 @@ import {
 import { PageHeader } from "@/components/app/page-header";
 import { EmptyState } from "@/components/app/empty-state";
 import { RiskPill } from "@/components/app/risk-pill";
+import { RiskScoresDetail } from "@/components/app/risk-scores";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -284,6 +285,21 @@ export function MedicationsPage() {
               </p>
             </AlertDescription>
           </Alert>
+
+          {result.risk_scores ? (
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm">Risk scores</CardTitle>
+                <CardDescription className="mt-1">
+                  Deterministic scores graded from the captured encounter — the urgency above comes from these when
+                  they are complete, and each point is traceable to its input.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <RiskScoresDetail scores={result.risk_scores} />
+              </CardContent>
+            </Card>
+          ) : null}
 
           {result.indications.length ? (
             <div className="flex flex-wrap gap-1.5">
