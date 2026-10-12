@@ -48,9 +48,22 @@ export type RealtimeConsultationEvent = {
     risk_factors: string[];
   };
   /**
+   * 1-based line number on this connection. Both the `line_ack` and the
+   * `analysis` frame for a line carry it, so a client can tell a copilot plan
+   * that landed late from a current one.
+   */
+  line_seq?: number;
+  /**
+   * Deterministic risk scores for this line (ADR-020): HEART, GRACE and
+   * CHA₂DS₂-VASc, graded from the visit details, the transcript and the report
+   * text — the same block the medication review's urgency comes from.
+   */
+  risk_scores?: RiskScores;
+  /**
    * Live medication safety screen (ADR-018): rebuilt from the visit details
    * and every line spoken so far, so options, blocks and interactions move
-   * with the consultation instead of being recomputed at the end.
+   * with the consultation instead of being recomputed at the end. It rides the
+   * instant `line_ack` and is refreshed by the `analysis` frame.
    */
   medication_review?: MedicationReview;
   ai_copilot?: {
@@ -172,8 +185,90 @@ export type MedicationInteractionAlert = {
   action: string;
 };
 
+// Deterministic risk scores (ADR-020). A score with a missing input reports
+// `score: null` and names the gap instead of scoring the patient as low risk.
+export type RiskScoreComponent = { points: number; detail: string };
+
+export type HeartScore = {
+  name: "HEART";
+  score: number | null;
+  known_points: number;
+  max_score: number;
+  complete: boolean;
+  band: "low" | "intermediate" | "high" | null;
+  components: Record<string, RiskScoreComponent>;
+  mace_risk_6_weeks: string | null;
+  missing: string[];
+  source: string;
+};
+
+export type GraceScore = {
+  name: "GRACE";
+  score: number | null;
+  known_points: number;
+  max_score: number;
+  complete: boolean;
+  band: "low" | "intermediate" | "high" | null;
+  in_hospital_mortality: { percent: number | null; interpolated: boolean; anchor: string } | null;
+  components: Record<string, RiskScoreComponent>;
+  missing: string[];
+  source: string;
+  note: string;
+};
+
+export type Cha2ds2VascScore = {
+  name: "CHA2DS2-VASc";
+  score: number | null;
+  known_points: number;
+  max_score: number;
+  complete: boolean;
+  annual_stroke_risk_pct: number | null;
+  anticoagulation_tier: "none" | "consider" | "recommended" | null;
+  components: Record<string, RiskScoreComponent>;
+  missing: string[];
+  source: string;
+  note: string;
+  applies_to?: string;
+};
+
+export type RiskScores = {
+  heart: HeartScore;
+  grace: GraceScore;
+  cha2ds2_vasc: Cha2ds2VascScore;
+  inputs: {
+    age: number | null;
+    sex: string | null;
+    condition_tags: string[];
+    heart_risk_factors: string[];
+    established_ascvd: string[];
+    vitals: {
+      heart_rate: number | null;
+      systolic_bp: number | null;
+      diastolic_bp: number | null;
+      killip: string | null;
+    };
+    creatinine_mg_dl: number | null;
+    ecg: "normal" | "repolarisation" | "st_deviation" | null;
+    ecg_detail: string;
+    history_detail: string;
+    history_features: string[];
+    cardiac_arrest: boolean;
+    elevated_markers: boolean | null;
+    atrial_fibrillation: boolean;
+  };
+  missing: string[];
+};
+
 export type MedicationReview = {
-  pathway: { urgency: "emergency" | "urgent" | "routine"; statement: string; rationale: string[] };
+  pathway: {
+    urgency: "emergency" | "urgent" | "routine";
+    statement: string;
+    rationale: string[];
+    /** Which instrument decided the urgency: a score, the band or the presentation. */
+    drivers?: string[];
+  };
+  /** The deterministic scores this review's urgency was graded from. */
+  risk_scores?: RiskScores | null;
   indications: { name: string; triggered_by: string }[];
   patient_profile: {
     age: number | null;
