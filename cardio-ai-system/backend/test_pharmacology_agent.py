@@ -115,6 +115,24 @@ def test_allergy_phrases_are_read_from_the_narrative():
     assert extract_allergy_mentions("No known drug allergies") == []
 
 
+def test_the_allergy_clause_ends_where_the_next_statement_starts():
+    """A drug named after the allergy must not itself become an allergy."""
+    mentions = extract_allergy_mentions("allergic to aspirin and I take warfarin 5 mg daily")
+    joined = " ".join(mentions).lower()
+    assert "aspirin" in joined
+    assert "warfarin" not in joined
+
+    spoken = extract_allergy_mentions(
+        "she is allergic to penicillin but takes amoxicillin for her chest"
+    )
+    assert [term.lower() for term in spoken] == ["penicillin"]
+
+    # …while a genuine substance list still yields both substances.
+    both = extract_allergy_mentions("allergic to aspirin and sulfa drugs")
+    assert "aspirin" in " ".join(both).lower()
+    assert "sulfa" in " ".join(both).lower()
+
+
 def test_sulfonamide_history_flags_furosemide_without_blocking_it():
     review = review_medications(
         symptoms=["leg swelling", "shortness of breath"],
