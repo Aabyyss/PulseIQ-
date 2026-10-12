@@ -70,11 +70,17 @@ the signed-in user's history before the response is returned.
 
 **Request**
 ```json
-{ "text": "chest pain radiating to left arm since morning" }
+{
+  "text": "chest pain radiating to left arm since morning",
+  "report_text": "BP 90/60, HR 110, Killip II, creatinine 1.4 mg/dL, troponin I: 0.06 ng/mL, ECG: ST depression",
+  "age": "68", "sex": "Male", "conditions": ["hypertension"]
+}
 ```
 | field | type | rules |
 |---|---|---|
 | text | string | required, non-blank |
+| report_text | string | optional — lab values and ECG statements, and the vitals the scores need |
+| age / sex / conditions / allergies / current_medications / labs / vitals | optional | the patient context the scores are graded from |
 
 **200**
 ```json
@@ -85,9 +91,13 @@ the signed-in user's history before the response is returned.
   "prediction": 1,
   "probability": 0.83,
   "risk_level": "High|Medium|Low",
+  "risk_scores": { "heart": { … }, "grace": { … }, "cha2ds2_vasc": { … }, "inputs": { … }, "missing": ["…"] },
   "learned_generation": 17
 }
 ```
+`risk_scores` (ADR-020) is the deterministic block — HEART, GRACE,
+CHA₂DS₂-VASc — graded from the same encounter, reported *beside* the model band
+rather than instead of it. See “Deterministic risk scores” below.
 Extraction unions the built-in dictionary with the caller's **learned
 vocabulary** (taught phrases, see `/learning/teach` below), so a phrase the
 clinician taught fires here exactly as it does in the live loop.
@@ -197,16 +207,44 @@ the consultation screen; blank or omitted fields are **reported as gaps**
 instead of being treated as "none", and an absent `pregnancy` means *not
 recorded*, not *not pregnant*.
 
+Every line is numbered on its connection (`line_seq`, 1-based) and both frames
+for that line carry the number. The plan for a line can finish after a later
+line has already been screened — a `line_seq` lets a client ignore the older
+one instead of rewinding the safety screen. Frames from a single connection may
+interleave for the same reason: line 5's `line_ack` can precede line 4's
+`analysis` frame.
+
 **Server → client, frame 1 — `line_ack` (instant, no LLM):**
 ```json
 {
-  "kind": "line_ack", "speaker": "patient",
+  "kind": "line_ack", "line_seq": 5, "speaker": "patient",
   "transcript": "as spoken", "original_transcript": "as spoken",
   "symptoms": ["extracted concepts"],
+  "medication_review": { …the `medications` block from POST /medication-review… },
   "matched_phrases": { "chest pain": "seene mein dard" },
   "learned_generation": 17, "learned_count": 3, "learned_hit": false
 }
 ```
+`medication_review` rides this frame too (ADR-018), because the safety screen
+needs no model at all: it is rebuilt here from the visit details, the whole
+transcript and this line's extracted symptoms, so a blocking allergy appears on
+the line that reported it instead of after the copilot plan — measured at tens
+of milliseconds, against tens of seconds for the plan. The `analysis` frame then
+sends the same review refreshed with the diagnosis band and the English
+translation; the two are expected to agree on what they block, and the early one
+already escalates emergency presentations on the presentation itself. One honest
+difference: this first pass patterns the line **as spoken**
+(allergy/condition/medication vocabulary is English-keyed), so a non-English line
+can gain findings when the translation lands.
+
+The plan never blocks the next line: each line is queued to a per-connection
+worker, so the receiving loop is free to ack the line after it while the model
+is still busy with the one before. Without that, a line spoken during a plan
+waited for that plan, and the screen that exists to be current was the thing
+that fell behind. That queue is bounded — a client sending lines faster than the
+model can plan loses the oldest pending plans rather than making the server hold
+a growing backlog of model calls. Every line is still screened: the ack is
+synchronous, so `medication_review` arrives whether or not its plan survives.
 Lets the UI show concepts, risk hints and the body map immediately; the
 dictionary matches English, Urdu script and Roman Urdu directly, plus the
 signed-in clinician's **learned vocabulary** (ADR-015). `matched_phrases`
@@ -220,7 +258,7 @@ used" badge and the × not-a-symptom correction affordance).
 **Server → client, frame 2 — `analysis` (after the copilot pipeline):**
 ```json
 {
-  "kind": "analysis",
+  "kind": "analysis", "line_seq": 5,
   "speaker": "patient",
   "transcript": "english normalised text",
   "original_transcript": "as spoken",
@@ -234,6 +272,7 @@ used" badge and the × not-a-symptom correction affordance).
   "patient_recommendations": ["string"],
   "medical_entities": { "medications": [{ "name", "dose_mg", "matched" }], "durations": [], "risk_factors": [] },
   "medication_review": { …the `medications` block from POST /medication-review… },
+  "risk_scores": { …the deterministic block, see “Deterministic risk scores”… },
   "ai_copilot": { "doctor_questions": [], "recommended_tests": [], "next_steps": [], "diagnostic_impression": [], "urgency": "low|moderate|high", "safety_note": "…",
     "suggestion_sources": { "<exact suggestion text>": "ACC/AHA chest pain guideline — …" },
     "confidence": { "confidence": "low|moderate|high", "insufficient_information": "true|false", "reason": "…" } }
@@ -257,7 +296,9 @@ rebuilt for this line — options, allergy/condition/laboratory blocks,
 interaction alerts, `missing_information` and the urgency band — from the
 recorded visit details above plus every line spoken so far. It is recomputed
 from the encounter on each line instead of being accumulated in connection
-state, so a cleared transcript clears the screen; nothing is stored.
+state, so a cleared transcript clears the screen; nothing is stored. This frame
+carries the review **refreshed** with the diagnosis band and the translation;
+the instant `line_ack` above already carried the first pass.
 
 ---
 
@@ -495,7 +536,9 @@ is stored.
   "conditions": ["hypertension", "prior MI"],
   "allergies": ["aspirin"],
   "current_medications": ["warfarin", "metoprolol 25 mg"],
-  "labs": { "platelets": 90 }
+  "labs": { "platelets": 90 },
+  "vitals": { "heart_rate": 110, "systolic_bp": 90, "killip": "II" },
+  "cardiac_arrest": false
 }
 ```
 | field | notes |
@@ -504,6 +547,8 @@ is stored.
 | conditions | free text or canonical tags — history phrasing ("stent 2023", "previous MI", "asthma") is mapped to tags |
 | current_medications | names or common brand names (Disprin, Concor, Crestor, Xarelto…), used for interaction screening and "already documented" detection |
 | labs | optional numeric additions/overrides (e.g. platelets, which the report parser does not cover) merged with values parsed from `report_text` |
+| vitals | optional admission vitals for GRACE — `heart_rate`, `systolic_bp`, `killip` (`"I".."IV"`) — otherwise read from the text ("BP 90/60, HR 110, Killip II") |
+| cardiac_arrest | optional boolean for GRACE's arrest-at-admission item (otherwise read from the text) |
 
 **200**
 ```json
@@ -511,7 +556,7 @@ is stored.
   "symptoms": ["sweating", "chest pain"],
   "diagnosis": { "…the /diagnose payload with risk_level…" },
   "medications": {
-    "pathway": { "urgency": "emergency|urgent|routine", "statement": "…", "rationale": ["…"] },
+    "pathway": { "urgency": "emergency|urgent|routine", "statement": "…", "rationale": ["…"], "drivers": ["HEART 8 (high, 6-week MACE 50-65%)", "GRACE 207 (>140, high) — in-hospital mortality 21.5%"] },
     "indications": [ { "name": "suspected_acs", "triggered_by": "chest pain reported (suspected acute coronary syndrome)" } ],
     "patient_profile": { "age": 68, "sex": "male", "conditions": ["prior_mi"], "condition_text": [], "allergies": ["aspirin"], "current_medications": [], "current_medication_classes": [], "labs_considered": { "renal_severe": 28 } },
     "recommendations": [ { "drug": "Aspirin", "drug_class": "antiplatelet", "status": "recommended|alternative|already-documented", "priority": 1, "indications": ["suspected_acs"], "triggered_by": ["chest pain reported (…)"], "dose_note": "…", "monitoring": ["…"], "review_flags": ["…"], "evidence": "ACC/AHA chest pain guideline — …", "action": "…" } ],
@@ -520,6 +565,7 @@ is stored.
     "interaction_alerts": [ { "pair": ["p2y12", "anticoagulant"], "drugs": ["clopidogrel", "anticoagulant"], "severity": "major|moderate", "note": "…", "action": "…" } ],
     "monitoring_plan": ["Potassium and creatinine at 1–2 weeks"],
     "missing_information": ["No drug allergies recorded — ask before prescribing (this blocks allergy screening)."],
+    "risk_scores": { "heart": { … }, "grace": { … }, "cha2ds2_vasc": { … }, "inputs": { … }, "missing": ["…"] },
     "summary": "6 option(s) offered, 7 blocked or flagged for review, 2 interaction(s) flagged — based on 6 captured indication(s).",
     "disclaimer": "Decision support only — these are options for a qualified clinician to review…"
   },
@@ -604,6 +650,57 @@ DocumentReference holds the deterministic SOAP note (or the supplied final
 report) — never the transcript.
 
 **401** unauthenticated · **200** `{"error": "text, report_text or patient context is required"}` on an empty request
+
+## Deterministic risk scores (ADR-020)
+HEART (chest pain), GRACE (in-hospital ACS mortality, classic point score) and
+CHA₂DS₂-VASc (stroke risk in atrial fibrillation) are computed deterministically
+and reported by `/diagnose`, `/medication-review` and every live `analysis`
+frame, and they are what the medication pathway's urgency is graded from.
+
+```json
+{
+  "heart": {
+    "name": "HEART", "score": 8, "known_points": 8, "max_score": 10, "complete": true,
+    "band": "low|intermediate|high", "mace_risk_6_weeks": "50-65%",
+    "components": { "history": { "points": 2, "detail": "chest pain with radiation, sweating" }, "ecg": { "points": 2, "detail": "ST deviation documented" } },
+    "missing": [], "source": "HEART score (Backus et al. 2008) — …"
+  },
+  "grace": {
+    "name": "GRACE", "score": 207, "known_points": 207, "max_score": 372, "complete": true,
+    "band": "low|intermediate|high",
+    "in_hospital_mortality": { "percent": 21.5, "interpolated": true, "anchor": "200 -> 18%, 210 -> 23%" },
+    "components": { "age": { "points": 58, "detail": "68 years" }, "killip": { "points": 20, "detail": "Killip class II" } },
+    "missing": [], "source": "GRACE in-hospital mortality, classic point score (Granger et al., 2003) — …", "note": "Mortality is interpolated between printed rows of the published GRACE nomogram table."
+  },
+  "cha2ds2_vasc": {
+    "name": "CHA2DS2-VASc", "score": 5, "known_points": 5, "max_score": 9, "complete": true,
+    "annual_stroke_risk_pct": 6.7, "anticoagulation_tier": "none|consider|recommended",
+    "components": { "age": { "points": 2, "detail": "80 years (>=75)" }, "sex": { "points": 1, "detail": "female" } },
+    "missing": [], "applies_to": "atrial fibrillation", "source": "CHA₂DS₂-VASc (Lip et al. 2010) — …", "note": "…"
+  },
+  "inputs": { "age": 68, "sex": "male", "condition_tags": ["hypertension"], "heart_risk_factors": ["hypertension"], "established_ascvd": [], "troponin": { "key": "troponin_i", "value": 0.06, "unit": "ng/ml", "ceiling": 0.04, "ratio": 1.5 }, "vitals": { "heart_rate": 110, "systolic_bp": 90, "diastolic_bp": 60, "killip": "II" }, "creatinine_mg_dl": 1.4, "ecg": "st_deviation", "ecg_detail": "ST deviation documented", "history_detail": "chest pain with radiation, sweating", "history_features": ["radiation", "sweating"], "cardiac_arrest": false, "elevated_markers": true, "atrial_fibrillation": false },
+  "missing": ["GRACE: Killip class", "CHA2DS2-VASc: sex"]
+}
+```
+
+Rules a client must respect:
+
+- **`score: null` means incomplete, never zero.** `complete: false` names the
+gaps in `missing` (and the union in the block's own `missing`); the points that
+*could* be computed stay in `known_points`. Show the gaps; do not display a
+number the score refused to produce.
+- **The scores escalate, and they never soften a presentation.** A high HEART or
+GRACE band makes the encounter an emergency (`pathway.drivers` names it), but
+chest pain keeps the ACS pathway even when the band is lower — the rationale says
+so explicitly.
+- **`inputs` is the audit trail.** Every derived reading (the History features,
+the ECG category, the troponin ratio and its assay ceiling, the parsed vitals,
+the creatinine unit conversion) is returned with the score that used it.
+- **CHA₂DS₂-VASc is an AF score.** `applies_to` says whether atrial fibrillation
+was captured; the medication layer only consumes it then, and it grades the
+reason behind the anticoagulation option rather than ordering anything.
+- **GRACE mortality is a nomogram reading.** `interpolated: true` means the value
+sits between two printed rows of the published table, with both anchors given.
 
 ## Non-goals
 - No pagination or filtering; lists are capped (200 entries, newest first;
