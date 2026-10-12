@@ -316,10 +316,15 @@ def _extract_numeric(analyte: dict[str, Any], text: str, lowered: str) -> list[d
             unit_match = re.search(r"([a-zA-Z/%\.]+)", window[num_match.end():num_match.end() + 12])
             unit_raw = unit_match.group(1) if unit_match else None
             unit = _normalise_unit(unit_raw)
-            separator = re.search(r"[:=]", after)
+            # A printed line marks the value with a colon or equals; a spoken
+            # one says "his eGFR is 26" or "a creatinine of 1.2", where the
+            # number trails the sentence and has no unit token to recognise it
+            # by. Both are explicit value markers; "start aspirin 5 mg daily"
+            # has neither, which is the dose context this guard exists for.
+            separator = re.search(r"[:=]|\b(?:is|are|was|were|of|at)\b", after, re.I)
             has_known_unit = unit in analyte["ranges"]
             if not has_known_unit and not separator and not is_floor:
-                # No colon and no recognised unit → likely not a lab line.
+                # No colon, copula or recognised unit → likely not a lab line.
                 if unit_raw is None:
                     continue
             ranges: dict[str, Band] = analyte["ranges"]
@@ -456,6 +461,105 @@ def screen_report_text(text: str) -> dict[str, Any]:
         "summary": {"critical": critical, "abnormal": abnormal, "normal": normal, "parsed": parsed},
         "message": message,
     }
+
+
+# ---------------------------------------------------------------------------
+# Measures the risk scores need (agents/risk_scores_agent)
+# ---------------------------------------------------------------------------
+
+# Assay ceilings in the unit the score compares against (ng/mL), taken from the
+# same analyte table the screening flags use — the ceiling must not drift from
+# the reference range the clinician sees.
+_TROPONIN_CEILING = {"troponin_i": 0.04, "troponin_t": 0.01}
+
+_HEART_RATE_RE = re.compile(
+    r"\b(?:hr|heart\s+rate|pulse(?:\s+rate)?)\s*(?:is|of|was|:|=)?\s*(\d{2,3})\b",
+    re.I,
+)
+_BP_RE = re.compile(
+    r"\b(?:bp|blood\s+pressure|systolic)\s*(?:is|of|was|:|=)?\s*(\d{2,3})\s*(?:/|over)\s*(\d{2,3})\b",
+    re.I,
+)
+_KILLIP_RE = re.compile(
+    r"\bkillip(?:\s+class)?\s*(?:is|:|=)?\s*(iv|iii|ii|i|4|3|2|1)\b",
+    re.I,
+)
+_KILLIP_ROMAN = {"1": "I", "2": "II", "3": "III", "4": "IV"}
+
+
+def troponin_ratio(text: str) -> dict[str, Any] | None:
+    """Troponin as a multiple of its assay ceiling, for the HEART score's item.
+
+    HEART scores the troponin item against *that assay's* discriminative
+    threshold, so this returns the ratio (value ÷ ceiling) rather than a raw
+    concentration, converting ng/L to ng/mL first. A troponin reported only as
+    "positive" has no ratio to give: the caller is told the number is missing
+    instead of being handed a made-up one.
+    """
+    result = screen_report_text(text)
+    for value in result.get("values", []):
+        key = str(value.get("key", ""))
+        ceiling = _TROPONIN_CEILING.get(key)
+        if ceiling is None:
+            continue
+        try:
+            number = float(value["value"])
+        except (TypeError, ValueError, KeyError):
+            continue
+        unit = str(value.get("unit") or "").lower()
+        if unit == "ng/l":
+            number = number / 1000.0
+            unit = "ng/ml"
+        if unit != "ng/ml":
+            continue
+        return {
+            "key": key,
+            "value": number,
+            "unit": unit,
+            "ceiling": ceiling,
+            "ratio": round(number / ceiling, 3),
+        }
+    for flag in result.get("text_flags", []):
+        text = f"{flag.get('name', '')} {flag.get('explanation', '')}".lower()
+        if "troponin" in text and "positive" in text:
+            # A positive qualitative troponin carries no number to score.
+            return {"key": "troponin_positive", "value": None, "unit": None, "ceiling": None, "ratio": None}
+    return None
+
+
+def vitals_from_text(text: str) -> dict[str, Any]:
+    """Heart rate, blood pressure and Killip class as stated in the text.
+
+    The risk scores need admission vitals; nothing in this system captured them
+    before, so they are read from the same clinical text the labs come from
+    ("BP 90/60, HR 110") and can be overridden by explicit values. Values outside
+    a physiologically possible range are ignored rather than scored, and the
+    diastolic must be below the systolic for a blood pressure to count.
+    """
+    raw = str(text or "")
+    vitals: dict[str, Any] = {
+        "heart_rate": None, "systolic_bp": None, "diastolic_bp": None, "killip": None,
+    }
+
+    match = _HEART_RATE_RE.search(raw)
+    if match:
+        value = int(match.group(1))
+        if 20 <= value <= 300:
+            vitals["heart_rate"] = value
+
+    match = _BP_RE.search(raw)
+    if match:
+        systolic, diastolic = int(match.group(1)), int(match.group(2))
+        if 40 <= systolic <= 300 and 20 <= diastolic <= 200 and diastolic < systolic:
+            vitals["systolic_bp"] = systolic
+            vitals["diastolic_bp"] = diastolic
+
+    match = _KILLIP_RE.search(raw)
+    if match:
+        token = match.group(1).upper()
+        vitals["killip"] = _KILLIP_ROMAN.get(token, token)
+
+    return vitals
 
 
 def labs_for_review(text: str, extra: dict[str, Any] | None = None) -> dict[str, float]:
