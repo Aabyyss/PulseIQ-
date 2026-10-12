@@ -25,9 +25,17 @@ Narrative text  "chest pain going to my left arm since morning, sweating"
    ▼
 [4] orchestrator.risk_from_probability
    │   >0.75 → High · >0.45 → Medium · else Low
+   │
+   └─ risk_score_context.build_risk_scores (optional report_text/patient)
+         ├─ detect_conditions          (recorded history ∪ the wording)
+         ├─ troponin_ratio             (lab_report: value ÷ its assay ceiling)
+         ├─ vitals_from_text           (lab_report: HR, BP, Killip)
+         └─ ECG category + chest-pain typicality
+         → {heart, grace, cha2ds2_vasc, inputs, missing}
    ▼
 [5] JSON response
-   { text, symptoms[], features{}, prediction, probability, risk_level }
+   { text, symptoms[], features{}, prediction, probability, risk_level,
+     risk_scores{heart, grace, cha2ds2_vasc, inputs, missing} }
    + auth_store.add_screening(user_id, …) → persisted to the caller's
      owner-scoped history before the response is returned
 ```
@@ -83,17 +91,37 @@ Per inbound line, in order:
 ```
 {speaker, text, report_text, language_code, transcript, patient{}}
    │
+   ├─ line_ack  (instant, no model, carries line_seq): extract_symptoms_for_user
+   │     + medication_review_for_live_line  (the §5 rules, over the whole
+   │       encounter as spoken — the screen lands with the line, ADR-018)
+   │
+   └─ queued, not awaited (one worker per connection, in order)
    ├─ translate_to_english        (LLM if non-en, else passthrough)
    ├─ run_diagnosis_from_text     (same 5-stage pipeline as §1)
    ├─ map_symptoms_to_pain_points (pain_mapper_agent)
    ├─ cardiac_regions             (heart_region_agent)
    ├─ generate_ai_copilot_plan    (questions, tests, next steps, urgency)
-   └─ medication_review_for_encounter  (the §5 rules, over the whole encounter)
+   └─ medication_review_for_encounter  (same §5 rules again, now with the
+                                        diagnosis band and the translation)
    ▼
 {speaker, transcript, original_transcript, language_code, report_text,
  symptoms, diagnosis, pain_points, cardiac_regions,
  doctor_next_questions, patient_recommendations, ai_copilot, medication_review}
 ```
+
+The instant frame exists because the copilot plan calls the local model: on CPU
+the first analysed line of a visit measured ~22 s, and a medication screen that
+waits that long is not a live screen. Both stages compute the review the same
+way from the same context rules; only the ack stage's wording is earlier.
+
+For the same reason the plan runs on a per-connection worker rather than inline:
+awaiting it in the receiving loop meant the next line could not even be read
+until the model finished, so its instant ack — and with it the safety screen —
+arrived when the model was done. Plans are still produced in order, so frames
+from one connection can interleave (line 5's ack before line 4's plan) and each
+carries the `line_seq` it belongs to; the UI applies a screen only if it is not
+older than the one on show, and lets nothing in flight repopulate a cleared
+transcript.
 
 The connection is one loop per session; any single line that raises still
 returns an `{"error": …}` frame so the UI keeps running.
@@ -119,12 +147,24 @@ screen (ADR-018).
    │     ├─ labs_for_review → labs{}    (lab_report: unit-aware eGFR, K+, Hb, LDL, LVEF, troponin)
    │     └─ extract_symptoms_from_text  (nlp_symptom_agent: the narrative's vocabulary)
    ├─ run_diagnosis_from_text           (same 5-stage pipeline as §1 → risk band)
+   ├─ build_risk_scores                 (risk_score_context: HEART, GRACE, CHA₂DS₂-VASc)
    └─ review_medications                (pharmacology_agent: options, blocks, interactions)
+         └─ _pathway                   (urgency from the scores, naming the driver)
    ▼
-{symptoms, diagnosis, medications{pathway, indications, recommendations,
- contraindicated, allergy_alerts, interaction_alerts, monitoring_plan,
- missing_information, summary, disclaimer}, extracted{}}
+{symptoms, diagnosis, risk_scores{}, medications{pathway{urgency, statement,
+ rationale, drivers}, indications, recommendations, contraindicated,
+ allergy_alerts, interaction_alerts, monitoring_plan, missing_information,
+ risk_scores, summary, disclaimer}, extracted{}}
 ```
+
+The encounter's urgency is no longer hand-derived: a raised troponin, then a
+HEART or GRACE score in its high band, decide it (ADR-020), and `pathway.drivers`
+names whichever instrument did. Chest pain remains a *floor* — a lower band
+refines the reading but never softens the ACS pathway, and its numbers are shown
+in the rationale so that is explicit. The scores are built once per call and
+handed to the review, the diagnosis payload and the response, so the three can
+never disagree; an input the encounter did not capture leaves a score incomplete
+with the gap named (`missing`) instead of scoring the patient as low risk.
 
 The union rules live once, in `backend/encounter_context.py`, and are shared with
 the live loop (§4): the recorded visit details are unioned with what the
