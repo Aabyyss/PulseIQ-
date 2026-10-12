@@ -32,6 +32,7 @@ import { PageHeader } from "@/components/app/page-header";
 import { EmptyState } from "@/components/app/empty-state";
 import { LearningPanel } from "@/components/app/learning-panel";
 import { RiskPill } from "@/components/app/risk-pill";
+import { RiskScoresStrip } from "@/components/app/risk-scores";
 import { StatTile } from "@/components/app/stat-tile";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -1142,7 +1143,7 @@ export function ConsultationPage() {
         {!medicationReview ? (
           <p className="text-2xs italic leading-relaxed text-faint">
             {awaitingCopilot
-              ? "Reading the encounter — the safety screen arrives with the copilot analysis."
+              ? "Screening this line against the visit details — the safety screen lands with the line, the copilot plan follows."
               : "Record a symptom, drug, condition, allergy or laboratory line and the screen fills from the encounter."}
           </p>
         ) : (
@@ -1156,6 +1157,15 @@ export function ConsultationPage() {
                 {medicationReview.interaction_alerts.length} interaction(s)
               </span>
             </div>
+
+            {/* Deterministic scores (ADR-020): the urgency above is graded from
+                these, so they are shown with the block they produced. */}
+            <RiskScoresStrip scores={medicationReview.risk_scores} />
+            {medicationReview.pathway.drivers?.length ? (
+              <p className="text-2xs text-faint">
+                Decided by: {medicationReview.pathway.drivers.join(" · ")}
+              </p>
+            ) : null}
 
             {medicationReview.allergy_alerts.map((alert) => (
               <Alert key={alert.drug} variant="destructive">
