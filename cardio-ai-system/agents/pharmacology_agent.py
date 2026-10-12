@@ -94,7 +94,17 @@ def extract_allergy_mentions(text: str) -> list[str]:
     """
     found: list[str] = []
     for match in _ALLERGY_PHRASE.finditer(str(text or "")):
-        chunk = re.split(r"\b(?:but|however|though|no other|nkda)\b|[.;\n]", match.group(1), flags=re.I)[0]
+        chunk = re.split(
+            # A substance list ends at the next statement: a sentence break, a
+            # contrast, or a new actor. The actor cut matters most — without it
+            # "allergic to aspirin and I take warfarin" made "I take warfarin"
+            # an allergy term, which blocked a drug the patient was actually
+            # taking, while "allergic to aspirin and sulfa" stays two substances.
+            r"\b(?:but|however|though|no other|nkda)\b|[.;\n]"
+            r"|\b(?:and\s+)?(?:i|he|she|they|we|patient|the patient)\b",
+            match.group(1),
+            flags=re.I,
+        )[0]
         for term in as_list(chunk):
             if len(term) > 1 and term not in found:
                 found.append(term)
@@ -129,6 +139,12 @@ CONDITION_PATTERNS: list[tuple[str, str]] = [
     ("migraine_aura", r"\bmigraine\b"),
     ("smoking", r"\b(?:smok(?:e|es|ing|er)|cigarette|bidi)\b"),
     ("obesity", r"\b(?:obese|obesity|overweight)\b"),
+    # Two more risk-factor inputs the scores need: peripheral arterial disease
+    # and a family history of coronary disease (HEART counts both).
+    ("peripheral_arterial_disease",
+     r"\b(?:peripheral arterial disease|peripheral vascular disease|\bpad\b|claudication|aortic plaque|\bpvd\b)\b"),
+    ("family_history_cad",
+     r"\b(?:family history of (?:heart|cad|coronary|cardiac)|father (?:had|died of)[^.;]{0,20}heart|mother (?:had|died of)[^.;]{0,20}heart|(?:dad|brother|sister) (?:had|died of)[^.;]{0,20}heart|sudden cardiac death in (?:the )?family)\b"),
 ]
 
 _ALL_TAGS = {tag for tag, _ in CONDITION_PATTERNS}
@@ -524,6 +540,7 @@ DRUGS: list[dict[str, Any]] = [
 
 _DRUG_BY_KEY = {d["key"]: d for d in DRUGS}
 _CLASS_OF = {d["key"]: d["drug_class"] for d in DRUGS}
+_KEY_BY_NAME = {d["name"]: d["key"] for d in DRUGS}
 
 # Current-medication aliases (incl. common brands) → internal drug key.
 # Used for interaction screening and "already documented" detection.
@@ -778,8 +795,16 @@ def review_medications(
     risk_level: str | None = None,
     labs: dict[str, Any] | None = None,
     pregnancy: bool | None = None,
+    risk_scores: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Recommend, flag and block medication options from the captured facts."""
+    """Recommend, flag and block medication options from the captured facts.
+
+    ``risk_scores`` is the deterministic block from
+    :mod:`backend.risk_score_context` (HEART, GRACE, CHA₂DS₂-VASc). The encounter
+    urgency comes from it when it is complete, and CHA₂DS₂-VASc grades the
+    stroke-risk reason behind the anticoagulation option; when it is absent or
+    incomplete the review behaves exactly as it did before.
+    """
     symptom_list = [str(s).strip().lower() for s in (symptoms or []) if str(s).strip()]
     condition_list = as_list(conditions)
     allergy_list = as_list(allergies)
@@ -799,6 +824,21 @@ def review_medications(
     # Gastroprotection becomes an indication when antithrombotic bleeding risk stacks up.
     if _antithrombotic_bleeding_risk(tags, current_keys, age_value):
         indications["antithrombotic_bleeding_risk"] = _antithrombotic_bleeding_risk(tags, current_keys, age_value) or ""
+
+    # CHA₂DS₂-VASc is a stroke-risk instrument, so it speaks only for a patient
+    # in atrial fibrillation — and it grades the reason behind the
+    # anticoagulation option rather than ordering it.
+    stroke_risk = _score_band(risk_scores, "cha2ds2_vasc")
+    stroke_risk_incomplete = False
+    if "atrial_fibrillation" in tags and stroke_risk:
+        if stroke_risk.get("score") is None:
+            stroke_risk_incomplete = True
+        else:
+            indications["atrial_fibrillation_stroke_risk"] = (
+                f"CHA2DS2-VASc {stroke_risk['score']}"
+                f" ({stroke_risk.get('annual_stroke_risk_pct')}%/year)"
+                f" — anticoagulation tier: {stroke_risk.get('anticoagulation_tier')}"
+            )
 
     recommendations: list[dict[str, Any]] = []
     contraindicated: list[dict[str, Any]] = []
@@ -914,6 +954,21 @@ def review_medications(
                 "Dual RAAS blockade adds hyperkalaemia and renal injury without outcome benefit."
             )
 
+    # Below the conventional threshold the option is still listed (the rhythm
+    # and other indications decide), but the score says why it is not automatic.
+    if (
+        "atrial_fibrillation" in tags
+        and stroke_risk.get("anticoagulation_tier") == "none"
+        and "atrial_fibrillation_stroke_risk" in indications
+    ):
+        note = (
+            f"CHA2DS2-VASc {stroke_risk['score']} — below the conventional anticoagulation "
+            "threshold, so this is a rhythm/indication decision rather than an automatic one."
+        )
+        for rec in recommendations:
+            if _CLASS_OF.get(_KEY_BY_NAME.get(rec["drug"], ""), "") == "anticoagulant" and note not in rec["review_flags"]:
+                rec["review_flags"].append(note)
+
     primary_keys = [
         key for key in offered_keys
         if any(
@@ -948,8 +1003,14 @@ def review_medications(
             missing.append("Potassium not supplied — RAAS/MRA safety gates were not applied.")
     if sex and str(sex).lower().startswith("f") and age_value is not None and 15 <= age_value <= 50 and pregnancy is None and "pregnancy" not in tags:
         missing.append("Pregnancy status not recorded for a patient of childbearing age.")
+    if stroke_risk_incomplete:
+        missing.append(
+            "CHA2DS2-VASc incomplete ("
+            + ", ".join(stroke_risk.get("missing") or [])
+            + ") — stroke risk is not graded for this atrial fibrillation."
+        )
 
-    pathway = _pathway(risk_level, indications, derived)
+    pathway = _pathway(risk_level, indications, derived, risk_scores)
 
     if recommendations or contraindicated:
         summary = (
@@ -983,36 +1044,110 @@ def review_medications(
         "interaction_alerts": alerts,
         "monitoring_plan": monitoring,
         "missing_information": missing,
+        "risk_scores": risk_scores or None,
         "summary": summary,
         "disclaimer": DISCLAIMER,
     }
 
 
-def _pathway(risk_level: str | None, indications: dict[str, str], derived: dict[str, float]) -> dict[str, Any]:
-    """Urgency of the *encounter*, so medication choices never delay escalation."""
-    if derived.get("troponin_elevated") is not None or risk_level == "High":
+def _score_band(risk_scores: dict[str, Any] | None, name: str) -> dict[str, Any]:
+    """One score's summary from the assembled block, or an empty dict."""
+    if not isinstance(risk_scores, dict):
+        return {}
+    score = risk_scores.get(name)
+    return score if isinstance(score, dict) else {}
+
+
+def _pathway(
+    risk_level: str | None,
+    indications: dict[str, str],
+    derived: dict[str, float],
+    risk_scores: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Urgency of the *encounter*, so medication choices never delay escalation.
+
+    The deterministic scores decide first, because they are checkable: a raised
+    troponin, then HEART or GRACE in their high band, then the model's screening
+    band, then a chest-pain presentation. The older triggers stay as the
+    fallback for encounters the scores cannot grade (missing vitals, no
+    chest-pain history), so nothing escalates less than it did before — and
+    ``drivers`` names whichever instrument decided, so the clinician can see
+    *why* the encounter is being called an emergency.
+    """
+    heart = _score_band(risk_scores, "heart")
+    grace = _score_band(risk_scores, "grace")
+
+    def reading(name: str, score: dict[str, Any]) -> str:
+        total, band = score["score"], score["band"]
+        if name == "HEART":
+            return f"HEART {total} ({band}, 6-week MACE {score.get('mace_risk_6_weeks')})"
+        bound = {"low": "<109", "intermediate": "109-140", "high": ">140"}.get(band, "")
+        mortality = (score.get("in_hospital_mortality") or {}).get("percent")
+        tail = f" — in-hospital mortality {mortality:g}%" if mortality else ""
+        return f"GRACE {total} ({bound}, {band}){tail}"
+
+    complete = [
+        (name, score)
+        for name, score in (("HEART", heart), ("GRACE", grace))
+        if score.get("score") is not None
+    ]
+    drivers = [reading(name, score) for name, score in complete if score.get("band") == "high"]
+    intermediate = [reading(name, score) for name, score in complete if score.get("band") == "intermediate"]
+
+    if derived.get("troponin_elevated") is not None:
         return {
             "urgency": "emergency",
             "statement": "Treat as possible acute coronary syndrome: stabilise and escalate on clinical grounds.",
             "rationale": [
-                "Screening band is High" if risk_level == "High" else "Troponin is above the reference limit",
+                "Troponin is above the reference limit",
+                "Do not delay emergency assessment, ECG or biomarkers for outpatient medication titration.",
+            ] + drivers,
+            "drivers": ["troponin"] + drivers,
+        }
+    if drivers:
+        return {
+            "urgency": "emergency",
+            "statement": "Treat as possible acute coronary syndrome: stabilise and escalate on clinical grounds.",
+            "rationale": drivers + [
+                "Deterministic score in its high band — do not delay emergency assessment, ECG or biomarkers.",
+            ],
+            "drivers": drivers,
+        }
+    if risk_level == "High":
+        return {
+            "urgency": "emergency",
+            "statement": "Treat as possible acute coronary syndrome: stabilise and escalate on clinical grounds.",
+            "rationale": [
+                "Screening band is High",
                 "Do not delay emergency assessment, ECG or biomarkers for outpatient medication titration.",
             ],
+            "drivers": ["screening band"],
         }
     if "suspected_acs" in indications:
+        # The presentation is a floor, not a contest: a score in a lower band
+        # refines the reading but never softens the ACS pathway (ADR-018). Its
+        # numbers are still shown, so the reason the urgency exceeds the score
+        # is explicit rather than unexplained.
+        graded = [reading(name, score) for name, score in complete]
         return {
             "urgency": "emergency",
             "statement": "Chest pain reported: treat as possible acute coronary syndrome until excluded.",
-            "rationale": ["Chest pain is the trigger for the ACS pathway regardless of the medication options."],
+            "rationale": [
+                "Chest pain is the trigger for the ACS pathway regardless of the medication options.",
+            ] + [f"Graded as {line} — the pathway is not softened by a lower band." for line in graded],
+            "drivers": ["presentation"] + graded,
         }
-    if risk_level == "Medium":
+
+    if intermediate or risk_level == "Medium":
         return {
             "urgency": "urgent",
             "statement": "Arrange same-day or next-day clinical review; medication changes are for that review.",
-            "rationale": ["Screening band is Medium."],
+            "rationale": (intermediate + (["Screening band is Medium."] if risk_level == "Medium" else [])),
+            "drivers": intermediate or ["screening band"],
         }
     return {
         "urgency": "routine",
         "statement": "Routine review: options below are for planned, clinician-led prescribing.",
         "rationale": ["No emergency trigger captured in this encounter."],
+        "drivers": [],
     }
