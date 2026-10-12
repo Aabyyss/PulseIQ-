@@ -124,3 +124,20 @@ def test_gt_lt_bounds_respected():
     result = screen_report_text("Troponin I <0.01 ng/mL")
     value = next(v for v in result["values"] if v["key"] == "troponin_i")
     assert value["status"] == "normal"
+
+
+def test_prose_values_read_aloud_are_parsed_like_a_printed_line():
+    """"his eGFR is 26" and "a creatinine of 1.2" are values, not prose noise."""
+    result = screen_report_text(
+        "His potassium is 6.1 mmol/L, his eGFR is 26 and a creatinine of 1.2 mg/dL."
+    )
+    values = {v["key"]: v for v in result["values"]}
+    assert values["potassium"]["value"] == 6.1
+    assert values["potassium"]["status"] == "critical_high"
+    assert values["egfr"]["value"] == 26
+    assert values["creatinine"]["value"] == 1.2
+
+
+def test_a_bare_number_with_no_value_marker_is_still_ignored():
+    """The incidental-number guard survives: no unit, no colon, no copula."""
+    assert screen_report_text("cholesterol 40").get("values") == []
