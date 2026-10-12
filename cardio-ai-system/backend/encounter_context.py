@@ -15,9 +15,12 @@ outcome for a safety screen. So the union rules live here, once:
 - **allergies** — the recorded list plus explicit "allergic to …" phrases.
 - **current medications** — names and brands from the record plus the ones the
   encounter names, de-duplicated case-insensitively.
-- **labs** — numeric findings parsed from the report text (unit-aware, via
-  :func:`backend.lab_report.labs_for_review`), with caller-supplied values
-  overriding the parsed ones.
+- **labs** — numeric findings parsed from the report text *and* from what was
+  said out loud (unit-aware, via :func:`backend.lab_report.labs_for_review`):
+  a clinician reading "eGFR 26" off the note is the same fact as pasting it,
+  and the live screen must not ignore one of them. Three sources, most
+  deliberate last — speech, then the written report text, then the recorded
+  fields, so a value the clinician deliberately entered always wins.
 - **symptoms** — what the vocabulary extracts from the whole narrative, unioned
   with the caller's (already learned-vocabulary-aware) findings for the current
   line, so nothing found mid-visit is lost.
@@ -80,6 +83,12 @@ def build_medication_context(
             detected.append(symptom)
 
     pregnancy = context.get("pregnancy")
+    # Read aloud during the visit, then the report text the clinician typed or
+    # pasted (which wins where both state a value), then the recorded fields.
+    labs = labs_for_review(encounter_text)
+    labs.update(labs_for_review(report_text))
+    if isinstance(context.get("labs"), dict):
+        labs.update(labs_for_review("", context["labs"]))
 
     return {
         "narrative": narrative,
@@ -90,10 +99,7 @@ def build_medication_context(
         "current_medications": current,
         "age": age,
         "sex": context.get("sex") or None,
-        "labs": labs_for_review(
-            report_text,
-            context.get("labs") if isinstance(context.get("labs"), dict) else None,
-        ),
+        "labs": labs,
         "symptoms": detected,
         # None (not False) means "not recorded", which the review reports as a
         # gap rather than silently treating the patient as not pregnant.
