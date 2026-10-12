@@ -14,7 +14,10 @@ from backend.ai_assistant import (
     generate_final_report_plan,
     get_active_provider,
 )
-from backend.realtime_service import process_live_transcript_entry
+from backend.realtime_service import (
+    medication_review_for_live_line,
+    process_live_transcript_entry,
+)
 from backend.deidentify import deidentify, deidentify_transcript
 from backend.encounter_context import build_medication_context
 from backend.fhir_export import build_fhir_bundle
@@ -202,11 +205,23 @@ def auth_me(user: dict = Depends(get_current_user)):
 
 @app.post("/diagnose")
 def diagnose(data: dict, user: dict = Depends(get_current_user)):
-    text = (data or {}).get("text", "")
+    payload = data or {}
+    text = payload.get("text", "")
     if not isinstance(text, str) or not text.strip():
         return {"error": "text is required"}
 
-    result = run_diagnosis_from_text(text)
+    # The optional patient context and report text are what the deterministic
+    # scores (HEART, GRACE, CHA₂DS₂-VASc) are graded from; without them the
+    # response still carries the model band and reports the score gaps.
+    result = run_diagnosis_from_text(
+        text,
+        report_text=str(payload.get("report_text") or ""),
+        patient={
+            key: payload.get(key)
+            for key in ("age", "sex", "conditions", "allergies", "current_medications", "labs", "vitals")
+            if payload.get(key) is not None
+        } or None,
+    )
     # Privacy: the live analysis sees the original wording, but what gets
     # persisted below is de-identified first (CNIC/phone/email/labeled names).
     stored_text, redactions = deidentify(text)
@@ -547,6 +562,10 @@ def medication_review(data: dict, user: dict = Depends(get_current_user)):
             "current_medications": context["current_medications"],
             "labs": context["labs"],
             "pregnancy": context["pregnancy"],
+            # Admission vitals and the arrest flag feed GRACE; they are optional
+            # and are otherwise read from the report/narrative text.
+            "vitals": payload.get("vitals") if isinstance(payload.get("vitals"), dict) else None,
+            "cardiac_arrest": payload.get("cardiac_arrest") if isinstance(payload.get("cardiac_arrest"), bool) else None,
         },
     )
     result["extracted"] = {
@@ -679,9 +698,60 @@ async def consultation_socket(websocket: WebSocket, token: str = ""):
         await websocket.close(code=4401, reason="Sign in to use the live copilot.")
         return
     await websocket.accept()
+    # Two producers write to this socket — the receiving loop (instant acks) and
+    # the analysis worker (copilot plans) — so sends are serialised.
+    send_lock = asyncio.Lock()
+
+    async def send(payload: dict) -> None:
+        async with send_lock:
+            await websocket.send_json(payload)
+
+    # Bounded: plans for lines the clinician has already moved past are worth
+    # little, and an unbounded queue would let a client make the server hold a
+    # growing backlog of model calls. The newest lines win.
+    analysis_queue: asyncio.Queue[dict] = asyncio.Queue(maxsize=8)
+    # Lines are numbered per connection so a client can tell a lagging plan from
+    # a current one: a plan for line 3 can arrive after line 4's ack, and the
+    # safety screen must never be rewound by it.
+    line_seq = 0
+
+    async def run_analysis() -> None:
+        """Copilot plans, one at a time, off the receiving loop.
+
+        The plan is the expensive half of a line: it calls the local model,
+        tens of seconds on CPU. Awaiting it inline meant the loop could not read
+        the next line until the previous plan was finished, so a line spoken
+        during that call queued behind it and its ack — the medication safety
+        screen, the one thing that needs no model — arrived only when the model
+        was done. Lines still run in order, so the frames describe the
+        encounter in the order it was spoken.
+        """
+        while True:
+            item = await analysis_queue.get()
+            try:
+                processed = await asyncio.to_thread(
+                    process_live_transcript_entry, **item["request"]
+                )
+                processed["kind"] = "analysis"
+                processed["line_seq"] = item["seq"]
+                await send(processed)
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                # One bad line must not kill the worker or the connection: say
+                # so, keep reading, and let the next line be analysed.
+                try:
+                    await send(
+                        {"error": "Live analysis failed for that line — keep going, the next line will be analysed."}
+                    )
+                except Exception:
+                    return  # client gone
+
+    worker = asyncio.create_task(run_analysis())
     try:
         while True:
             message = await websocket.receive_json()
+            line_seq += 1
             speaker = message.get("speaker", "patient")
             text = message.get("text", "")
             report_text = message.get("report_text", "")
@@ -694,7 +764,7 @@ async def consultation_socket(websocket: WebSocket, token: str = ""):
             patient = message.get("patient") if isinstance(message.get("patient"), dict) else None
             transcript = message.get("transcript") if isinstance(message.get("transcript"), str) else ""
             if not isinstance(text, str) or not text.strip():
-                await websocket.send_json({"error": "text is required"})
+                await send({"error": "text is required"})
                 continue
             if not isinstance(report_text, str):
                 report_text = ""
@@ -704,6 +774,10 @@ async def consultation_socket(websocket: WebSocket, token: str = ""):
             # the UI shows concepts, risk hints and the body map immediately.
             # The full copilot plan needs the local LLM (tens of seconds on
             # CPU), so it follows as a separate message rather than blocking.
+            # The medication safety screen is deterministic, so it rides the
+            # instant frame too and the analysis frame then refreshes it with
+            # the diagnosis band and the translation — the clinician sees a
+            # blocking allergy on the line that reported it, not 20s later.
             user = auth_store.resolve_token(token)
             owner_id = user["id"] if user else None
             try:
@@ -712,12 +786,21 @@ async def consultation_socket(websocket: WebSocket, token: str = ""):
                 )
                 learned = vocabulary_service.learned_overlay(owner_id) or {}
                 learned_count = sum(len(v) for v in (learned.get("phrases") or {}).values()) + len(learned.get("suppressions") or [])
-                await websocket.send_json({
+                early_review = medication_review_for_live_line(
+                    text=text,
+                    transcript=transcript,
+                    report_text=report_text,
+                    patient=patient,
+                    symptoms=ack_symptoms,
+                )
+                await send({
                     "kind": "line_ack",
+                    "line_seq": line_seq,
                     "speaker": "doctor" if speaker == "doctor" else "patient",
                     "transcript": text,
                     "original_transcript": text,
                     "symptoms": ack_symptoms,
+                    "medication_review": early_review,
                     "matched_phrases": ack_details,
                     "learned_generation": learned.get("generation", 0),
                     "learned_count": learned_count,
@@ -727,20 +810,32 @@ async def consultation_socket(websocket: WebSocket, token: str = ""):
                 })
             except Exception:
                 pass  # client gone; the to_thread result would also fail to send
-            # Process off the event loop: the copilot plan can call the
-            # local LLM for tens of seconds on CPU, and blocking here would
-            # freeze every other request and websocket on the server.
-            processed = await asyncio.to_thread(
-                process_live_transcript_entry,
-                text=text,
-                speaker=speaker,
-                report_text=report_text,
-                language_code=language_code,
-                owner_id=owner_id,
-                patient=patient,
-                transcript=transcript,
+            # Queued, not awaited: the loop goes straight back to reading lines,
+            # so the next line's ack — and with it the safety screen — never
+            # waits on the previous line's model call. The plan itself still
+            # runs off the event loop, so one slow plan cannot freeze the other
+            # requests or sockets on the server either.
+            if analysis_queue.full():
+                # Drop the oldest pending plan for the line the earliest.
+                try:
+                    analysis_queue.get_nowait()
+                except asyncio.QueueEmpty:  # emptied by the worker meanwhile
+                    pass
+            analysis_queue.put_nowait(
+                {
+                    "seq": line_seq,
+                    "request": {
+                        "text": text,
+                        "speaker": speaker,
+                        "report_text": report_text,
+                        "language_code": language_code,
+                        "owner_id": owner_id,
+                        "patient": patient,
+                        "transcript": transcript,
+                    },
+                }
             )
-            processed["kind"] = "analysis"
-            await websocket.send_json(processed)
     except WebSocketDisconnect:
         return
+    finally:
+        worker.cancel()
