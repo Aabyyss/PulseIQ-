@@ -7,6 +7,7 @@ from agents.nlp_symptom_agent import extract_symptoms_from_text
 from agents.feature_mapper_agent import map_symptoms_to_features
 from agents.prediction_agent import predict_heart_disease
 from agents.pharmacology_agent import review_medications
+from backend.risk_score_context import build_risk_scores
 
 
 def risk_from_probability(probability: float) -> str:
@@ -43,6 +44,8 @@ def run_medication_review(text="", patient=None, symptoms=None, report_text=""):
     if risk not in ("Low", "Medium", "High"):
         risk = diagnosis["risk_level"] if diagnosis else None
 
+    risk_scores = build_risk_scores(narrative, report_text, context, symptoms)
+
     medications = review_medications(
         symptoms=symptoms,
         conditions=context.get("conditions"),
@@ -53,15 +56,26 @@ def run_medication_review(text="", patient=None, symptoms=None, report_text=""):
         risk_level=risk,
         labs=context.get("labs"),
         pregnancy=context.get("pregnancy"),
+        risk_scores=risk_scores,
     )
 
-    return {"symptoms": symptoms, "diagnosis": diagnosis, "medications": medications}
+    return {
+        "symptoms": symptoms,
+        "diagnosis": diagnosis,
+        "medications": medications,
+        "risk_scores": risk_scores,
+    }
 
 
-def run_diagnosis_from_text(text, symptoms=None):
+def run_diagnosis_from_text(text, symptoms=None, report_text="", patient=None):
     """Screen a narrative. ``symptoms`` may carry pre-extracted findings
     (e.g. merged with a clinician's learned vocabulary by realtime_service)
-    so the risk estimate reflects what the caller already knows."""
+    so the risk estimate reflects what the caller already knows.
+
+    The model's probability band is reported beside the deterministic scores
+    (HEART, GRACE, CHA₂DS₂-VASc) built from the same encounter, so a caller can
+    see an instrument-checkable risk as well as the screening estimate.
+    """
 
     if symptoms is None:
         symptoms = extract_symptoms_from_text(text)
@@ -78,5 +92,6 @@ def run_diagnosis_from_text(text, symptoms=None):
         "features": features,
         "prediction": int(prediction),
         "probability": float(probability),
-        "risk_level": risk
+        "risk_level": risk,
+        "risk_scores": build_risk_scores(text, report_text, patient, symptoms),
     }
