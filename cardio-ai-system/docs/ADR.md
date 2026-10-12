@@ -449,7 +449,8 @@ antiplatelet + anticoagulant is a major interaction, missing input is reported);
 no new dependency; nothing stored; the endpoint returns 401 unauthenticated.
 
 ## ADR-018 · Live medication safety screen inside the consultation loop
-**Status:** Accepted (2026-10-11)
+**Status:** Accepted (2026-10-11) — delivery amended 2026-10-12 (the review
+rides the instant ``line_ack`` as well as the ``analysis`` frame)
 
 ADR-017 shipped the medication review as a page: the clinician types the
 encounter, submits, reads the options and the blocks. But the question it answers
@@ -472,7 +473,8 @@ Rules that keep the live screen honest:
 
 - **One set of union rules.** The context a review is judged against (recorded
   facts ∪ extracted entities ∪ condition vocabulary ∪ allergy phrases ∪
-  unit-aware labs from the report text ∪ narrative symptoms) lives in
+  unit-aware labs from the report text or read out loud ∪ narrative symptoms)
+  lives in
   ``backend/encounter_context.build_medication_context``, used by both
   ``POST /medication-review`` and the live loop. Two assemblies would eventually
   disagree about the same patient — the worst possible outcome for a safety
@@ -488,9 +490,33 @@ Rules that keep the live screen honest:
 - **The screen can never soften the presentation.** ``pathway.urgency`` still
   escalates on the diagnosis band or a raised troponin, independent of the drug
   list (ADR-017).
+- **The screen is model-free, so it ships with the line.** The review is
+  computed twice per line, deliberately: once in the socket handler, where the
+  line, the transcript so far and the visit details are already in hand, and it
+  goes out on the instant ``line_ack``; then again in the ``analysis`` frame with
+  the diagnosis band and the English translation folded in. Riding only the
+  analysis frame made a security-critical screen wait on the copilot plan — a
+  local model call measured at ~22 s on CPU for the first analysed line of a
+  visit — on a screen whose entire value is being current while the visit is
+  spoken. The early snapshot leaves ``pathway.urgency`` to the presentation
+  itself (a suspected ACS indication is an emergency with or without a screening
+  band), so it cannot soften  the presentation, and the two stages are asserted to
+  agree on what they *block* even when their wording differs. The one honest gap
+  in the early stage: it reads the line as spoken, so a non-English line can gain
+  findings once the translation arrives.
+- **A slow plan cannot hold up the next line.** Shipping the review on the ack
+  was only half of it: the receiving loop awaited the plan before it would read
+  the next message, so line 2's ack waited for line 1's model call and the
+  "instant" screen was seconds behind as soon as a plan was slow. Plans now run
+  on a per-connection worker, in order, and the loop goes straight back to
+  reading. That makes frames interleave (line 2's ack can precede line 1's plan),
+  so both frames of a line carry its `line_seq` and the UI applies a screen only
+  when it is not older than the one on show — a late plan may refine the screen,
+  never rewind it, and nothing in flight repopulates a cleared transcript.
 - **Nothing new is required.** No new endpoint, no new dependency, nothing
   stored; the field is additive, so a client that ignores ``medication_review``
-  keeps working.
+  keeps working — and a client that still reads only the ``analysis`` frame sees
+  exactly what it saw before.
 
 Rejected alternatives: a ``POST /medication-review`` call per spoken line from
 browser (two round-trips per line, and the same visit details would travel twice
@@ -501,14 +527,37 @@ plausible-but-wrong failure mode ADR-016/017 reject — a hallucinated allergy
 clearance is the worst output this system could produce); auto-prescribing from
 live options (doses stay protocol-anchored text for the clinician).
 
-Consequence: 13 new directional cases in
-``backend/test_live_medication_review.py`` — a recorded allergy blocks before a
-single line is spoken, an allergy/condition/medication said out loud counts with
-the form empty, later lines add without erasing earlier findings, a cleared
-transcript leaves nothing stale, report values from the visit note reach the
-laboratory gates, and the socket frame carries the review (LLM tier stubbed) —
-bringing the backend suite to 94 tests. The page and the live loop serve the same
-rules; nothing stored; no new dependency.
+Consequence: ``backend/test_live_medication_review.py`` holds 22 directional
+cases (13 at first acceptance, 9 added with the instant-ack path and the worker)
+— a recorded allergy blocks before a single line is spoken, an
+allergy/condition/medication said out loud counts with the form empty, later
+lines add without erasing earlier findings, a cleared transcript leaves nothing
+stale, report values from the visit note and values read aloud reach the
+laboratory gates, the socket frame carries the review (LLM tier stubbed), the
+early ack snapshot blocks on the line that reported it while agreeing with the
+analysis frame on every block and interaction it reports, and a second line is
+acked in under a second even while the first line's plan is still sleeping on
+the model — the case that fails by 2.2 s if the plan is awaited inline again.
+With the extractor and screener regressions that brings the backend suite to
+130 tests. The page and the live loop serve the same rules; nothing stored; no
+new dependency.
+
+Amending this decision surfaced a false positive the live path made obvious: the
+allergy phrase pattern used to swallow the rest of its clause, so *"allergic to
+aspirin and I take warfarin"* recorded **warfarin** as a reported allergy and
+blocked a drug the patient was actually taking — a wrong block on a safety
+screen, arriving faster than ever once the screen moved onto the ack. The clause
+now ends at the next actor or sentence break ("and I take…", "but takes…"), two
+substances in one breath ("aspirin and sulfa") are still both kept, and
+``backend/test_pharmacology_agent.py`` plus the live suite pin both directions.
+
+Building the live screen also exposed a second gap, this one in the context
+rules: only the report-text box was parsed for laboratory values, so a clinician
+*reading* "eGFR 26" off the note out loud changed nothing, even though ADR-018
+claimed a lab note read during the visit reaches the gates. Labs are now parsed
+from the spoken encounter as well, with a deliberate precedence — speech, then
+the written report text, then the values recorded on the form — so a number the
+clinician typed always wins over the same number heard in passing.
 
 ## ADR-019 · FHIR R4 export of the structured findings
 **Status:** Accepted (2026-10-11)
@@ -590,3 +639,88 @@ the exported document does not embed the transcript — bringing the backend sui
 to 118 tests. The frontend adds an "Export FHIR JSON" action and shows the
 resource counts, gaps and caveats next to it; ``docs/API_SPEC.md`` and
 ``docs/DATA_FLOW.md`` describe the contract.
+
+## ADR-020 · Deterministic HEART, GRACE and CHA₂DS₂-VASc instead of hand-derived urgency
+**Status:** Accepted (2026-10-12)
+
+Until now the urgency of an encounter was hand-derived in two unrelated places:
+the medication layer escalated on "chest pain is present" plus the model's
+screening band, and the diagnosis layer reported that band alone. Neither is an
+instrument. A clinician cannot check a model probability against a published
+cut-off, two layers can disagree about the same patient, and a band derived from
+13 dataset features cannot express *why* an encounter is being called an
+emergency.
+
+Decision: three published scores are computed deterministically — HEART for
+chest pain, GRACE (in-hospital, classic point score) for ACS risk, and
+CHA₂DS₂-VASc for stroke risk in atrial fibrillation — in
+``agents/risk_scores_agent.py``, with their inputs assembled once in
+``backend/risk_score_context.py`` and consumed by both layers:
+
+- the **medication layer** grades ``pathway.urgency`` from them (high HEART or
+  GRACE → emergency, intermediate → urgent) and reports ``pathway.drivers``, so
+  the urgency names the instrument that decided it;
+- the **diagnosis layer** returns ``risk_scores`` beside the model band, in
+  ``/diagnose``, in the medication review payload and on every live
+  ``analysis`` frame;
+- CHA₂DS₂-VASc grades the *reason* behind the anticoagulation option when atrial
+  fibrillation is captured — it never orders anticoagulation, and a score below
+  the conventional threshold says so on the option's review flags.
+
+Rules that keep the scores honest:
+
+- **An unknown input is never a zero.** A score with a missing component reports
+  ``score: null``, ``complete: false``, the points it *could* compute
+  (``known_points``) and the list of what to supply. A falsely low score is the
+  worst possible output of a safety screen, so the scores refuse to produce one.
+- **Scores escalate; they never soften the presentation.** Chest pain still
+  triggers the ACS pathway regardless of a lower HEART band (ADR-018's rule),
+  and the score's numbers are shown in the rationale so the reason the urgency
+  exceeds the score is explicit rather than unexplained. Where the presentation
+  rule does not fire, the score decides — which is how an intermediate GRACE in
+  a dyspnoeic patient becomes *urgent* instead of routine.
+- **Every derived reading is stated as a convention.** HEART's History item is
+  derived from the captured features (two or more of radiation / exertional
+  onset / sweating / nausea / dyspnoea = typical, one = atypical, none =
+  non-specific) and returned with the features that drove it; the ECG item maps
+  documented statements (ST deviation = 2, repolarisation change = 1, documented
+  normal ECG = 0, nothing documented = missing); HEART's troponin item is the
+  value over *that assay's* reference ceiling from ADR-005's table.
+- **Units are converted, not assumed.** GRACE's creatinine point table is in
+  mg/dL, so µmol/L is divided by 88.4 before binning; troponin in ng/L is
+  converted to ng/mL, and a qualitative "troponin positive" is passed as an
+  elevated marker while the HEART item stays missing (it needs a number).
+- **Mortality is a nomogram, and says so.** GRACE published a nomogram, not an
+  equation, so the in-hospital mortality is read from the printed table and any
+  value between rows is flagged ``interpolated: true`` with both anchor rows —
+  not presented as a quoted figure.
+- **Vitals are captured, not invented.** Heart rate, blood pressure and Killip
+  class are read from the clinical text ("BP 90/60, HR 110, Killip II") or
+  supplied explicitly; absent vitals leave GRACE incomplete and name what to
+  supply, rather than assuming Killip I.
+
+Rejected alternatives: implementing GRACE 2.0's logistic model (its coefficients
+cannot be checked offline against the original paper here, and the classic point
+score is the published, reproducible one — the point tables are the artefact a
+clinician recognises); computing the scores in the frontend (two implementations
+of a safety-critical number would drift, exactly as ADR-018 rejected two context
+assemblies); treating an absent input as normal; switching to CHA₂DS₂-VA (the
+2024 ESC score that omits sex) — noted as a future option, but mixing its
+thresholds with CHA₂DS₂-VASc's published tiers would be wrong.
+
+Consequences: 29 new cases in ``backend/test_risk_scores.py`` — every point
+table boundary, the published bands, the nomogram anchors (140 → 2.9%), the
+µmol/L conversion, the incomplete-score contract, the CHA₂DS₂-VASc sex modifier
+and tiers, the pathway consuming the scores (including that a lower band cannot
+soften chest pain), the AF stroke-risk reason, and the live frame carrying the
+same block the review used — bringing the backend suite to 159 tests. The
+consultation card shows the scores with the block they produced and names the
+driver; the medication workspace shows the full breakdown with each point's
+input.
+
+Known limits: GRACE needs vitals and a Killip class, which arrive only when they
+are stated in the report text or read aloud, so it is often reported incomplete
+by design; a bare "troponin 0.06" without the I/T specifier is not parsed (the
+assay determines the ceiling, so guessing would change the points); and the
+annual stroke-risk percentages are cohort- and source-dependent, so they are
+labelled as published estimates rather than universal constants.
