@@ -78,6 +78,15 @@ type LineAckEvent = {
   transcript: string;
   original_transcript?: string;
   symptoms?: string[];
+  /** 1-based line number on this connection (see RealtimeConsultationEvent). */
+  line_seq?: number;
+  /**
+   * The medication safety screen for this line, computed on the instant ack
+   * (ADR-018). The model-free half of the copilot, so it does not wait for the
+   * tens-of-seconds plan the `analysis` frame follows with — which then
+   * refreshes the same review with the diagnosis band and the translation.
+   */
+  medication_review?: MedicationReview;
   matched_phrases?: Record<string, string>;
   learned_generation?: number;
   learned_count?: number;
@@ -233,6 +242,29 @@ export function useConsultationCapture(getVisitContext?: () => LiveVisitContext)
   // encounter so far plus this visit's recorded details.
   const [medicationReview, setMedicationReview] = useState<MedicationReview | null>(null);
 
+  // The safety screen is rebuilt for every line, so a copilot plan that lands
+  // after a newer line's screen must not rewind it — plans call the local model
+  // and arrive seconds late. Line numbers only climb, which makes the order
+  // decidable; clearing the transcript also drops anything still in flight.
+  const seenLineSeqRef = useRef(0);
+  const suppressedThroughSeqRef = useRef(0);
+
+  const applyMedicationReview = useCallback(
+    (review?: MedicationReview | null, seq?: number) => {
+      if (typeof seq === "number") {
+        seenLineSeqRef.current = Math.max(seenLineSeqRef.current, seq);
+      }
+      // A frame without a review never blanks the screen, and an older frame
+      // never replaces a newer one.
+      if (!review) return;
+      if (typeof seq === "number") {
+        if (seq < seenLineSeqRef.current || seq <= suppressedThroughSeqRef.current) return;
+      }
+      setMedicationReview(review);
+    },
+    []
+  );
+
   const wsRef = useRef<WebSocket | null>(null);
   const recognitionRef = useRef<SpeechRecognition | null>(null);
   const keepListeningRef = useRef(false);
@@ -306,6 +338,9 @@ export function useConsultationCapture(getVisitContext?: () => LiveVisitContext)
 
   const handleAck = (payload: LineAckEvent) => {
     addSymptoms(payload.symptoms ?? []);
+    // Show the safety screen with the line that produced it: the ack carries
+    // the deterministic review, the analysis frame only refines it.
+    applyMedicationReview(payload.medication_review, payload.line_seq);
     recomputeBodyInsights();
     setLastLineReading({
       text: payload.original_transcript?.trim() || payload.transcript,
@@ -351,7 +386,7 @@ export function useConsultationCapture(getVisitContext?: () => LiveVisitContext)
       setSuggestionSources(payload.ai_copilot?.suggestion_sources ?? {});
       setPlanConfidence(payload.ai_copilot?.confidence ?? null);
       if (payload.medical_entities) setMedicalEntities(payload.medical_entities);
-      setMedicationReview(payload.medication_review ?? null);
+      applyMedicationReview(payload.medication_review, payload.line_seq);
       return seq;
     };
 
@@ -512,6 +547,8 @@ export function useConsultationCapture(getVisitContext?: () => LiveVisitContext)
     setPlanConfidence(null);
     setMedicalEntities({ medications: [], durations: [], risk_factors: [] });
     setMedicationReview(null);
+    // Any plan still in flight belongs to a line that is no longer on screen.
+    suppressedThroughSeqRef.current = seenLineSeqRef.current;
   }, []);
 
   // ------------------------------------------------------------------
