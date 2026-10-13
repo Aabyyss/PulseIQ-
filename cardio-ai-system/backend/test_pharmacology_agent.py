@@ -339,3 +339,17 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
+
+def test_a_mmol_ldl_still_reaches_the_dyslipidaemia_indication():
+    """The lipid gate reads a flattened lab map: the unit must be applied first.
+
+    "LDL 4.2 mmol/L" is 162 mg/dL and belongs above the 160 mg/dL threshold, but
+    read as a bare 4.2 it never fired the indication that offers a statin.
+    """
+    from backend.lab_report import labs_for_review
+
+    labs = labs_for_review("LDL 4.2 mmol/L")
+    assert labs["ldl"] == 162.414
+    assert lab_tags(labs)["dyslipidemia_lab"] == 162.414
+    assert "dyslipidemia_lab" not in lab_tags(labs_for_review("LDL 100 mg/dL"))
