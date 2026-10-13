@@ -441,6 +441,32 @@ def test_the_live_frame_carries_the_same_scores_the_review_used():
     assert frame["medication_review"]["pathway"]["urgency"] == "emergency"
 
 
+def test_a_comma_written_report_reaches_the_equation_unchanged():
+    """The decimal comma and the micro sign are parser details, not score inputs.
+
+    The same patient and the same lipids, written the way a European report
+    prints them ("5,5 mmol/L", "130 µmol/L"), must reach the equation with the
+    same numbers as the dot-and-ASCII version — the parser resolves the spelling
+    before the scores ever see a value.
+    """
+    dotted = build_risk_scores(
+        encounter_text="white male, never smoked, not diabetic, 68 years",
+        report_text="BP 150/90. Total cholesterol 5.5 mmol/L, HDL 1.3 mmol/L, creatinine 130 umol/L.",
+        patient={"age": "68", "sex": "Male", "race": "white"},
+    )
+    comma = build_risk_scores(
+        encounter_text="white male, never smoked, not diabetic, 68 years",
+        report_text="BP 150/90. Total cholesterol 5,5 mmol/L. HDL 1,3 mmol/L. Creatinine 130 µmol/L.",
+        patient={"age": "68", "sex": "Male", "race": "white"},
+    )
+    assert comma["inputs"]["total_cholesterol_mg_dl"] == 212.7
+    assert comma["inputs"]["hdl_mg_dl"] == 50.3
+    assert comma["inputs"]["creatinine_mg_dl"] == 1.471
+    assert comma["inputs"] == dotted["inputs"]
+    assert comma["ascvd"]["risk_pct"] == dotted["ascvd"]["risk_pct"]
+    assert comma["ascvd"]["category"] == dotted["ascvd"]["category"]
+
+
 def main() -> None:
     """Run the suite directly (no pytest needed)."""
     tests = [(name, fn) for name, fn in sorted(globals().items()) if name.startswith("test_") and callable(fn)]

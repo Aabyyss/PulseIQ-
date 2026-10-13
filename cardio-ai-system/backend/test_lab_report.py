@@ -235,6 +235,61 @@ def test_other_analytes_at_the_end_of_a_sentence_keep_their_unit():
     assert values["egfr"]["unit"] == "ml/min/1.73m2"
 
 
+# ---------------------------------------------------------------------------
+# How a value is written: the comma, and the unit token beside it
+# ---------------------------------------------------------------------------
+
+def test_a_decimal_comma_is_a_whole_value_not_a_stray_digit():
+    """Half the world writes 1,3 mmol/L; both the unit and the value must survive.
+
+    The unit token was allowed to start with a digit, so "HDL 1,3 mmol/L" read
+    the "3" as the unit — the search matched the digit before it could reach the
+    mmol/L beside it, the lookup missed and the value fell back to mg/dL. The
+    digits after the comma were dropped at the same time, so the number was 1.0
+    rather than 1.3. Both halves of that are asserted here.
+    """
+    result = screen_report_text("HDL 1,3 mmol/L")
+    value = next(v for v in result["values"] if v["key"] == "hdl")
+    assert value["unit"] == "mmol/l"
+    assert value["unit_label"] == "mmol/l"
+    assert value["value"] == 1.3
+    assert value["status"] == "normal"
+    assert value["reference"] == "≥1.0 mmol/l"
+
+
+def test_a_comma_written_lipid_panel_keeps_every_value_unit_and_band():
+    """The comma is a decimal point, so the band it is graded against is the right one."""
+    cases = [
+        ("Total cholesterol 5,5 mmol/L", "total_cholesterol", 5.5, "high", "≤5.2 mmol/l"),
+        ("LDL 3,45 mmol/L", "ldl", 3.45, "high", "≤3.4 mmol/l"),
+        ("Triglycerides 2,1 mmol/L", "triglycerides", 2.1, "high", "≤1.7 mmol/l"),
+        ("HDL: 1,3 mmol/l.", "hdl", 1.3, "normal", "≥1.0 mmol/l"),
+        ("Potassium 5,6 mmol/L", "potassium", 5.6, "high", "3.5–5.1 mmol/l"),
+    ]
+    for text, key, want_value, want_status, want_reference in cases:
+        value = next(v for v in screen_report_text(text)["values"] if v["key"] == key)
+        assert value["value"] == want_value, text
+        assert value["unit"] == "mmol/l", text
+        assert value["status"] == want_status, text
+        assert value["reference"] == want_reference, text
+
+
+def test_a_group_separator_after_a_comma_is_not_read_as_a_decimal_point():
+    """A three-digit group is ambiguous, so it is left alone rather than guessed.
+
+    "1,250" is a grouped thousand in one convention and 1.25 in another. The
+    comma counts as a decimal point only when one or two digits follow it, so
+    the parser invents neither reading; what a value like this still loses is
+    recorded here rather than hidden.
+    """
+    value = next(
+        v for v in screen_report_text("Total cholesterol 1,250 mg/dL")["values"]
+        if v["key"] == "total_cholesterol"
+    )
+    assert value["value"] == 1.0
+    assert value["unit"] == "mg/dl"
+
+
 def test_a_micro_sign_before_mol_belongs_to_the_unit():
     """Printouts write µmol/L and μmol/L, not the ASCII "umol".
 

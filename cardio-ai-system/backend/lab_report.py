@@ -237,7 +237,12 @@ _TROP_TEXT_PATTERNS = [
 # Parsing
 # ---------------------------------------------------------------------------
 
-_NUMBER = r"(?<![<>])(<?\d+(?:\.\d+)?)(?!\s?%?\s*[x×])"  # avoid "5 x daily" dosing
+# A value: an integer with an optional decimal part, written with either a dot
+# or — as much of the world writes it — a comma. A comma counts as a decimal
+# point only when one or two digits follow it and no third does, so a printed
+# group separator ("platelets 250,000") still leaves the integer alone instead
+# of quietly shrinking it by three orders of magnitude.
+_NUMBER = r"(?<![<>])(<?\d+(?:\.\d+|,\d{1,2}(?!\d))?)(?!\s?%?\s*[x×])"  # avoid "5 x daily" dosing
 _NUM_RE = re.compile(_NUMBER)
 
 # The unit token printed after a value. The FIRST character must be a letter or
@@ -328,7 +333,9 @@ def _extract_numeric(analyte: dict[str, Any], text: str, lowered: str) -> list[d
             below_limit = raw_value.startswith("<") or raw_value.startswith(">")
             below_limit = raw_value.startswith("<")
             try:
-                value = float(raw_value.lstrip("<>"))
+                # A comma is a decimal point here (see ``_NUMBER``); float()
+                # itself only reads a dot.
+                value = float(raw_value.lstrip("<>").replace(",", "."))
             except ValueError:
                 continue
             # Reject values glued to a dose context ("5 mg daily" after a
