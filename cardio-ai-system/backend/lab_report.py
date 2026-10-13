@@ -624,15 +624,61 @@ def vitals_from_text(text: str) -> dict[str, Any]:
     return vitals
 
 
+# The flat {analyte: number} view has no room for a unit, so the gates and the
+# scores are written in each analyte's primary unit and the parsed value is
+# CONVERTED into it rather than relabelled: a cholesterol of 5.5 handed to a
+# reader that expects mg/dL is a different number, not a different label.
+# Factors are the published ones — cholesterol x38.67, triglycerides x88.57,
+# glucose x18.0, creatinine ÷88.4, and HbA1c's IFCC->DCCT offset formula.
+_UNIT_FACTORS: dict[str, dict[tuple[str, str], float]] = {
+    "total_cholesterol": {("mmol/l", "mg/dl"): 38.67},
+    "ldl": {("mmol/l", "mg/dl"): 38.67},
+    "hdl": {("mmol/l", "mg/dl"): 38.67},
+    "triglycerides": {("mmol/l", "mg/dl"): 88.57},
+    "glucose": {("mmol/l", "mg/dl"): 18.0},
+    "creatinine": {("umol/l", "mg/dl"): 1 / 88.4},
+    "troponin_i": {("ng/l", "ng/ml"): 0.001},
+    "troponin_t": {("ng/l", "ng/ml"): 0.001},
+    "potassium": {("meq/l", "mmol/l"): 1.0},
+    "sodium": {("meq/l", "mmol/l"): 1.0},
+    "egfr": {("ml/min", "ml/min/1.73m2"): 1.0},
+}
+_PRIMARY_UNIT = {analyte["key"]: analyte["primary_unit"] for analyte in _ANALYTES}
+_HBA1C_IFCC_TO_DCCT = 10.929
+
+
+def to_primary_unit(key: str, value: float, unit: str | None) -> float | None:
+    """``value`` restated in the analyte's primary unit, or ``None`` when the
+    printed unit cannot be mapped onto it.
+
+    Public because the risk-score context parses the same text and must convert
+    exactly as :func:`labs_for_review` does — two conversion tables would drift
+    and score the same patient two different ways.
+    """
+    primary = _PRIMARY_UNIT.get(key)
+    if primary is None or not unit or unit == primary:
+        return value
+    if key == "hba1c" and unit == "mmol/mol" and primary == "%":
+        return round(value / _HBA1C_IFCC_TO_DCCT + 2.15, 2)
+    factor = _UNIT_FACTORS.get(key, {}).get((unit, primary))
+    if factor is None:
+        return None
+    return round(value * factor, 4)
+
+
 def labs_for_review(text: str, extra: dict[str, Any] | None = None) -> dict[str, float]:
     """Numeric findings flattened for the medication safety gates.
 
     Reuses :func:`screen_report_text` so the numbers stay unit-aware, then
-    flattens them into the ``{analyte: number}`` shape the pharmacology agent
-    expects. Troponin is only trusted as ng/mL (the unit its threshold is
-    expressed in); an abnormal flag from any other unit is passed through as
-    an explicit marker instead of comparing unlike units. ``extra`` is applied
-    last, so a caller-supplied value wins over the parsed one.
+    converts each one into its analyte's primary unit and flattens it into the
+    ``{analyte: number}`` shape the pharmacology agent expects — a mmol/L
+    cholesterol and a µmol/L creatinine arrive as mg/dL, an HbA1c in mmol/mol
+    as a percentage, and an ng/L troponin as ng/mL. A value whose printed unit
+    has no defined conversion is left out rather than passed on in a unit the
+    caller would misread, except for troponin, whose abnormal flag is carried so
+    a safety gate does not silently lose it. ``extra`` is applied last, so a
+    caller-supplied value wins over the parsed one and must itself be in the
+    primary unit.
     """
     labs: dict[str, float] = {}
     if isinstance(text, str) and text.strip():
@@ -642,8 +688,16 @@ def labs_for_review(text: str, extra: dict[str, Any] | None = None) -> dict[str,
                 number = float(value["value"])
             except (TypeError, ValueError, KeyError):
                 continue
+            unit = str(value.get("unit") or "").lower() or None
+            converted = to_primary_unit(key, number, unit)
+            if converted is None:
+                if key in ("troponin_i", "troponin_t") and value.get("severity") in ("critical", "abnormal"):
+                    labs["troponin_flag"] = 1.0
+                continue
+            number = converted
+            unit = _PRIMARY_UNIT.get(key) or unit
             if key in ("troponin_i", "troponin_t"):
-                if str(value.get("unit") or "").lower() == "ng/ml":
+                if unit == "ng/ml":
                     labs["troponin"] = number
                 elif value.get("severity") in ("critical", "abnormal"):
                     labs["troponin_flag"] = 1.0

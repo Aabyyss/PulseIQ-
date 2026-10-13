@@ -252,6 +252,52 @@ def test_an_incidental_word_after_a_number_is_not_labelled_as_a_unit():
     assert values["potassium"]["unit_label"] == "mmol/l"
 
 
+def test_the_shared_converter_restates_a_value_in_the_analytes_primary_unit():
+    from backend.lab_report import to_primary_unit
+
+    assert to_primary_unit("hdl", 1.3, "mmol/l") == 50.271
+    assert to_primary_unit("creatinine", 130, "umol/l") == 1.4706
+    assert to_primary_unit("hba1c", 48, "mmol/mol") == 6.54
+    assert to_primary_unit("potassium", 5.6, "meq/l") == 5.6
+    assert to_primary_unit("hdl", 50, "mg/dl") == 50  # already primary
+    assert to_primary_unit("hdl", 50, None) == 50  # no unit stated: assume primary
+    assert to_primary_unit("ck_mb", 30, "u/l") is None  # no defined conversion
+
+
+def test_the_flattened_lab_map_converts_before_the_unit_is_lost():
+    """The gates read {analyte: number} with no unit, so it must be applied here.
+
+    A mmol/L cholesterol and a µmol/L creatinine used to reach the medication
+    gates and the risk scores as bare numbers — read as mg/dL, both.
+    """
+    from backend.lab_report import labs_for_review
+
+    labs = labs_for_review(
+        "Total cholesterol 5.5 mmol/L, HDL 1.3 mmol/L, LDL 4.2 mmol/L, triglycerides 2.1 mmol/L. "
+        "Creatinine 130 umol/L. HbA1c 48 mmol/mol. Potassium 5.6 meq/L. Troponin I 90 ng/L."
+    )
+    assert labs["total_cholesterol"] == 212.685
+    assert labs["hdl"] == 50.271
+    assert labs["ldl"] == 162.414
+    assert labs["triglycerides"] == 185.997
+    assert labs["creatinine"] == 1.4706
+    assert labs["hba1c"] == 6.54  # IFCC -> DCCT, not a factor
+    assert labs["potassium"] == 5.6  # meq/L is mmol/L
+    assert labs["troponin"] == 0.09  # ng/L -> ng/mL
+    # mg/dL input is untouched.
+    assert labs_for_review("Total cholesterol 213 mg/dL")["total_cholesterol"] == 213
+
+
+def test_a_value_in_a_unit_with_no_conversion_is_left_out_not_relabelled():
+    """CK-MB in U/L has no ng/mL factor: the gates get nothing rather than 30."""
+    from backend.lab_report import labs_for_review
+
+    assert "ck_mb" not in labs_for_review("CK-MB 30 U/L")
+    # Troponin is the exception: its abnormal flag still reaches the gate.
+    flagged = labs_for_review("Troponin I 500 pg/mL")
+    assert "troponin" not in flagged
+    assert flagged["troponin_flag"] == 1.0
+
 # ---------------------------------------------------------------------------
 # How a value is written: the comma, and the unit token beside it
 # ---------------------------------------------------------------------------
@@ -322,6 +368,20 @@ def test_a_micro_sign_before_mol_belongs_to_the_unit():
         assert value["value"] == 130.0, text
         assert value["reference"] == "53.0–115.0 umol/l", text
         assert value["status"] == "high", text  # above the band, not a critical 130 mg/dL
+
+
+def test_a_comma_written_panel_reaches_the_gates_in_primary_units():
+    """The flattened lab map has no unit, so the comma must be read before it is lost."""
+    from backend.lab_report import labs_for_review
+
+    labs = labs_for_review(
+        "Total cholesterol 5,5 mmol/L. HDL 1,3 mmol/L. LDL 3,45 mmol/L. "
+        "Creatinine 130 µmol/L."
+    )
+    assert labs["total_cholesterol"] == 212.685  # 5.5 x 38.67
+    assert labs["hdl"] == 50.271
+    assert labs["ldl"] == 133.4115
+    assert labs["creatinine"] == 1.4706
 
 
 def test_a_bare_number_is_a_value_when_it_ends_a_sentence():
