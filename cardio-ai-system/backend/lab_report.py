@@ -127,6 +127,24 @@ _ANALYTES: list[dict[str, Any]] = [
         "note": "≥150 mg/dL is borderline; ≥500 mg/dL carries acute pancreatitis risk and needs urgent attention.",
     },
     {
+        # Non-HDL is total minus HDL, so it needs its own band: graded against
+        # HDL's floor (or against the total's ceiling) a high value would read as
+        # normal, which is the opposite of the finding.
+        "key": "non_hdl",
+        "label": "Non-HDL cholesterol",
+        "aliases": [
+            r"non[\s\-]*hdl[\s\-]*c\b",
+            r"non[\s\-]*hdl\b",
+            r"non[\s\-]+high[\s\-]+density[\s\-]+lipoprotein",
+        ],
+        # The international convention sets the non-HDL threshold 30 mg/dL
+        # (0.8 mmol/L) above the LDL-C threshold, so this is LDL's band shifted:
+        # 130/190 -> 160/220 mg/dL and 3.4/4.9 -> 4.2/5.7 mmol/L.
+        "ranges": {"mg/dl": (None, 160.0, None, 220.0), "mmol/l": (None, 4.2, None, 5.7)},
+        "primary_unit": "mg/dl",
+        "note": "Non-HDL cholesterol is total minus HDL; its threshold sits 30 mg/dL (0.8 mmol/L) above the LDL-C threshold.",
+    },
+    {
         "key": "glucose",
         "label": "Glucose (fasting)",
         "aliases": [r"fasting\s+glucose\b", r"glucose[\s\(]*fasting", r"\bbs[\s\-]*f\b", r"\bfbs\b", r"\bglucose\b", r"\bblood\s+sugar\b"],
@@ -677,6 +695,7 @@ _UNIT_FACTORS: dict[str, dict[tuple[str, str], float]] = {
     "ldl": {("mmol/l", "mg/dl"): 38.67},
     "hdl": {("mmol/l", "mg/dl"): 38.67},
     "triglycerides": {("mmol/l", "mg/dl"): 88.57},
+    "non_hdl": {("mmol/l", "mg/dl"): 38.67},
     "glucose": {("mmol/l", "mg/dl"): 18.0},
     "creatinine": {("umol/l", "mg/dl"): 1 / 88.4},
     "troponin_i": {("ng/l", "ng/ml"): 0.001},

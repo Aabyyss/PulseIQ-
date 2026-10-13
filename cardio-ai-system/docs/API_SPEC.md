@@ -482,7 +482,7 @@ Forget everything this clinician taught.
 **200** `{ "ok": true, "removed": 7, "generation": 21 }`
 
 ## POST /screen-report *(auth)*
-Reference-range screening of report text — parses lab values (16
+Reference-range screening of report text — parses lab values (18
 unit-aware analytes) and text-only ECG findings, flags
 abnormal/critical results first, and explains every flag with the
 matched text and the band it was judged against. Pure read; nothing is

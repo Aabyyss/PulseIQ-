@@ -402,6 +402,36 @@ def test_a_bare_number_is_a_value_when_it_ends_a_sentence():
     # The path the FHIR export and the metformin gate take.
     assert labs_for_review("Troponin I: 0.09 ng/mL. Potassium 6.1 mmol/L. eGFR 26.")["egfr"] == 26.0
 
+# ---------------------------------------------------------------------------
+# Lipid abbreviations, and the labels they hide inside
+# ---------------------------------------------------------------------------
+
+def test_every_lipid_abbreviation_is_read_as_its_own_fraction():
+    """Chol, TG, HDL-C, LDL-C and non-HDL are the panel's written forms.
+
+    Each case asserts the value is attributed to that fraction *and to nothing
+    else*, which is the half that used to go wrong: "non-HDL" was reported as a
+    healthy HDL, and "LDL cholesterol 120" as both LDL and a total of 120.
+    """
+    cases = [
+        ("Chol: 5.5 mmol/L", "total_cholesterol", 5.5, "mmol/l"),
+        ("Total chol 5.5 mmol/L", "total_cholesterol", 5.5, "mmol/l"),
+        ("T. chol 250 mg/dL", "total_cholesterol", 250.0, "mg/dl"),
+        ("TG 2.1 mmol/L", "triglycerides", 2.1, "mmol/l"),
+        ("TGs 2.1 mmol/L", "triglycerides", 2.1, "mmol/l"),
+        ("HDL-C 1.2 mmol/L", "hdl", 1.2, "mmol/l"),
+        ("LDL-C 3.4 mmol/L", "ldl", 3.4, "mmol/l"),
+        ("non-HDL 4.2 mmol/L", "non_hdl", 4.2, "mmol/l"),
+        ("non-HDL-C 5,0 mmol/L", "non_hdl", 5.0, "mmol/l"),
+        ("nonHDL 5.0 mmol/L", "non_hdl", 5.0, "mmol/l"),
+        ("Non-HDL cholesterol 5.0 mmol/L", "non_hdl", 5.0, "mmol/l"),
+        ("non high density lipoprotein 5.0 mmol/L", "non_hdl", 5.0, "mmol/l"),
+    ]
+    for text, key, want_value, want_unit in cases:
+        found = [(v["key"], v["value"], v["unit"]) for v in screen_report_text(text)["values"]]
+        assert found == [(key, want_value, want_unit)], text
+
+
 def test_a_lipid_abbreviation_is_not_matched_inside_a_longer_word():
     """A word, not a substring: cholestasis is not a cholesterol."""
     assert [v["key"] for v in screen_report_text("cholestasis noted, triglycerides 2.1 mmol/L")["values"]] == [
@@ -427,3 +457,33 @@ def test_a_lipoprotein_cholesterol_is_not_also_read_as_total_cholesterol():
     assert {v["key"]: v["value"] for v in values} == {"ldl": 120.0, "hdl": 45.0}
 
 
+def test_non_hdl_is_graded_against_its_own_band_not_hdls():
+    """Read as HDL, a high non-HDL came back "normal" — the finding inverted.
+
+    Non-HDL cholesterol is total minus HDL, and the international convention puts
+    its threshold 30 mg/dL (0.8 mmol/L) above the LDL-C threshold, so the band
+    here is LDL's 130/190 mg/dL shifted to 160/220 (4.2/5.7 mmol/L).
+    """
+    high = screen_report_text("non-HDL-C 5.0 mmol/L")["values"]
+    assert [v["key"] for v in high] == ["non_hdl"]  # not an HDL value at all
+    assert (high[0]["status"], high[0]["reference"]) == ("high", "≤4.2 mmol/l")
+
+    statuses = {
+        text: screen_report_text(text)["values"][0]["status"]
+        for text in ("non-HDL 160 mg/dL", "non-HDL 190 mg/dL", "non-HDL 230 mg/dL")
+    }
+    assert statuses == {
+        "non-HDL 160 mg/dL": "normal",
+        "non-HDL 190 mg/dL": "high",
+        "non-HDL 230 mg/dL": "critical_high",
+    }
+
+
+def test_the_lipid_abbreviations_reach_the_gates_in_primary_units():
+    """The flattened lab map is judged in mg/dL, so the panel's short forms convert too."""
+    from backend.lab_report import labs_for_review
+
+    labs = labs_for_review("non-HDL 5.0 mmol/L. Total chol 5.5 mmol/L. TGs 2.1 mmol/L.")
+    assert labs["non_hdl"] == 193.35  # 5.0 x 38.67, the same factor as cholesterol
+    assert labs["total_cholesterol"] == 212.685
+    assert labs["triglycerides"] == 185.997
