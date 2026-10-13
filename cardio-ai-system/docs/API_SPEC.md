@@ -739,6 +739,10 @@ Rules a client must respect:
   the coefficient set and is never guessed: when it was not captured, the higher
   of the two sex-matched equations is reported, `race_captured` is false and
   `alternative` carries the other one.
+  A stated race is accepted as `race` on `/diagnose` and `/medication-review`
+  (inside `patient` on the live `analysis` frame) in any of the forms `white`,
+  `african_american`, `African-American` or `Black`; when none is recorded the
+  wording is read before the two-model fallback applies.
 - **`in_range` is part of the contract.** The equations were derived over age
   40-79, total cholesterol 130-320 mg/dL, HDL 20-100 mg/dL and systolic BP
   90-200 mmHg; outside them the number is returned with `in_range: false` and
