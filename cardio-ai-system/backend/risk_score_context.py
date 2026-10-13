@@ -53,7 +53,7 @@ from typing import Any
 
 from agents.pharmacology_agent import current_med_keys, detect_conditions
 from agents.risk_scores_agent import ascvd_score, cha2ds2_vasc, grace_score, heart_score
-from backend.lab_report import screen_report_text, troponin_ratio, vitals_from_text
+from backend.lab_report import screen_report_text, to_primary_unit, troponin_ratio, vitals_from_text
 
 # HEART's risk-factor count: diagnosed diabetes, smoking, hypertension,
 # hypercholesterolaemia, obesity, family history of coronary disease.
@@ -88,9 +88,6 @@ _ECG_DOCUMENTED = r"\b(?:ECG|EKG|electrocardiogram)\b|sinus\s+rhythm|normal\s+ca
 
 _CARDIAC_ARREST = r"\b(?:cardiac\s+arrest|arrested|asystole|pulseless\s+(?:VT|ventricular)|CPR)\b"
 
-_CREATININE_UMOL_PER_MGDL = 88.4
-# Cholesterol (total and HDL) is reported in mmol/L in much of the world.
-_CHOLESTEROL_MMOL_PER_MGDL = 38.67
 
 # Race/ethnicity, because the pooled cohort equations publish one model per
 # group. Read from the record first, then from the wording.
@@ -135,13 +132,14 @@ def _sex(patient: dict) -> str | None:
 def _creatinine_mg_dl(text: str, patient: dict) -> float | None:
     """Creatinine in mg/dL — the unit the GRACE point table is written in.
 
-    Recorded values use the analyte's primary unit (mg/dL); values parsed from
-    text keep their own unit and are converted when it is µmol/L.
+    The recorded lab map and the parsed text are both funnelled through
+    ``lab_report.to_primary_unit``, so a µmol/L value is converted rather than
+    binned as if it were mg/dL — and both routes give the same number.
     """
     recorded = patient.get("labs")
     if isinstance(recorded, dict) and recorded.get("creatinine") is not None:
         try:
-            return float(recorded["creatinine"])
+            return round(float(recorded["creatinine"]), 3)
         except (TypeError, ValueError):
             pass
     for value in screen_report_text(text).get("values", []):
@@ -151,25 +149,24 @@ def _creatinine_mg_dl(text: str, patient: dict) -> float | None:
             number = float(value["value"])
         except (TypeError, ValueError, KeyError):
             continue
-        unit = str(value.get("unit") or "").lower()
-        if unit == "umol/l":
-            return round(number / _CREATININE_UMOL_PER_MGDL, 3)
-        if unit == "mg/dl":
-            return number
+        converted = to_primary_unit("creatinine", number, str(value.get("unit") or "").lower() or None)
+        if converted is not None:
+            return round(converted, 3)
     return None
 
 
 def _lipid_mg_dl(text: str, patient: dict, key: str) -> float | None:
     """Total or HDL cholesterol in mg/dL — the unit the equation is written in.
 
-    A recorded value is already in the analyte's primary unit (mg/dL); a value
-    parsed from text keeps the unit the report printed, so mmol/L is converted
-    rather than read as if it were mg/dL.
+    The recorded lab map is already in the analyte's primary unit, and a value
+    parsed from text is converted by ``lab_report.to_primary_unit`` (one table,
+    shared with the flattened lab map the medication gates read), so a mmol/L
+    lipid is never read as if it were mg/dL whichever route it arrived by.
     """
     recorded = patient.get("labs")
     if isinstance(recorded, dict) and recorded.get(key) is not None:
         try:
-            return float(recorded[key])
+            return round(float(recorded[key]), 1)
         except (TypeError, ValueError):
             pass
     for value in screen_report_text(text).get("values", []):
@@ -179,11 +176,9 @@ def _lipid_mg_dl(text: str, patient: dict, key: str) -> float | None:
             number = float(value["value"])
         except (TypeError, ValueError, KeyError):
             continue
-        unit = str(value.get("unit") or "").lower()
-        if unit == "mmol/l":
-            return round(number * _CHOLESTEROL_MMOL_PER_MGDL, 1)
-        if unit == "mg/dl":
-            return number
+        converted = to_primary_unit(key, number, str(value.get("unit") or "").lower() or None)
+        if converted is not None:
+            return round(converted, 1)
     return None
 
 
