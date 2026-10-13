@@ -724,3 +724,81 @@ by design; a bare "troponin 0.06" without the I/T specifier is not parsed (the
 assay determines the ceiling, so guessing would change the points); and the
 annual stroke-risk percentages are cohort- and source-dependent, so they are
 labelled as published estimates rather than universal constants.
+
+## ADR-021 · Add the ASCVD Pooled Cohort Equations as the fourth deterministic score
+**Status:** Accepted (2026-10-14)
+
+ADR-020 closed the calculator gap for the *acute* encounter and for atrial
+fibrillation, and named the ASCVD 10-year risk equation as the one still missing
+because it needs the pooled cohort coefficients. It is the primary-prevention
+instrument: HEART and GRACE grade a presentation that already looks cardiac,
+whereas the pooled cohort equations estimate the risk of a *first*
+atherosclerotic event — the number a statin decision is actually thresholded on.
+
+Decision: ``agents/risk_scores_agent.py`` gains ``ascvd_score``, over the four
+published models (white men, white women, African American men, African American
+women). Each is a thirteen-term linear predictor with the guideline's group
+centering value and baseline survival: ``risk = 1 - S10^exp(sum(beta*x) - mean)``.
+Inputs are assembled in the same ``backend/risk_score_context.py`` block as the
+other three and travel in the same payloads — ``/diagnose``,
+``/medication-review`` and every live ``analysis`` frame — and through the same
+consultation card and medication-workspace breakdown.
+
+Rules that keep it honest, and the conventions it adds:
+
+- **A probability needs every input.** Age, sex, total cholesterol, HDL,
+  systolic BP, hypertension-treatment, smoking and diabetes status must all be
+  captured; otherwise ``score: null``, ``complete: false`` and the list of what
+  to supply. An unstated smoking or diabetes status is *unknown*, not "no" — and
+  because the condition vocabulary matches "smoker" inside *ex-smoker*, an
+  explicit denial ("never smoked", "non-diabetic") is read first, so an ex-smoker
+  scores as a non-smoker.
+- **Race/ethnicity selects the model and is never guessed.** The guideline
+  publishes one coefficient set per group, so the group is read from the record
+  or the wording. When it is not captured, the *higher* of the two sex-matched
+  equations is reported, the other is returned beside it in ``alternative``, and
+  ``note`` names the choice. Defaulting to one group would quietly under-estimate
+  half the patients; erring high errs towards treating. This is a convention of
+  this implementation, not of the guideline.
+- **The derived ranges are carried, not hidden.** The equations were derived over
+  age 40-79, total cholesterol 130-320 mg/dL, HDL 20-100 mg/dL and systolic BP
+  90-200 mmHg. Outside them the number is still computed, but ``in_range`` is
+  false and ``out_of_range`` names the input, so a caller deciding on treatment
+  can require ``in_range``.
+- **Every term of the sum is returned.** ``components`` carries each term's
+  coefficient, value and contribution — the SBP half that does not apply and any
+  term the group's model does not use are omitted — plus ``linear_predictor``
+  (sum, mean, baseline survival), so the arithmetic can be checked by hand the
+  way a point score's components can.
+- **Units are converted, not assumed.** Cholesterol and HDL in mmol/L are
+  multiplied by 38.67, the rule ADR-020 already set for creatinine in umol/L.
+- **It never escalates an encounter.** A ten-year probability is a chronic risk:
+  it grades the reason behind the lipid-lowering option (a moderate-intensity
+  statin at or above 7.5%, and a note saying why not below it), exactly as
+  CHA2DS2-VASc grades the anticoagulation reason. ``pathway.drivers`` stays the
+  acute instruments' business.
+
+Rejected alternatives: implementing PREVENT (the 2023 AHA equations) instead —
+noted as the successor, but the pooled cohort equations are what the published
+worked example and a reference implementation can be checked against offline;
+defaulting an unstated race to one group; reporting a risk outside the derived
+ranges without a flag; and computing the probability in the frontend (two
+implementations of a safety-critical number would drift, the ground ADR-018 and
+ADR-020 already rejected).
+
+Consequences: 13 new cases in ``backend/test_risk_scores.py`` — the guideline's
+worked example for all four groups, the unrounded values against the reference
+implementation (5.3786% white men, 6.0611% African American men), the
+incomplete-score contract, the higher-group convention, the out-of-range flag,
+the term-by-term sum, the mmol/L conversion, the treated/untreated BP branch, the
+named gap in the encounter's ``missing`` list, the statin option the threshold
+offers, the below-threshold note, and that an ungradable equation is named when a
+laboratory panel did arrive — bringing the backend suite to 172 tests. A
+``statin_primary_prevention`` entry in the curated drug table is what the
+indication resolves to.
+
+Known limits: these are the 2013 equations (ACC has since moved to PREVENT, and
+the equations' risk magnitude is no longer endorsed for current decision-making);
+the white-men example prints 5.4% here against the guideline's rounded 5.3%
+because the reference coefficient table is itself rounded; and an encounter that
+never captures a lipid panel reports ASCVD incomplete by design.
