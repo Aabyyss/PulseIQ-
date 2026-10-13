@@ -240,13 +240,35 @@ _TROP_TEXT_PATTERNS = [
 _NUMBER = r"(?<![<>])(<?\d+(?:\.\d+)?)(?!\s?%?\s*[x×])"  # avoid "5 x daily" dosing
 _NUM_RE = re.compile(_NUMBER)
 
+# The unit token printed after a value. The FIRST character must be a letter or
+# the micro sign, never a digit: a token that starts with a digit is part of the
+# *value*, and letting one through made a European decimal comma swallow the
+# unit — "HDL 1,3 mmol/L" read "3" as the token, missed the lookup table and
+# fell back to mg/dL, discarding the mmol/L printed right beside it. Digits, dots
+# and slashes stay in the continuation class so "ml/min/1.73m2" is one token, the
+# micro sign is included because units are printed with it ("µmol/L"), and the
+# optional slash group keeps a spaced "mmol / L" together; sentence punctuation
+# is trimmed by ``_normalise_unit`` rather than excluded here, because a trailing
+# period must not swallow the unit that precedes it.
+_UNIT_TOKEN_RE = re.compile(
+    r"[a-zA-Z\u00b5\u03bc/%][a-zA-Z0-9/%\u00b5\u03bc\.]*(?:\s*/\s*[a-zA-Z0-9\.]+)?"
+)
 
 def _normalise_unit(raw: str | None) -> str | None:
+    """Map a printed unit token onto the canonical unit, or ``None`` if unknown.
+
+    Running text trails the token with sentence punctuation ("... 1.3 mmol/L."),
+    and a period used to be read as part of the unit, so ``mmol/l.`` missed the
+    lookup table and the value silently fell back to the analyte's primary unit
+    — grading a mmol/L result against the mg/dL band. Punctuation is therefore
+    stripped from both ends before the lookup, and the token itself is allowed to
+    span a slash ("mmol / L", "ml/min/1.73m2").
+    """
     if not raw:
         return None
     cleaned = raw.strip().lower().replace("μ", "u").replace("µ", "u")
     cleaned = cleaned.replace("²", "2").replace(" ", "")
-    return _UNIT_ALIASES.get(cleaned)
+    return _UNIT_ALIASES.get(cleaned.strip(".,;:()[]"))
 
 
 def _compile_aliases(aliases: list[str]) -> list[re.Pattern[str]]:
@@ -313,20 +335,23 @@ def _extract_numeric(analyte: dict[str, Any], text: str, lowered: str) -> list[d
             # lab name is a prescription, not a lab result) — a real lab
             # line carries the analyte's unit or a colon/equals separator.
             after = window[: num_match.end()]
-            unit_match = re.search(r"([a-zA-Z/%\.]+)", window[num_match.end():num_match.end() + 12])
-            unit_raw = unit_match.group(1) if unit_match else None
+            unit_match = _UNIT_TOKEN_RE.search(window[num_match.end():num_match.end() + 12])
+            unit_raw = unit_match.group(0) if unit_match else None
             unit = _normalise_unit(unit_raw)
             # A printed line marks the value with a colon or equals; a spoken
             # one says "his eGFR is 26" or "a creatinine of 1.2", where the
             # number trails the sentence and has no unit token to recognise it
-            # by. Both are explicit value markers; "start aspirin 5 mg daily"
-            # has neither, which is the dose context this guard exists for.
+            # by. Both are explicit value markers.
             separator = re.search(r"[:=]|\b(?:is|are|was|were|of|at)\b", after, re.I)
             has_known_unit = unit in analyte["ranges"]
-            if not has_known_unit and not separator and not is_floor:
-                # No colon, copula or recognised unit → likely not a lab line.
-                if unit_raw is None:
-                    continue
+            # What follows a bare number is what separates a statement from a
+            # fragment: "eGFR 26." states a value, while a number with nothing
+            # after it ("start aspirin 5") is a dose. This used to fall out of
+            # the unit token matching a sentence period by accident; it is
+            # checked here so the token itself can reject punctuation.
+            trailing = window[num_match.end():].strip()
+            if not has_known_unit and not separator and not is_floor and not trailing:
+                continue
             ranges: dict[str, Band] = analyte["ranges"]
             band = ranges.get(unit or "", ranges[analyte["primary_unit"]])
             unit_label = unit or analyte["primary_unit"]

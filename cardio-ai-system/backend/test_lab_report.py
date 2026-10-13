@@ -141,3 +141,132 @@ def test_prose_values_read_aloud_are_parsed_like_a_printed_line():
 def test_a_bare_number_with_no_value_marker_is_still_ignored():
     """The incidental-number guard survives: no unit, no colon, no copula."""
     assert screen_report_text("cholesterol 40").get("values") == []
+
+
+# ---------------------------------------------------------------------------
+# Unit attribution
+# ---------------------------------------------------------------------------
+
+def test_a_sentence_final_unit_is_not_part_of_the_unit():
+    """A trailing period must not swallow the unit token that precedes it.
+
+    "Total cholesterol 5.5 mmol/L." used to read "mmol/l." as the unit, miss the
+    lookup table and fall back to mg/dL — grading a 5.5 mmol/L result against the
+    200 mg/dL band, where it looked normal.
+    """
+    result = screen_report_text("Total cholesterol: 5.5 mmol/L.")
+    value = next(v for v in result["values"] if v["key"] == "total_cholesterol")
+    assert value["unit"] == "mmol/l"
+    assert value["status"] == "high"
+    assert "5.2" in value["reference"]
+
+
+def test_a_lipid_value_keeps_its_unit_whatever_punctuation_follows_it():
+    cases = [
+        ("Total cholesterol 5.5 mmol/L, HDL 1.3 mmol/L.",
+         {"total_cholesterol": "mmol/l", "hdl": "mmol/l"}),
+        ("Total cholesterol: 5.5 mmol/L. HDL: 1.3 mmol/L.",
+         {"total_cholesterol": "mmol/l", "hdl": "mmol/l"}),
+        ("Cholesterol 5.5 mmol/L. HDL 50 mg/dL.",
+         {"total_cholesterol": "mmol/l", "hdl": "mg/dl"}),
+        ("HDL 1.3 mmol/L.",
+         {"hdl": "mmol/l"}),
+        ("LDL 3.4 mmol/L, HDL 1.0 mmol/L, triglycerides 2.1 mmol/L.",
+         {"ldl": "mmol/l", "hdl": "mmol/l", "triglycerides": "mmol/l"}),
+        ("Total cholesterol 5.5 mmol/L (fasting), HDL 1.3 mmol/L (repeat)",
+         {"total_cholesterol": "mmol/l", "hdl": "mmol/l"}),
+        ("LDL: 3.4 mmol/L. Triglycerides: 2.1 mmol/L.",
+         {"ldl": "mmol/l", "triglycerides": "mmol/l"}),
+        ("HDL 1.3 mmol / L",
+         {"hdl": "mmol/l"}),
+        ("HDL 1.3mmol/L",
+         {"hdl": "mmol/l"}),
+        ("Total cholesterol 213 mg/dL, HDL 50 mg/dL.",
+         {"total_cholesterol": "mg/dl", "hdl": "mg/dl"}),
+    ]
+    for text, expected in cases:
+        units = {v["key"]: v["unit"] for v in screen_report_text(text)["values"]}
+        for key, unit in expected.items():
+            assert units.get(key) == unit, f"{text!r} -> {key} read as {units.get(key)!r}"
+
+
+def test_an_mmol_lipid_is_not_flagged_against_the_mgdl_band():
+    """The bug had a clinical consequence, so the fix is asserted clinically.
+
+    HDL 1.3 mmol/L is 50 mg/dL: within range. Judged against the mg/dL floor of
+    40 it was reported as below reference, and the same misattribution made a
+    cholesterol of 5.5 mmol/L look normal.
+    """
+    result = screen_report_text("HDL 1.3 mmol/L. Total cholesterol 5.5 mmol/L.")
+    values = {v["key"]: v for v in result["values"]}
+    assert values["hdl"]["status"] == "normal"
+    assert values["hdl"]["reference"] == "≥1.0 mmol/l"
+    assert values["total_cholesterol"]["status"] == "high"
+    assert result["summary"]["abnormal"] == 1  # the cholesterol, not the HDL
+
+
+def test_the_unit_normaliser_ignores_punctuation_and_spacing():
+    from backend.lab_report import _normalise_unit
+
+    assert _normalise_unit("mmol/L.") == "mmol/l"
+    assert _normalise_unit("mg/dL,") == "mg/dl"
+    assert _normalise_unit("(mmol/L)") == "mmol/l"
+    assert _normalise_unit("mmol / L") == "mmol/l"
+    assert _normalise_unit("ml / min / 1.73m2.") == "ml/min/1.73m2"
+    assert _normalise_unit("µmol/L.") == "umol/l"
+    assert _normalise_unit("furlongs/fortnight") is None
+    assert _normalise_unit(None) is None
+
+
+def test_mgdl_values_are_unaffected_by_the_punctuation_rule():
+    result = screen_report_text("Total cholesterol 213 mg/dL, HDL 50 mg/dL.")
+    values = {v["key"]: v for v in result["values"]}
+    assert values["total_cholesterol"]["unit"] == "mg/dl"
+    assert values["total_cholesterol"]["status"] == "high"
+    assert values["hdl"]["unit"] == "mg/dl"
+    assert values["hdl"]["status"] == "normal"
+
+
+def test_other_analytes_at_the_end_of_a_sentence_keep_their_unit():
+    result = screen_report_text("Potassium 5.6 mmol/L. HbA1c 6.4%. eGFR 26 ml/min/1.73m2.")
+    values = {v["key"]: v for v in result["values"]}
+    assert values["potassium"]["unit"] == "mmol/l"
+    assert values["hba1c"]["unit"] == "%"
+    assert values["egfr"]["unit"] == "ml/min/1.73m2"
+
+
+def test_a_micro_sign_before_mol_belongs_to_the_unit():
+    """Printouts write µmol/L and μmol/L, not the ASCII "umol".
+
+    The token used to begin at the first ASCII letter, so "µmol/L" was read as
+    "mol/L", missed the lookup table and was judged against the mg/dL band: a
+    creatinine of 130 µmol/L came back as 130 mg/dL, a critical value three
+    orders of magnitude from the truth.
+    """
+    for text in ("Creatinine 130 µmol/L", "Creatinine 130 μmol/L"):
+        value = next(v for v in screen_report_text(text)["values"] if v["key"] == "creatinine")
+        assert value["unit"] == "umol/l", text
+        assert value["unit_label"] == "umol/l", text
+        assert value["value"] == 130.0, text
+        assert value["reference"] == "53.0–115.0 umol/l", text
+        assert value["status"] == "high", text  # above the band, not a critical 130 mg/dL
+
+
+def test_a_bare_number_is_a_value_when_it_ends_a_sentence():
+    """The dose guard's boundary, which the unit token no longer decides.
+
+    A number with nothing after it is a dose ("start aspirin 5"); one that ends
+    a sentence states a value ("eGFR 26."). The sentence period was matched as
+    the unit token by accident, which is what let the second case through, so
+    the boundary is asserted here and the renal gate keeps seeing the eGFR.
+    """
+    from backend.lab_report import labs_for_review
+
+    assert screen_report_text("cholesterol 40").get("values") == []
+    assert screen_report_text("start aspirin 5").get("values") == []
+    result = screen_report_text("eGFR 26. Potassium 6.1 mmol/L.")
+    egfr = next(v for v in result["values"] if v["key"] == "egfr")
+    assert (egfr["value"], egfr["unit"], egfr["status"]) == (26.0, "ml/min/1.73m2", "low")
+    # The path the FHIR export and the metformin gate take.
+    assert labs_for_review("Troponin I: 0.09 ng/mL. Potassium 6.1 mmol/L. eGFR 26.")["egfr"] == 26.0
+
