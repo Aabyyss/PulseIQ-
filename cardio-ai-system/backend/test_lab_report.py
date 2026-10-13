@@ -235,6 +235,23 @@ def test_other_analytes_at_the_end_of_a_sentence_keep_their_unit():
     assert values["egfr"]["unit"] == "ml/min/1.73m2"
 
 
+def test_an_unmappable_unit_names_the_band_it_was_judged_against():
+    """An unrecognised unit is never presented as if it were the primary one."""
+    result = screen_report_text("HDL 1.2 g/L. Creatinine 1.2 mmol/kL.")
+    values = {v["key"]: v for v in result["values"]}
+    assert values["hdl"]["unit"] == "mg/dl"  # the band it was judged against ...
+    assert "g/L (judged as mg/dl)" in values["hdl"]["unit_label"]  # ... and said so
+    assert values["creatinine"]["unit_label"] == "mmol/kL (judged as mg/dl)"
+
+
+def test_an_incidental_word_after_a_number_is_not_labelled_as_a_unit():
+    """The caveat stays off prose: only unit-shaped tokens get it."""
+    result = screen_report_text("Creatinine 1.2 today. Potassium is 4.0 mmol/L.")
+    values = {v["key"]: v for v in result["values"]}
+    assert "(judged as" not in values["creatinine"]["unit_label"]
+    assert values["potassium"]["unit_label"] == "mmol/l"
+
+
 # ---------------------------------------------------------------------------
 # How a value is written: the comma, and the unit token beside it
 # ---------------------------------------------------------------------------

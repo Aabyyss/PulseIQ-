@@ -15,8 +15,15 @@ Design
   (``Troponin I``, ``Trop-I``, ``hs-TnI`` …) and a numeric pattern, so a
   parsed value always points back to the exact matched text.
 - Unit-aware ranges: the same analyte in different units (mg/dL vs mmol/L,
-  ng/mL vs ng/L) gets the right reference band. A value with an unrecognised
-  unit falls back to the analyte's primary band and says so.
+  ng/mL vs ng/L) gets the right reference band, whatever punctuation follows the
+  token ("... 1.3 mmol/L." is mmol/L, not mg/dL) and however the unit is
+  printed — the micro sign of "µmol/L" belongs to the unit, not to the letters
+  after it. A value written with a decimal comma ("HDL 1,3 mmol/L") is read as
+  1.3 in the unit beside it, though a three-digit group after the comma
+  ("1,250") is left alone, being ambiguous between the two conventions. A value
+  whose printed unit cannot be mapped is judged against the analyte's primary
+  band and labelled with the unit it was actually read as, so no band is
+  assumed silently.
 - Severity ordering: ``critical`` → ``abnormal`` → ``normal``. Criticals
   (potassium 6.4, EF 25%, anterior ST elevation) always sort first.
 - Explainability: each flagged value carries ``matched_text`` (the snippet
@@ -259,6 +266,25 @@ _UNIT_TOKEN_RE = re.compile(
     r"[a-zA-Z\u00b5\u03bc/%][a-zA-Z0-9/%\u00b5\u03bc\.]*(?:\s*/\s*[a-zA-Z0-9\.]+)?"
 )
 
+# Stems that make a printed token look like a unit rather than a prose word, so
+# the "judged as" caveat is attached to "g/l" and "mmol/kL" without also
+# labelling every incidental word after a number.
+_UNIT_STEMS = ("mmol", "umol", "mg", "ng", "pg", "meq", "miu", "iu", "ml", "g", "u")
+
+
+def _clean_unit_text(raw: str | None) -> str:
+    return (raw or "").strip().strip(".,;:()[]")
+
+
+def _looks_like_unit(raw: str | None) -> bool:
+    token = _clean_unit_text(raw).lower().replace("μ", "u").replace("µ", "u")
+    if not token:
+        return False
+    if "/" in token:
+        return True
+    return token.startswith(_UNIT_STEMS)
+
+
 def _normalise_unit(raw: str | None) -> str | None:
     """Map a printed unit token onto the canonical unit, or ``None`` if unknown.
 
@@ -364,6 +390,10 @@ def _extract_numeric(analyte: dict[str, Any], text: str, lowered: str) -> list[d
             unit_label = unit or analyte["primary_unit"]
             if unit and not has_known_unit:
                 unit_label = f"{unit} (judged as {analyte['primary_unit']})"
+            elif unit is None and _looks_like_unit(unit_raw):
+                # A unit this module cannot map must not look like the primary
+                # unit: name what was printed and what it was banded against.
+                unit_label = f"{_clean_unit_text(unit_raw)} (judged as {analyte['primary_unit']})"
             status = _classify(value, below_limit, band, is_floor)
             dedupe = (value, status)
             if dedupe in seen_values:
