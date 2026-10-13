@@ -30,12 +30,14 @@ Narrative text  "chest pain going to my left arm since morning, sweating"
          ├─ detect_conditions          (recorded history ∪ the wording)
          ├─ troponin_ratio             (lab_report: value ÷ its assay ceiling)
          ├─ vitals_from_text           (lab_report: HR, BP, Killip)
+         ├─ lipids in mg/dL            (lab_report: total cholesterol, HDL; mmol/L × 38.67)
+         ├─ race / BP-treatment / smoking / diabetes  (record or wording)
          └─ ECG category + chest-pain typicality
-         → {heart, grace, cha2ds2_vasc, inputs, missing}
+         → {heart, grace, cha2ds2_vasc, ascvd, inputs, missing}
    ▼
 [5] JSON response
    { text, symptoms[], features{}, prediction, probability, risk_level,
-     risk_scores{heart, grace, cha2ds2_vasc, inputs, missing} }
+     risk_scores{heart, grace, cha2ds2_vasc, ascvd, inputs, missing} }
    + auth_store.add_screening(user_id, …) → persisted to the caller's
      owner-scoped history before the response is returned
 ```
@@ -147,7 +149,7 @@ screen (ADR-018).
    │     ├─ labs_for_review → labs{}    (lab_report: unit-aware eGFR, K+, Hb, LDL, LVEF, troponin)
    │     └─ extract_symptoms_from_text  (nlp_symptom_agent: the narrative's vocabulary)
    ├─ run_diagnosis_from_text           (same 5-stage pipeline as §1 → risk band)
-   ├─ build_risk_scores                 (risk_score_context: HEART, GRACE, CHA₂DS₂-VASc)
+   ├─ build_risk_scores                 (risk_score_context: HEART, GRACE, CHA₂DS₂-VASc, ASCVD-PCE)
    └─ review_medications                (pharmacology_agent: options, blocks, interactions)
          └─ _pathway                   (urgency from the scores, naming the driver)
    ▼
