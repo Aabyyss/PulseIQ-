@@ -460,3 +460,143 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
+
+# ---------------------------------------------------------------------------
+# ASCVD (2013 ACC/AHA Pooled Cohort Equations)
+# ---------------------------------------------------------------------------
+
+# The guideline's own worked example: 55 years, total cholesterol 213 mg/dL,
+# HDL 50 mg/dL, systolic BP 120 mmHg untreated, non-smoker, non-diabetic.
+_PCE_EXAMPLE = dict(
+    age=55, total_cholesterol_mg_dl=213, hdl_mg_dl=50, systolic_bp=120,
+    treated_for_hypertension=False, current_smoker=False, diabetes=False,
+)
+
+
+def test_the_pooled_cohort_example_matches_the_published_reference_values():
+    from agents.risk_scores_agent import ascvd_score
+
+    # Printed to one decimal, the guideline's example reads 2.1 / 3.0 / 5.3 / 6.1.
+    # White men come out at 5.4 here (5.3786): the reference implementation of the
+    # same coefficients reports 5.378606% and notes that its rounded coefficient
+    # table need not reproduce the guideline's printed 5.3 exactly.
+    expected = {
+        ("white", "female"): 2.1,
+        ("african_american", "female"): 3.0,
+        ("white", "male"): 5.4,
+        ("african_american", "male"): 6.1,
+    }
+    for (race, sex), want in expected.items():
+        got = ascvd_score(race=race, sex=sex, **_PCE_EXAMPLE)["risk_pct"]
+        assert got == want, f"{race} {sex}: {got} != {want}"
+
+
+def test_the_unrounded_risk_matches_the_reference_implementation():
+    from agents.risk_scores_agent import _ascvd_risk, _ascvd_term_values
+
+    values = _ascvd_term_values(
+        age=55, total_cholesterol_mg_dl=213, hdl_mg_dl=50, systolic_bp=120,
+        treated_for_hypertension=False, current_smoker=False, diabetes=False,
+    )
+    assert round(_ascvd_risk("aa_men", values), 4) == 6.0611
+    assert round(_ascvd_risk("white_men", values), 4) == 5.3786
+
+
+def test_an_unknown_input_leaves_the_equation_unscored_and_named():
+    from agents.risk_scores_agent import ascvd_score
+
+    incomplete = {**_PCE_EXAMPLE, "hdl_mg_dl": None}
+    scored = ascvd_score(race="white", sex="male", **incomplete)
+    assert scored["score"] is None and scored["complete"] is False
+    assert scored["missing"] == ["HDL cholesterol"]
+    assert "HDL cholesterol" in scored["note"]
+
+    # An unheard smoking/diabetes status is unknown, not "no".
+    unknown = ascvd_score(race="white", sex="male", **{**_PCE_EXAMPLE, "current_smoker": None})
+    assert unknown["score"] is None and "smoking status" in unknown["missing"]
+
+
+def test_race_not_captured_reports_the_higher_sex_matched_equation():
+    from agents.risk_scores_agent import ascvd_score
+
+    both = ascvd_score(race=None, sex="male", **_PCE_EXAMPLE)
+    assert both["risk_pct"] == 6.1 and both["group"] == "African American men"
+    assert both["race_captured"] is False
+    assert both["alternative"] == {"group": "white men", "risk_pct": 5.4}
+    assert "Race/ethnicity was not captured" in both["note"]
+
+
+def test_inputs_outside_the_derived_range_are_flagged_not_hidden():
+    from agents.risk_scores_agent import ascvd_score
+
+    young = ascvd_score(race="white", sex="male", **{**_PCE_EXAMPLE, "age": 35})
+    assert young["risk_pct"] is not None  # still computed ...
+    assert young["in_range"] is False  # ... but not presented as validated
+    assert "age 35" in young["out_of_range"][0]
+
+
+def test_every_term_of_the_sum_is_reported_with_its_coefficient():
+    from agents.risk_scores_agent import ascvd_score
+
+    scored = ascvd_score(race="white", sex="male", **_PCE_EXAMPLE)
+    terms = scored["components"]
+    assert terms["ln(age)"]["coefficient"] == 12.344
+    assert round(sum(term["contribution"] for term in terms.values()), 4) == scored["linear_predictor"]["sum"]
+    assert scored["category"] == "borderline" and scored["statin_indicated"] is True
+
+
+def test_the_encounter_assembles_the_equation_from_the_record_and_the_wording():
+    scores = build_risk_scores(
+        encounter_text="chest pain, white male, never smoked, not diabetic",
+        report_text="BP 120/80. Total cholesterol 213 mg/dL, HDL 50 mg/dL.",
+        patient={"age": "55", "sex": "Male"},
+    )
+    assert scores["ascvd"]["complete"] is True
+    assert scores["ascvd"]["risk_pct"] == 5.4
+    assert scores["ascvd"]["group"] == "white men"
+    assert scores["inputs"]["current_smoker"] is False
+    assert scores["inputs"]["diabetes_status"] is False
+
+    # mmol/L is converted, never read as if it were mg/dL.
+    converted = build_risk_scores(
+        encounter_text="white male, never smoked, not diabetic",
+        report_text="BP 120/80. Total cholesterol 5.5 mmol/L, HDL 1.3 mmol/L.",
+        patient={"age": "55", "sex": "Male"},
+    )
+    assert converted["inputs"]["total_cholesterol_mg_dl"] == 212.7
+    assert converted["inputs"]["hdl_mg_dl"] == 50.3
+
+
+def test_a_recorded_antihypertensive_selects_the_treated_blood_pressure_term():
+    scores = build_risk_scores(
+        encounter_text="white male, never smoked, not diabetic",
+        report_text="BP 120/80. Total cholesterol 213 mg/dL, HDL 50 mg/dL.",
+        patient={"age": "55", "sex": "Male", "current_medications": ["amlodipine"]},
+    )
+    assert scores["inputs"]["bp_treated"] is True
+    assert "ln(systolic BP), treated" in scores["ascvd"]["components"]
+    assert "ln(systolic BP), untreated" not in scores["ascvd"]["components"]
+
+
+def test_an_incomplete_equation_is_named_in_the_encounter_gaps():
+    scores = build_risk_scores(encounter_text="chest pain", patient={"age": "68", "sex": "Male"})
+    gaps = " | ".join(scores["missing"])
+    assert "ASCVD-PCE: total cholesterol" in gaps
+    assert "ASCVD-PCE: HDL cholesterol" in gaps
+
+
+def test_the_diagnosis_and_medication_paths_carry_the_equation():
+    diagnosis = run_diagnosis_from_text(
+        "crushing chest pain, white male, never smoked, not diabetic",
+        report_text="BP 120/80. Total cholesterol 213 mg/dL, HDL 50 mg/dL, creatinine 1.0 mg/dL, HR 80, Killip I",
+        patient={"age": "55", "sex": "Male"},
+    )
+    assert diagnosis["risk_scores"]["ascvd"]["risk_pct"] is not None
+
+    medication = run_medication_review(
+        text="crushing chest pain, white male, never smoked, not diabetic",
+        report_text="BP 120/80. Total cholesterol 213 mg/dL, HDL 50 mg/dL, creatinine 1.0 mg/dL, HR 80, Killip I",
+        patient={"age": "55", "sex": "Male"},
+    )
+    assert medication["risk_scores"]["ascvd"]["category"] in ("low", "borderline", "intermediate", "high")

@@ -231,13 +231,53 @@ export type Cha2ds2VascScore = {
   applies_to?: string;
 };
 
+// The pooled cohort equations report a probability, not points: every term of
+// the published model is returned as its own coefficient x value contribution so
+// the sum can be checked by hand.
+export type AscvdTerm = {
+  coefficient: number;
+  value: number;
+  contribution: number;
+  detail: string;
+};
+
+export type AscvdScore = {
+  name: "ASCVD-PCE";
+  score: number | null;
+  risk_pct: number | null;
+  complete: boolean;
+  category: "low" | "borderline" | "intermediate" | "high" | null;
+  statin_indicated: boolean;
+  /** Which of the four published models produced the number. */
+  group: string | null;
+  race_captured: boolean | null;
+  /** The other sex-matched model, when race/ethnicity was not captured. */
+  alternative: { group: string; risk_pct: number } | null;
+  linear_predictor: { sum: number; mean: number; baseline_survival: number } | null;
+  in_range: boolean;
+  out_of_range: string[];
+  components: Record<string, AscvdTerm>;
+  missing: string[];
+  source: string;
+  applies_to: string;
+  note: string;
+};
+
 export type RiskScores = {
   heart: HeartScore;
   grace: GraceScore;
   cha2ds2_vasc: Cha2ds2VascScore;
+  /** Absent on payloads stored before the equation was added. */
+  ascvd?: AscvdScore;
   inputs: {
     age: number | null;
     sex: string | null;
+    race?: string | null;
+    total_cholesterol_mg_dl?: number | null;
+    hdl_mg_dl?: number | null;
+    bp_treated?: boolean;
+    current_smoker?: boolean | null;
+    diabetes_status?: boolean | null;
     condition_tags: string[];
     heart_risk_factors: string[];
     established_ascvd: string[];

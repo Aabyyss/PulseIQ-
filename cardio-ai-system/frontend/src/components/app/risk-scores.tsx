@@ -1,12 +1,30 @@
 import { Badge } from "@/components/ui/badge";
-import type { RiskScoreComponent, RiskScores } from "@/lib/types";
+import type { AscvdScore, RiskScoreComponent, RiskScores } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 const BAND_VARIANT = {
   low: "ok",
+  borderline: "warn",
   intermediate: "warn",
   high: "destructive"
 } as const;
+
+/** The pooled cohort equations read a probability, not a point total. */
+function ascvdLine(score: AscvdScore) {
+  return {
+    label: "ASCVD 10-year",
+    total: score.risk_pct !== null ? `${score.risk_pct}%` : `${score.missing.length} input(s) missing`,
+    band: score.category,
+    extra:
+      score.risk_pct !== null && score.group
+        ? `${score.group} equation${score.race_captured === false ? " (higher of the two sex-matched models)" : ""}`
+        : undefined,
+    missing: score.missing,
+    complete: score.complete,
+    components: score.components,
+    source: score.source
+  };
+}
 
 /** One score's one-line reading: total and band, or what it is still missing. */
 function scoreLine(
@@ -52,7 +70,8 @@ export function RiskScoresStrip({ scores, className }: { scores?: RiskScores | n
       complete: stroke.complete,
       components: stroke.components,
       source: stroke.source
-    }
+    },
+    ...(scores.ascvd ? [ascvdLine(scores.ascvd)] : [])
   ];
 
   return (
@@ -130,6 +149,55 @@ export function RiskScoresDetail({ scores }: { scores?: RiskScores | null }) {
           <p className="mt-1 text-2xs italic text-faint">{score.source}</p>
         </div>
       ))}
+      {scores.ascvd ? <AscvdBreakdown score={scores.ascvd} /> : null}
+    </div>
+  );
+}
+
+/** ASCVD's terms, so the published sum can be checked by hand. */
+function AscvdBreakdown({ score }: { score: AscvdScore }) {
+  return (
+    <div>
+      <p className="label">
+        ASCVD 10-year {score.risk_pct !== null ? `${score.risk_pct}%` : "—"}
+        {score.category ? ` (${score.category})` : ""}
+      </p>
+      {score.group ? (
+        <p className="mt-0.5 text-2xs text-muted">
+          {score.group} equation
+          {score.race_captured === false && score.alternative
+            ? ` — the other sex-matched model gives ${score.alternative.risk_pct}%`
+            : ""}
+        </p>
+      ) : null}
+      <ul className="mt-1.5 space-y-1">
+        {Object.entries(score.components).map(([name, term]) => (
+          <li key={name} className="flex items-baseline gap-2 text-2xs">
+            <span className="w-16 shrink-0 font-medium text-fg">{term.contribution}</span>
+            <span className="text-muted">
+              {name} x {term.coefficient} — {term.detail}
+            </span>
+          </li>
+        ))}
+      </ul>
+      {score.linear_predictor ? (
+        <p className="mt-1 text-2xs text-muted">
+          Linear predictor: {score.linear_predictor.sum} - {score.linear_predictor.mean} ={" "}
+          {Math.round((score.linear_predictor.sum - score.linear_predictor.mean) * 10000) / 10000}
+        </p>
+      ) : null}
+      {score.statin_indicated ? (
+        <p className="mt-1 text-2xs text-muted">At or above the 7.5% threshold where a statin is indicated.</p>
+      ) : null}
+      {score.out_of_range.length ? (
+        <p className="mt-1 text-2xs italic text-faint">
+          Outside the validated range ({score.out_of_range.join(", ")}) — reported with that caveat.
+        </p>
+      ) : null}
+      {score.missing.length ? (
+        <p className="mt-1 text-2xs italic text-faint">Not scored (needs {score.missing.join(", ")}).</p>
+      ) : null}
+      <p className="mt-1 text-2xs italic text-faint">{score.source}</p>
     </div>
   );
 }

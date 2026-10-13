@@ -2,16 +2,17 @@
 
 Why this exists
 ---------------
-``agents/risk_scores_agent`` holds the arithmetic of HEART, GRACE and
-CHA₂DS₂-VASc, but nothing there knows where an encounter keeps its facts. Two
-layers consume those scores — the diagnosis pipeline (which reports them beside
+``agents/risk_scores_agent`` holds the arithmetic of HEART, GRACE, CHA₂DS₂-VASc
+and the ASCVD Pooled Cohort Equations, but nothing there knows where an
+encounter keeps its facts. Two layers consume those scores — the diagnosis pipeline (which reports them beside
 the model's band) and the medication safety review (whose urgency used to be
 hand-derived) — and if each assembled the inputs itself they would eventually
 score the same patient differently. That is the failure mode
 ``backend/encounter_context`` already exists to prevent for the medication
 rules, so the score inputs are assembled here, once:
 
-- **age / sex** from the visit details.
+- **age / sex** from the visit details, and **race/ethnicity** because the
+  pooled cohort equations publish a different model for each.
 - **condition tags** from the recorded history *and* the wording itself, using
   the same condition vocabulary the medication layer uses.
 - **troponin** as a multiple of its assay ceiling, unit-aware
@@ -20,6 +21,12 @@ rules, so the score inputs are assembled here, once:
   ("BP 90/60, HR 110, Killip II") or supplied explicitly.
 - **creatinine in mg/dL** for GRACE — µmol/L is converted, never binned as if
   it were mg/dL.
+- **total cholesterol, HDL cholesterol and systolic blood pressure** in mg/dL /
+  mmHg for ASCVD — mmol/L and µmol/L are converted, never fed in as if they
+  were the equation's units.
+- **hypertension treatment, smoking and diabetes status** for ASCVD. "Treated"
+  means a BP-lowering drug is recorded; a status the encounter never touched is
+  reported as missing, not as "no".
 - **ECG category** from the documented ECG statements, which is what HEART's
   ECG item and GRACE's ST-deviation item need.
 - **chest-pain typicality** for HEART's History item: derived from the captured
@@ -44,8 +51,8 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from agents.pharmacology_agent import detect_conditions
-from agents.risk_scores_agent import cha2ds2_vasc, grace_score, heart_score
+from agents.pharmacology_agent import current_med_keys, detect_conditions
+from agents.risk_scores_agent import ascvd_score, cha2ds2_vasc, grace_score, heart_score
 from backend.lab_report import screen_report_text, troponin_ratio, vitals_from_text
 
 # HEART's risk-factor count: diagnosed diabetes, smoking, hypertension,
@@ -82,6 +89,30 @@ _ECG_DOCUMENTED = r"\b(?:ECG|EKG|electrocardiogram)\b|sinus\s+rhythm|normal\s+ca
 _CARDIAC_ARREST = r"\b(?:cardiac\s+arrest|arrested|asystole|pulseless\s+(?:VT|ventricular)|CPR)\b"
 
 _CREATININE_UMOL_PER_MGDL = 88.4
+# Cholesterol (total and HDL) is reported in mmol/L in much of the world.
+_CHOLESTEROL_MMOL_PER_MGDL = 38.67
+
+# Race/ethnicity, because the pooled cohort equations publish one model per
+# group. Read from the record first, then from the wording.
+_AFRICAN_AMERICAN = r"\b(?:african[\s-]?american|afro[\s-]?caribbean|black)\b"
+_WHITE = r"\b(?:white|caucasian|european)\b"
+
+# Negative statements, so an explicitly documented absence is scored as absent
+# instead of being left missing. An ex-smoker is not a current smoker.
+_NEVER_SMOKED = (
+    r"\b(?:never\s+smok\w*|non[\s-]?smoker|does\s*n[o']?t\s+smoke|denies\s+smok\w*|"
+    r"ex[\s-]?smoker|former\s+smoker|quit\s+smoking|stopped\s+smoking|no\s+tobacco)\b"
+)
+_NOT_DIABETIC = (
+    r"\b(?:non[\s-]?diabetic|not\s+diabetic|no\s+diabetes|denies\s+diabetes|without\s+diabetes|normoglyc\w*)\b"
+)
+_NO_ANTIHYPERTENSIVE = (
+    r"\b(?:not\s+on\s+any\s+(?:blood\s+pressure|bp)[\s-]?\w*|no\s+antihypertensive\w*|"
+    r"not\s+on\s+antihypertensive\w*|never\s+on\s+(?:blood\s+pressure|bp)[\s-]?\w*)\b"
+)
+# Drug classes that count as BP-lowering treatment for the equation's "treated"
+# systolic blood pressure term.
+_ANTIHYPERTENSIVE_CLASSES = ("ace_inhibitor", "arb", "ccb", "beta_blocker", "loop_diuretic", "mra")
 
 
 def _age(patient: dict) -> int | None:
@@ -128,6 +159,96 @@ def _creatinine_mg_dl(text: str, patient: dict) -> float | None:
     return None
 
 
+def _lipid_mg_dl(text: str, patient: dict, key: str) -> float | None:
+    """Total or HDL cholesterol in mg/dL — the unit the equation is written in.
+
+    A recorded value is already in the analyte's primary unit (mg/dL); a value
+    parsed from text keeps the unit the report printed, so mmol/L is converted
+    rather than read as if it were mg/dL.
+    """
+    recorded = patient.get("labs")
+    if isinstance(recorded, dict) and recorded.get(key) is not None:
+        try:
+            return float(recorded[key])
+        except (TypeError, ValueError):
+            pass
+    for value in screen_report_text(text).get("values", []):
+        if str(value.get("key", "")) != key:
+            continue
+        try:
+            number = float(value["value"])
+        except (TypeError, ValueError, KeyError):
+            continue
+        unit = str(value.get("unit") or "").lower()
+        if unit == "mmol/l":
+            return round(number * _CHOLESTEROL_MMOL_PER_MGDL, 1)
+        if unit == "mg/dl":
+            return number
+    return None
+
+
+def _race(patient: dict, narrative: str) -> str | None:
+    """The equation group's race/ethnicity term: ``"white"``, ``"african_american"`` or unknown.
+
+    Read from the record first (a stated race is a fact about the patient), then
+    from the wording, because the pooled cohort equations publish a separate
+    coefficient set per group and picking one silently is what the score refuses
+    to do.
+    """
+    recorded = str(patient.get("race") or patient.get("ethnicity") or "").strip()
+    haystack = f"{recorded}\n{narrative}" if (recorded or narrative) else ""
+    if re.search(_AFRICAN_AMERICAN, haystack, re.I):
+        return "african_american"
+    if re.search(_WHITE, haystack, re.I):
+        return "white"
+    return None
+
+
+def _smoker(tags: list[str], narrative: str) -> bool | None:
+    """Current smoker: an explicit denial beats the condition tag.
+
+    The condition vocabulary matches ``smoker`` inside *ex-smoker* and *non-smoker*
+    too, so the documented absence is read first — an ex-smoker scores as a
+    non-smoker. Nothing said at all stays unknown.
+    """
+    if re.search(_NEVER_SMOKED, narrative, re.I):
+        return False
+    if "smoking" in tags:
+        return True
+    return None
+
+
+def _diabetes_status(tags: list[str], narrative: str) -> bool | None:
+    """Diabetes for the equation: recorded, explicitly denied, or unknown."""
+    if re.search(_NOT_DIABETIC, narrative, re.I):
+        return False
+    if "diabetes" in tags:
+        return True
+    return None
+
+
+def _bp_treated(context: dict, narrative: str, tags: list[str]) -> bool:
+    """The equation's *treated* systolic BP item: is the patient on BP-lowering drugs?
+
+    Convention of this implementation, stated as such: treatment is true when a
+    BP-lowering drug is recorded (or explicitly supplied), and false when the
+    encounter records none. ``True`` selects the treated-SBP coefficients, which
+    are the higher ones, so an unknown medication list biases towards a higher
+    estimate rather than a falsely low one.
+    """
+    explicit = context.get("bp_treated")
+    if isinstance(explicit, bool):
+        return explicit
+    vitals = context.get("vitals")
+    if isinstance(vitals, dict) and isinstance(vitals.get("bp_treated"), bool):
+        return bool(vitals["bp_treated"])
+    if set(_ANTIHYPERTENSIVE_CLASSES) & set(current_med_keys(context.get("current_medications"))):
+        return True
+    if re.search(_NO_ANTIHYPERTENSIVE, narrative, re.I):
+        return False
+    return False
+
+
 def _history_reading(narrative: str, symptoms: list[str]) -> tuple[str | None, list[str], str]:
     """HEART's History item: how typical the captured chest pain is.
 
@@ -172,7 +293,7 @@ def build_risk_scores(
     patient: dict | None = None,
     symptoms: list[str] | None = None,
 ) -> dict[str, Any]:
-    """HEART, GRACE and CHA₂DS₂-VASc for one encounter, with their inputs."""
+    """HEART, GRACE, CHA₂DS₂-VASc and ASCVD for one encounter, with their inputs."""
     context = patient if isinstance(patient, dict) else {}
     narrative = f"{encounter_text or ''}\n{report_text or ''}".strip()
 
@@ -249,8 +370,30 @@ def build_risk_scores(
         else "atrial fibrillation (not captured in this encounter)"
     )
 
+    # ASCVD is the primary-prevention equation: it reads the lipid panel and the
+    # BP-treatment, smoking and diabetes status alongside what the other scores
+    # already use, and reports a ten-year probability instead of a point total.
+    race = _race(context, narrative)
+    total_cholesterol = _lipid_mg_dl(narrative, context, "total_cholesterol")
+    hdl = _lipid_mg_dl(narrative, context, "hdl")
+    bp_treated = _bp_treated(context, narrative, tags)
+    current_smoker = _smoker(tags, narrative)
+    diabetes_status = _diabetes_status(tags, narrative)
+
+    ascvd = ascvd_score(
+        age=age,
+        sex=sex,
+        race=race,
+        total_cholesterol_mg_dl=total_cholesterol,
+        hdl_mg_dl=hdl,
+        systolic_bp=vitals.get("systolic_bp"),
+        treated_for_hypertension=bp_treated,
+        current_smoker=current_smoker,
+        diabetes=diabetes_status,
+    )
+
     missing: list[str] = []
-    for score in (heart, grace, stroke_risk):
+    for score in (heart, grace, stroke_risk, ascvd):
         for gap in score["missing"]:
             label = f"{score['name']}: {gap}"
             if label not in missing:
@@ -260,9 +403,16 @@ def build_risk_scores(
         "heart": heart,
         "grace": grace,
         "cha2ds2_vasc": stroke_risk,
+        "ascvd": ascvd,
         "inputs": {
             "age": age,
             "sex": sex,
+            "race": race,
+            "total_cholesterol_mg_dl": total_cholesterol,
+            "hdl_mg_dl": hdl,
+            "bp_treated": bp_treated,
+            "current_smoker": current_smoker,
+            "diabetes_status": diabetes_status,
             "condition_tags": tags,
             "heart_risk_factors": risk_factors,
             "established_ascvd": established,

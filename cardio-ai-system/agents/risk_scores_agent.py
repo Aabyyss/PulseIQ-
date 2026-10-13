@@ -1,4 +1,4 @@
-"""Deterministic cardiac risk scores: HEART, GRACE and CHA₂DS₂-VASc.
+"""Deterministic cardiac risk scores: HEART, GRACE, CHA₂DS₂-VASc, ASCVD.
 
 Why this module exists
 ----------------------
@@ -8,7 +8,7 @@ reported a model probability band. Both are defensible, but neither is a
 *score*: a clinician cannot check the reasoning against a published instrument,
 and two layers can disagree about the same patient.
 
-These three scores are pure arithmetic over captured facts — no model, no LLM,
+These four scores are pure arithmetic over captured facts — no model, no LLM,
 no randomness — so the same input always yields the same number, and every point
 can be traced to the fact that produced it.
 
@@ -21,7 +21,9 @@ What is deliberately *not* here
 - **No prescribing.** CHA₂DS₂-VASc carries the stroke risk and the conventional
   anticoagulation tier, never an order.
 - **No diagnosis.** HEART and GRACE estimate the risk of a cardiac event in a
-  patient whose presentation already suggests one; they do not diagnose.
+  patient whose presentation already suggests one; ASCVD estimates the ten-year
+  risk of a first event in a patient who has *not* had one; none of them
+  diagnose.
 
 Sources (implemented literally from these):
 - HEART: Backus et al. 2008; component definitions and 6-week MACE bands as
@@ -33,10 +35,16 @@ Sources (implemented literally from these):
   (<109 low, 109–140 intermediate, >140 high) as used in ACS guidance.
 - CHA₂DS₂-VASc: Lip et al. 2010; values and annual stroke-risk table as
   summarised at https://www.mdcalc.com/calc/801/cha2ds2-vasc-score-atrial-fibrillation-stroke-risk
+- ASCVD (2013 ACC/AHA Pooled Cohort Equations): Goff et al., Circulation
+  2014;129(25 Suppl 2):S49 — coefficients, group centering values and baseline
+  survival as carried by the reference implementation in the ``PooledCohort`` R
+  package (https://github.com/cran/PooledCohort, ``R/predict_risk.R``), whose
+  own worked example reproduces the values asserted in the tests here.
 """
 
 from __future__ import annotations
 
+import math
 from typing import Any
 
 # ---------------------------------------------------------------------------
@@ -404,4 +412,332 @@ def cha2ds2_vasc(
             "Female sex is a modifier: the tiers are 0 (men) / 1 (women) none, "
             "1 / 2 consider, >=2 / >=3 recommended - the decision stays clinical."
         ),
+    }
+
+
+# ---------------------------------------------------------------------------
+# ASCVD (2013 ACC/AHA Pooled Cohort Equations, 10-year risk)
+# ---------------------------------------------------------------------------
+
+# Four models, one per sex and race/ethnicity group, over the same thirteen
+# terms. A term the published table leaves out of a model has coefficient zero.
+ASCVD_TERMS = (
+    "ln_age", "ln_age_squared", "ln_total_cholesterol", "ln_age_x_ln_total_cholesterol",
+    "ln_hdl", "ln_age_x_ln_hdl", "ln_treated_sbp", "ln_age_x_ln_treated_sbp",
+    "ln_untreated_sbp", "ln_age_x_ln_untreated_sbp", "current_smoker", "ln_age_x_smoker", "diabetes",
+)
+
+# Risk is 1 - S10^exp(sum(beta * x) - mean). The guideline publishes a single
+# centering value per group, not a mean per term, so that is what is stored.
+ASCVD_GROUPS: dict[str, dict[str, Any]] = {
+    "white_men": {
+        "label": "white men",
+        "mean": 61.1816,
+        "baseline_survival": 0.91436,
+        "betas": (12.344, 0.0, 11.853, -2.664, -7.990, 1.769, 1.797, 0.0, 1.764, 0.0, 7.837, -1.795, 0.658),
+    },
+    "white_women": {
+        "label": "white women",
+        "mean": -29.1817,
+        "baseline_survival": 0.96652,
+        "betas": (-29.799, 4.884, 13.540, -3.114, -13.578, 3.149, 2.019, 0.0, 1.957, 0.0, 7.574, -1.665, 0.661),
+    },
+    "aa_men": {
+        "label": "African American men",
+        "mean": 19.5425,
+        "baseline_survival": 0.89536,
+        "betas": (2.469, 0.0, 0.302, 0.0, -0.307, 0.0, 1.916, 0.0, 1.809, 0.0, 0.549, 0.0, 0.645),
+    },
+    "aa_women": {
+        "label": "African American women",
+        "mean": 86.6081,
+        "baseline_survival": 0.95334,
+        "betas": (17.1141, 0.0, 0.9396, 0.0, -18.9196, 4.4748, 29.2907, -6.4321, 27.8197, -6.0873, 0.6908, 0.0, 0.8738),
+    },
+}
+
+ASCVD_SEX_GROUPS: dict[str, tuple[str, str]] = {
+    "male": ("white_men", "aa_men"),
+    "female": ("white_women", "aa_women"),
+}
+ASCVD_RACE_GROUPS: dict[str, dict[str, str]] = {
+    "white": {"male": "white_men", "female": "white_women"},
+    "african_american": {"male": "aa_men", "female": "aa_women"},
+}
+
+# The ranges the equations were derived and validated over. Outside them the
+# arithmetic still runs, but the reading is flagged rather than trusted.
+ASCVD_VALID_RANGES: dict[str, tuple[float, float]] = {
+    "age": (40, 79),
+    "total_cholesterol_mg_dl": (130, 320),
+    "hdl_mg_dl": (20, 100),
+    "systolic_bp": (90, 200),
+}
+
+# Clinical 10-year risk categories (ACC/AHA). Banded on the reported value, so
+# the category always agrees with the number on screen.
+_ASCVD_CATEGORY_CUTOFFS = ((5.0, "low"), (7.5, "borderline"), (20.0, "intermediate"), (float("inf"), "high"))
+ASCVD_REPORTING_PRECISION = 1
+ASCVD_STATIN_THRESHOLD = 7.5  # intermediate and above: a statin is indicated
+
+ASCVD_GROUP_LABELS = {key: spec["label"] for key, spec in ASCVD_GROUPS.items()}
+
+ASCVD_SOURCE = (
+    "2013 ACC/AHA Pooled Cohort Equations (Goff et al., Circulation 2014) — 10-year risk of a "
+    "first atherosclerotic cardiovascular event; coefficients, group centering value and "
+    "baseline survival as implemented by the reference PooledCohort R package."
+)
+
+_ASCVD_TERM_LABELS = {
+    "ln_age": "ln(age)",
+    "ln_age_squared": "ln(age) squared",
+    "ln_total_cholesterol": "ln(total cholesterol)",
+    "ln_age_x_ln_total_cholesterol": "ln(age) x ln(total cholesterol)",
+    "ln_hdl": "ln(HDL)",
+    "ln_age_x_ln_hdl": "ln(age) x ln(HDL)",
+    "ln_treated_sbp": "ln(systolic BP), treated",
+    "ln_age_x_ln_treated_sbp": "ln(age) x ln(systolic BP), treated",
+    "ln_untreated_sbp": "ln(systolic BP), untreated",
+    "ln_age_x_ln_untreated_sbp": "ln(age) x ln(systolic BP), untreated",
+    "current_smoker": "current smoker",
+    "ln_age_x_smoker": "ln(age) x current smoker",
+    "diabetes": "diabetes",
+}
+
+
+def _ascvd_term_values(
+    *,
+    age: int,
+    total_cholesterol_mg_dl: float,
+    hdl_mg_dl: float,
+    systolic_bp: float,
+    treated_for_hypertension: bool,
+    current_smoker: bool,
+    diabetes: bool,
+) -> dict[str, float]:
+    """The thirteen transformed terms, with the unused SBP half left at zero."""
+    ln_age = math.log(age)
+    ln_total = math.log(total_cholesterol_mg_dl)
+    ln_hdl = math.log(hdl_mg_dl)
+    ln_sbp = math.log(systolic_bp)
+    values = {term: 0.0 for term in ASCVD_TERMS}
+    values["ln_age"] = ln_age
+    values["ln_age_squared"] = ln_age ** 2
+    values["ln_total_cholesterol"] = ln_total
+    values["ln_age_x_ln_total_cholesterol"] = ln_age * ln_total
+    values["ln_hdl"] = ln_hdl
+    values["ln_age_x_ln_hdl"] = ln_age * ln_hdl
+    if treated_for_hypertension:
+        values["ln_treated_sbp"] = ln_sbp
+        values["ln_age_x_ln_treated_sbp"] = ln_age * ln_sbp
+    else:
+        values["ln_untreated_sbp"] = ln_sbp
+        values["ln_age_x_ln_untreated_sbp"] = ln_age * ln_sbp
+    if current_smoker:
+        values["current_smoker"] = 1.0
+        values["ln_age_x_smoker"] = ln_age
+    if diabetes:
+        values["diabetes"] = 1.0
+    return values
+
+
+def _ascvd_linear_predictor(group: str, values: dict[str, float]) -> float:
+    """sum(beta * x) for one group — the published linear predictor, before centering."""
+    return sum(beta * values[term] for term, beta in zip(ASCVD_TERMS, ASCVD_GROUPS[group]["betas"]))
+
+
+def _ascvd_risk(group: str, values: dict[str, float]) -> float:
+    """Unrounded 10-year risk in percent for one group's equation."""
+    spec = ASCVD_GROUPS[group]
+    return 100.0 * (1.0 - spec["baseline_survival"] ** math.exp(_ascvd_linear_predictor(group, values) - spec["mean"]))
+
+
+def _ascvd_category(risk_pct: float) -> str:
+    return _band_from_cutoffs(risk_pct, list(_ASCVD_CATEGORY_CUTOFFS))
+
+
+def _ascvd_components(group: str, values: dict[str, float], *, age, total_cholesterol_mg_dl, hdl_mg_dl,
+                      systolic_bp, treated_for_hypertension, current_smoker, diabetes) -> dict[str, dict[str, Any]]:
+    """Every term's contribution, so the sum can be checked by hand."""
+    details = {
+        "ln_age": f"ln({age}) = {values['ln_age']:.4f}",
+        "ln_age_squared": f"ln({age}) squared = {values['ln_age_squared']:.4f}",
+        "ln_total_cholesterol": f"ln({total_cholesterol_mg_dl:g} mg/dL) = {values['ln_total_cholesterol']:.4f}",
+        "ln_age_x_ln_total_cholesterol": f"{values['ln_age']:.4f} x {values['ln_total_cholesterol']:.4f}",
+        "ln_hdl": f"ln({hdl_mg_dl:g} mg/dL) = {values['ln_hdl']:.4f}",
+        "ln_age_x_ln_hdl": f"{values['ln_age']:.4f} x {values['ln_hdl']:.4f}",
+        "ln_treated_sbp": f"on treatment, ln({systolic_bp:g} mmHg) = {values['ln_treated_sbp']:.4f}",
+        "ln_age_x_ln_treated_sbp": f"{values['ln_age']:.4f} x {values['ln_treated_sbp']:.4f}",
+        "ln_untreated_sbp": f"not on treatment, ln({systolic_bp:g} mmHg) = {values['ln_untreated_sbp']:.4f}",
+        "ln_age_x_ln_untreated_sbp": f"{values['ln_age']:.4f} x {values['ln_untreated_sbp']:.4f}",
+        "current_smoker": "current smoker" if current_smoker else "not a current smoker",
+        "ln_age_x_smoker": f"ln({age}) = {values['ln_age_x_smoker']:.4f}" if current_smoker else "not a current smoker",
+        "diabetes": "diabetes" if diabetes else "no diabetes",
+    }
+    # The SBP half that does not apply is not shown at all, and neither is a term
+    # this group's model does not use — the components are the sum as published.
+    untaken = (
+        ("ln_untreated_sbp", "ln_age_x_ln_untreated_sbp") if treated_for_hypertension
+        else ("ln_treated_sbp", "ln_age_x_ln_treated_sbp")
+    )
+    betas = dict(zip(ASCVD_TERMS, ASCVD_GROUPS[group]["betas"]))
+    components: dict[str, dict[str, Any]] = {}
+    for term in ASCVD_TERMS:
+        beta = betas[term]
+        value = values[term]
+        if beta == 0.0 or term in untaken:
+            continue
+        components[_ASCVD_TERM_LABELS[term]] = {
+            "coefficient": beta,
+            "value": round(value, 4),
+            "contribution": round(beta * value, 4),
+            "detail": details[term],
+        }
+    return components
+
+
+def ascvd_score(
+    *,
+    age: int | None,
+    sex: str | None,
+    race: str | None,
+    total_cholesterol_mg_dl: float | None,
+    hdl_mg_dl: float | None,
+    systolic_bp: float | None,
+    treated_for_hypertension: bool | None,
+    current_smoker: bool | None,
+    diabetes: bool | None,
+) -> dict[str, Any]:
+    """Ten-year ASCVD risk (percent) from the 2013 ACC/AHA Pooled Cohort Equations.
+
+    This is the *primary* prevention instrument: it estimates the risk of a
+    first atherosclerotic event and is reported even for a patient who already
+    has disease, but it is only a treatment-threshold reading — HEART and GRACE
+    are what grade an acute presentation.
+
+    ``race`` is ``"white"`` or ``"african_american"``, because the guideline
+    publishes a separate equation for each. Two conventions, stated plainly
+    because they are choices of this implementation and not of the guideline:
+
+    - **No race captured means the higher of the two sex-matched equations is
+      reported**, with the other one returned beside it in ``alternative``. A
+      default to one group would quietly under-estimate half the patients; the
+      conservative read at least errs towards treating.
+    - **Inputs outside the validated ranges are reported, not hidden.**
+      ``out_of_range`` names them and ``in_range`` is false; a caller deciding
+      on treatment should require ``in_range``.
+
+    ``score`` is ``None`` whenever an input is missing — including an explicitly
+    unknown smoking or diabetes status, which is not the same as "no".
+    """
+    labels = {
+        "age": "age",
+        "sex": "sex",
+        "total_cholesterol_mg_dl": "total cholesterol",
+        "hdl_mg_dl": "HDL cholesterol",
+        "systolic_bp": "systolic blood pressure",
+        "treated_for_hypertension": "hypertension treatment status",
+        "current_smoker": "smoking status",
+        "diabetes": "diabetes status",
+    }
+    given = {
+        "age": age,
+        "sex": sex,
+        "total_cholesterol_mg_dl": total_cholesterol_mg_dl,
+        "hdl_mg_dl": hdl_mg_dl,
+        "systolic_bp": systolic_bp,
+        "treated_for_hypertension": treated_for_hypertension,
+        "current_smoker": current_smoker,
+        "diabetes": diabetes,
+    }
+    missing = [labels[name] for name, value in given.items() if value is None]
+
+    sex_key = (sex or "").strip().lower()
+    candidates: tuple[str, ...] = ()
+    if sex_key in ASCVD_SEX_GROUPS:
+        race_key = (race or "").strip().lower()
+        single = ASCVD_RACE_GROUPS.get(race_key, {}).get(sex_key)
+        candidates = (single,) if single else ASCVD_SEX_GROUPS[sex_key]
+
+    out_of_range = [
+        f"{name.replace('_mg_dl', '').replace('_', ' ')} {value:g}" if isinstance(value, (int, float)) else name
+        for name, (low, high) in ASCVD_VALID_RANGES.items()
+        for value in [given.get(name)]
+        if isinstance(value, (int, float)) and not low <= value <= high
+    ]
+
+    reading: dict[str, Any] | None = None
+    components: dict[str, dict[str, Any]] = {}
+    if not missing:
+        values = _ascvd_term_values(
+            age=int(age),
+            total_cholesterol_mg_dl=float(total_cholesterol_mg_dl),
+            hdl_mg_dl=float(hdl_mg_dl),
+            systolic_bp=float(systolic_bp),
+            treated_for_hypertension=bool(treated_for_hypertension),
+            current_smoker=bool(current_smoker),
+            diabetes=bool(diabetes),
+        )
+        risks = [(group, _ascvd_risk(group, values)) for group in candidates]
+        chosen_group, chosen_risk = max(risks, key=lambda item: item[1])
+        others = [
+            {"group": ASCVD_GROUPS[group]["label"], "risk_pct": round(risk, ASCVD_REPORTING_PRECISION)}
+            for group, risk in risks if group != chosen_group
+        ]
+        components = _ascvd_components(
+            chosen_group, values,
+            age=age, total_cholesterol_mg_dl=total_cholesterol_mg_dl, hdl_mg_dl=hdl_mg_dl,
+            systolic_bp=systolic_bp, treated_for_hypertension=treated_for_hypertension,
+            current_smoker=current_smoker, diabetes=diabetes,
+        )
+        spec = ASCVD_GROUPS[chosen_group]
+        reading = {
+            "group": spec["label"],
+            "race_captured": len(candidates) == 1,
+            "alternative": others[0] if others else None,
+            "risk_pct": round(chosen_risk, ASCVD_REPORTING_PRECISION),
+            "linear_predictor": {
+                "sum": round(_ascvd_linear_predictor(chosen_group, values), 4),
+                "mean": spec["mean"],
+                "baseline_survival": spec["baseline_survival"],
+            },
+        }
+
+    complete = not missing
+    risk_pct = reading["risk_pct"] if reading else None
+
+    if not complete:
+        note = "Risk requires every input: " + ", ".join(missing) + "."
+    elif out_of_range:
+        note = (
+            "Outside the range the equations were derived over "
+            f"({', '.join(out_of_range)}); reported with that caveat, not as a validated estimate."
+        )
+    elif not reading["race_captured"]:
+        note = (
+            "Race/ethnicity was not captured, so the higher of the two sex-matched equations is "
+            f"shown and the other is reported as {reading['alternative']['group']} "
+            f"({reading['alternative']['risk_pct']}%)."
+        )
+    else:
+        note = "Risk category is the conventional ACC/AHA reading of the reported value."
+
+    return {
+        "name": "ASCVD-PCE",
+        "score": risk_pct,
+        "risk_pct": risk_pct,
+        "complete": complete,
+        "category": _ascvd_category(risk_pct) if risk_pct is not None else None,
+        "statin_indicated": bool(risk_pct is not None and risk_pct >= ASCVD_STATIN_THRESHOLD),
+        "group": reading["group"] if reading else None,
+        "race_captured": reading["race_captured"] if reading else None,
+        "alternative": reading["alternative"] if reading else None,
+        "linear_predictor": reading["linear_predictor"] if reading else None,
+        "in_range": not out_of_range,
+        "out_of_range": out_of_range,
+        "components": components,
+        "missing": missing,
+        "source": ASCVD_SOURCE,
+        "applies_to": "primary prevention (10-year risk of a first ASCVD event)",
+        "note": note,
     }
