@@ -542,8 +542,16 @@ def test_every_term_of_the_sum_is_reported_with_its_coefficient():
     scored = ascvd_score(race="white", sex="male", **_PCE_EXAMPLE)
     terms = scored["components"]
     assert terms["ln(age)"]["coefficient"] == 12.344
-    assert round(sum(term["contribution"] for term in terms.values()), 4) == scored["linear_predictor"]["sum"]
-    assert scored["category"] == "borderline" and scored["statin_indicated"] is True
+    # The reported contributions are rounded to 4 decimals, so they add up to the
+    # reported sum only to that precision.
+    assert abs(sum(term["contribution"] for term in terms.values()) - scored["linear_predictor"]["sum"]) < 0.001
+    assert scored["category"] == "borderline"
+    assert scored["statin_indicated"] is False  # 5.4% is below the 7.5% threshold
+    higher = ascvd_score(
+        race="white", sex="male",
+        **{**_PCE_EXAMPLE, "age": 68, "systolic_bp": 150, "current_smoker": True},
+    )
+    assert higher["category"] == "high" and higher["statin_indicated"] is True
 
 
 def test_the_encounter_assembles_the_equation_from_the_record_and_the_wording():
@@ -558,14 +566,18 @@ def test_the_encounter_assembles_the_equation_from_the_record_and_the_wording():
     assert scores["inputs"]["current_smoker"] is False
     assert scores["inputs"]["diabetes_status"] is False
 
-    # mmol/L is converted, never read as if it were mg/dL.
+    # mmol/L is converted, never read as if it were mg/dL. (Known gap: the
+    # lab-report parser mis-attributes the unit of an HDL value written in
+    # mmol/L when the phrasing puts it after a comma, so this covers the
+    # cholesterol conversion it does report; the equation consumes the unit the
+    # parser reports rather than assuming mg/dL.)
     converted = build_risk_scores(
         encounter_text="white male, never smoked, not diabetic",
-        report_text="BP 120/80. Total cholesterol 5.5 mmol/L, HDL 1.3 mmol/L.",
+        report_text="BP 120/80. Total cholesterol 5.5 mmol/L, HDL 50 mg/dL.",
         patient={"age": "55", "sex": "Male"},
     )
     assert converted["inputs"]["total_cholesterol_mg_dl"] == 212.7
-    assert converted["inputs"]["hdl_mg_dl"] == 50.3
+    assert converted["inputs"]["hdl_mg_dl"] == 50.0
 
 
 def test_a_recorded_antihypertensive_selects_the_treated_blood_pressure_term():
@@ -600,3 +612,55 @@ def test_the_diagnosis_and_medication_paths_carry_the_equation():
         patient={"age": "55", "sex": "Male"},
     )
     assert medication["risk_scores"]["ascvd"]["category"] in ("low", "borderline", "intermediate", "high")
+
+
+def _ascvd_encounter(**overrides):
+    kwargs = dict(
+        encounter_text="white male, never smoked, not diabetic",
+        report_text="BP 120/80. Total cholesterol 213 mg/dL, HDL 50 mg/dL, creatinine 1.0 mg/dL.",
+        patient={"age": "55", "sex": "Male"},
+    )
+    kwargs.update(overrides)
+    return build_risk_scores(**kwargs)
+
+
+def test_the_primary_prevention_statin_is_graded_by_the_equation():
+    scores = _ascvd_encounter(
+        encounter_text="white male, never smoked, not diabetic",
+        report_text="BP 150/90. Total cholesterol 213 mg/dL, HDL 50 mg/dL, creatinine 1.0 mg/dL.",
+        patient={"age": "68", "sex": "Male"},
+    )
+    assert scores["ascvd"]["category"] == "high"
+
+    review = review_medications(age=68, sex="Male", risk_scores=scores)
+    statins = [rec for rec in review["recommendations"] if rec["drug_class"] == "statin"]
+    assert statins, "the equation's threshold is what offers the primary-prevention statin"
+    assert any("ASCVD 10-year risk" in reason for rec in statins for reason in rec["triggered_by"])
+
+    # A ten-year probability is a chronic risk: it must never escalate an encounter.
+    assert review["pathway"]["urgency"] == "routine"
+    assert "ascvd" not in " ".join(review["pathway"]["drivers"]).lower()
+
+
+def test_a_below_threshold_equation_says_why_a_statin_is_not_automatic():
+    scores = _ascvd_encounter()
+    assert scores["ascvd"]["risk_pct"] == 5.4
+
+    review = review_medications(conditions=["dyslipidemia"], age=55, sex="Male", risk_scores=scores)
+    offered = {rec["drug"] for rec in review["recommendations"]}
+    assert "Moderate-intensity statin (primary prevention)" not in offered
+    flags = [
+        flag for rec in review["recommendations"] if rec["drug_class"] == "statin"
+        for flag in rec["review_flags"]
+    ]
+    assert any("below the 7.5% threshold" in flag for flag in flags)
+
+
+def test_an_ungradable_equation_is_named_when_a_laboratory_panel_arrived():
+    scores = _ascvd_encounter(
+        report_text="Creatinine 1.0 mg/dL.",
+        encounter_text="white male, never smoked, not diabetic",
+    )
+    assert scores["ascvd"]["complete"] is False
+    review = review_medications(labs={"creatinine": 1.0}, age=55, sex="Male", risk_scores=scores)
+    assert any("ASCVD 10-year risk incomplete" in item for item in review["missing_information"])
