@@ -592,18 +592,16 @@ def test_the_encounter_assembles_the_equation_from_the_record_and_the_wording():
     assert scores["inputs"]["current_smoker"] is False
     assert scores["inputs"]["diabetes_status"] is False
 
-    # mmol/L is converted, never read as if it were mg/dL. (Known gap: the
-    # lab-report parser mis-attributes the unit of an HDL value written in
-    # mmol/L when the phrasing puts it after a comma, so this covers the
-    # cholesterol conversion it does report; the equation consumes the unit the
-    # parser reports rather than assuming mg/dL.)
+    # mmol/L is converted, never read as if it were mg/dL. Both values are
+    # written in mmol/L and followed by a comma and a full stop, which is what
+    # used to make the parser fall back to mg/dL.
     converted = build_risk_scores(
         encounter_text="white male, never smoked, not diabetic",
-        report_text="BP 120/80. Total cholesterol 5.5 mmol/L, HDL 50 mg/dL.",
+        report_text="BP 120/80. Total cholesterol 5.5 mmol/L, HDL 1.3 mmol/L.",
         patient={"age": "55", "sex": "Male"},
     )
     assert converted["inputs"]["total_cholesterol_mg_dl"] == 212.7
-    assert converted["inputs"]["hdl_mg_dl"] == 50.0
+    assert converted["inputs"]["hdl_mg_dl"] == 50.3
 
 
 def test_a_recorded_antihypertensive_selects_the_treated_blood_pressure_term():
@@ -713,3 +711,32 @@ def test_a_recorded_race_selects_the_model_group_whatever_its_format():
     assert unstated["ascvd"]["group"] == "white men"
     assert unstated["ascvd"]["alternative"] == {"group": "African American men", "risk_pct": 14.6}
     assert unstated["ascvd"]["risk_pct"] > unstated["ascvd"]["alternative"]["risk_pct"]
+
+
+def test_the_medication_context_hands_the_equation_mgdl_not_a_bare_mmol_value():
+    """The /medication-review path, where the report is flattened into a lab map.
+
+    The flattened map carries no unit, so a cholesterol of 5.5 mmol/L used to
+    reach the equation as "5.5 mg/dL" and the patient was scored from it.
+    """
+    from backend.encounter_context import build_medication_context
+
+    narrative = "white male, never smoked, not diabetic, 68 years"
+    report = "BP 150/90. Total cholesterol 5.5 mmol/L, HDL 1.3 mmol/L."
+    patient = {"age": "68", "sex": "Male", "race": "white"}
+    context = build_medication_context(narrative, report, patient)
+    assert context["labs"]["total_cholesterol"] == 212.685
+    assert context["labs"]["hdl"] == 50.271
+
+    via_context = build_risk_scores(
+        context["narrative"], report, {**patient, "labs": context["labs"]}, []
+    )
+    assert via_context["inputs"]["total_cholesterol_mg_dl"] == 212.7
+    assert via_context["inputs"]["hdl_mg_dl"] == 50.3
+    assert via_context["ascvd"]["category"] == "high"  # 21%: 68y, 150 mmHg, TC 213, HDL 50
+
+    # One number per patient: the flattened route and the text route agree.
+    from_text = build_risk_scores(narrative, report, patient)
+    assert via_context["ascvd"]["risk_pct"] == from_text["ascvd"]["risk_pct"]
+    assert via_context["inputs"]["total_cholesterol_mg_dl"] == from_text["inputs"]["total_cholesterol_mg_dl"]
+    assert via_context["inputs"]["hdl_mg_dl"] == from_text["inputs"]["hdl_mg_dl"]
