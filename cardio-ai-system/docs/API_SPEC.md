@@ -486,7 +486,14 @@ Reference-range screening of report text — parses lab values (18
 unit-aware analytes) and text-only ECG findings, flags
 abnormal/critical results first, and explains every flag with the
 matched text and the band it was judged against. Pure read; nothing is
-stored. Additions in this wave (ADR-016).
+stored. Additions in this wave (ADR-016). Values are read as written:
+a unit printed with the micro sign ("µmol/L") is that unit, and a
+decimal comma ("HDL 1,3 mmol/L") is a decimal point — a three-digit
+group after a comma is not, so nothing is invented where the two
+conventions disagree. The panel's short forms are read too (Chol,
+TG/TGs, HDL-C, LDL-C, non-HDL), and a fraction's name is never read as
+another's: "non-HDL" is neither HDL nor total cholesterol, and "LDL
+cholesterol" states LDL alone (ADR-022).
 
 **Request** `{ "text": "Troponin I: 0.05 ng/mL. Potassium 6.4 mmol/L. LVEF 35%." }`
 

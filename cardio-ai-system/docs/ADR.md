@@ -802,3 +802,60 @@ the equations' risk magnitude is no longer endorsed for current decision-making)
 the white-men example prints 5.4% here against the guideline's rounded 5.3%
 because the reference coefficient table is itself rounded; and an encounter that
 never captures a lipid panel reports ASCVD incomplete by design.
+
+## ADR-022 · Read a lipid panel the way it is written (abbreviations and fraction labels)
+**Status:** Accepted (2026-10-14)
+
+A panel reaches the screening endpoint typed, pasted or read off a printout, so
+the ward's short forms are what arrives — Chol, TG, HDL-C, LDL-C, non-HDL — and
+the analyte names overlap: the word "cholesterol" sits inside "LDL cholesterol",
+and "HDL" sits inside "non-HDL". Measured against the module before this change:
+"Chol: 5.5 mmol/L" and "TGs 2.1 mmol/L" were not parsed at all; **"non-HDL
+4.2 mmol/L" was reported as HDL 4.2 mmol/L, within reference** — the finding
+inverted, because a high non-HDL came back as a healthy HDL; "LDL cholesterol
+120 mg/dL" produced both LDL 120 and a *total cholesterol of 120*; and "VLDL
+cholesterol 30 mg/dL" was reported as total cholesterol.
+
+Decision: the abbreviations join the alias lists, and the overlapping names are
+resolved by the label around the match, in ``backend/lab_report.py``:
+
+- **Chol** is a total-cholesterol alias, with the word boundary that keeps it out
+  of "cholesterol", "cholestasis" and "cholesteryl"; **TG/TGs** join
+  triglycerides. HDL-C and LDL-C were already recognised and are now covered by
+  tests.
+- **Non-HDL is its own fraction** (``non_hdl``), not an alias of HDL and not
+  folded into the total. Its threshold is defined relative to LDL-C — the
+  international convention sets it **30 mg/dL (0.8 mmol/L) higher** — so its band
+  is LDL's 130/190 mg/dL shifted to 160/220 (3.4/4.9 to 4.2/5.7 mmol/L), and it
+  converts into the flattened lab map like the rest of the panel (x38.67).
+- **A match is dropped when the words around it name a different fraction**
+  (``_CONTEXT_EXCLUDES``, each pattern anchored to the end of the match):
+  "non-HDL" and "non-LDL" are not HDL and LDL, "very low density lipoprotein" is
+  not LDL, and a "cholesterol" preceded by a lipoprotein name belongs to that
+  fraction rather than to the total.
+
+Rejected alternatives: keeping "non-HDL" as an HDL alias (the inversion above);
+accepting only the exact spelling "non-HDL-C" (reports write "non-HDL", "nonHDL"
+and "non-HDL-C"); grading non-HDL against the total's ceiling (a high non-HDL
+would read as within range) or against HDL's floor; folding a non-HDL figure into
+total cholesterol when both appear on one line; and computing derived lipids
+inside the parser (HDL from total minus non-HDL, or non-HDL from total minus HDL)
+— a derived number is a different kind of claim from a printed one and belongs in
+a named calculation, not in extraction. VLDL is left unreported: no fraction and
+no band is defined for it here.
+
+Consequences: the screening module grows from 17 analytes to 18 — which also
+corrects the count API_SPEC had been carrying; ``/screen-report`` and the
+``labs_used`` map can carry a ``non_hdl`` key; 5 new cases in
+``backend/test_lab_report.py`` — every abbreviation attributed to its own
+fraction *and to nothing else*, abbreviations not matched inside longer words, a
+lipoprotein cholesterol not claimed as the total, non-HDL's own band including
+its boundaries, and the panel's short forms converting into the flattened lab map
+— bringing the backend suite to 198 tests. Four of the five fail against the
+previous parser; the fifth (over-matching) passes before and after by design.
+
+Known limits: "non-LDL" and "VLDL" values are dropped rather than attributed to a
+fraction, since no band is defined for either; a non-HDL is not derived from a
+printed total and HDL; and the lipid-lowering gate in the pharmacology agent
+still keys on LDL alone, so a report stating only non-HDL does not raise that
+indication — which this key now makes possible to fix.
