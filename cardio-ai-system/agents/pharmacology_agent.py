@@ -292,6 +292,26 @@ DRUGS: list[dict[str, Any]] = [
         "evidence": "AHA/ACC cholesterol guideline — high-intensity statin for established ASCVD and ACS.",
     },
     {
+        "key": "statin_primary_prevention",
+        "name": "Moderate-intensity statin (primary prevention)",
+        "drug_class": "statin",
+        "priority": 2,
+        "indications": ["ascvd_intermediate_risk"],
+        "avoid": [
+            ("pregnancy", "absolute", "Statins are contraindicated in pregnancy and breastfeeding."),
+            ("liver_disease", "relative", "Active hepatic disease — check transaminases before starting."),
+        ],
+        "caution": [
+            ("diabetes", "Statin therapy can modestly raise glucose — in primary prevention the ten-year risk still decides."),
+        ],
+        "lab_guards": [("transaminitis", "relative", "ALT >3× upper limit — investigate before starting a statin.")],
+        "allergens": ["statin", "statins", "atorvastatin", "rosuvastatin", "simvastatin", "pravastatin",
+                      "lipitor", "crestor", "zocor"],
+        "monitoring": ["Lipid panel at 6–8 weeks", "ALT if symptomatic", "Muscle symptoms (myopathy)"],
+        "dose_note": "Atorvastatin 20–40 mg nightly, or rosuvastatin 10–20 mg — moderate intensity for primary prevention.",
+        "evidence": "AHA/ACC cholesterol guideline — a statin is indicated when the ten-year ASCVD risk is intermediate (≥7.5%) or high, after a clinician-patient risk discussion.",
+    },
+    {
         "key": "beta_blocker",
         "name": "Beta-blocker (metoprolol/bisoprolol/carvedilol)",
         "drug_class": "beta_blocker",
@@ -602,6 +622,7 @@ _ALLERGY_ALTERNATIVES: dict[str, str] = {
     "aspirin": "For suspected ACS/PCI, a P2Y12 inhibitor alone (below) is the usual aspirin-free route — confirm with the institutional ACS protocol.",
     "clopidogrel": "If a P2Y12 inhibitor is essential (post-PCI), ticagrelor or prasugrel are alternatives — specialist input required.",
     "statin_high_intensity": "Do not rechallenge a true statin allergy: consider a different statin only after reviewing the reaction, or a non-statin lipid-lowering option with specialist input.",
+    "statin_primary_prevention": "Do not rechallenge a true statin allergy: consider a different statin only after reviewing the reaction, or a non-statin lipid-lowering option with specialist input.",
     "ace_inhibitor": "An ARB is the standard substitute for ACE-inhibitor cough — but any angioedema history needs specialist advice before starting *any* RAAS agent.",
     "arb": "Switch to an ACE inhibitor only if the reaction is not angioedema; otherwise specialist review for a non-RAAS strategy.",
     "beta_blocker": "Review the reaction before considering a cardioselective agent; rate control may need ivabradine or specialist input.",
@@ -840,6 +861,24 @@ def review_medications(
                 f" — anticoagulation tier: {stroke_risk.get('anticoagulation_tier')}"
             )
 
+    # The pooled cohort equation is a *chronic* risk, so it never escalates the
+    # encounter the way HEART or GRACE do — it grades the reason behind the
+    # lipid-lowering option, exactly as CHA₂DS₂-VASc grades the anticoagulation
+    # reason. A ten-year probability is not an emergency.
+    ascvd = _score_band(risk_scores, "ascvd")
+    ascvd_reading: str | None = None
+    ascvd_incomplete = False
+    if ascvd:
+        if ascvd.get("risk_pct") is None:
+            ascvd_incomplete = True
+        else:
+            ascvd_reading = (
+                f"ASCVD 10-year risk {ascvd['risk_pct']}% ({ascvd.get('category')}, "
+                f"{ascvd.get('group')} equation)"
+            )
+            if ascvd.get("statin_indicated"):
+                indications["ascvd_intermediate_risk"] = ascvd_reading
+
     recommendations: list[dict[str, Any]] = []
     contraindicated: list[dict[str, Any]] = []
     allergy_alerts: list[dict[str, Any]] = []
@@ -969,6 +1008,17 @@ def review_medications(
             if _CLASS_OF.get(_KEY_BY_NAME.get(rec["drug"], ""), "") == "anticoagulant" and note not in rec["review_flags"]:
                 rec["review_flags"].append(note)
 
+    # Below the threshold the equation still speaks: it says why a statin is not
+    # automatic instead of leaving the guideline out of the note.
+    if ascvd_reading and not ascvd.get("statin_indicated"):
+        note = (
+            f"{ascvd_reading} — below the 7.5% threshold for an automatic statin, so the "
+            "decision turns on the rest of the risk profile and the clinician-patient discussion."
+        )
+        for rec in recommendations:
+            if rec["drug_class"] == "statin" and note not in rec["review_flags"]:
+                rec["review_flags"].append(note)
+
     primary_keys = [
         key for key in offered_keys
         if any(
@@ -1008,6 +1058,14 @@ def review_medications(
             "CHA2DS2-VASc incomplete ("
             + ", ".join(stroke_risk.get("missing") or [])
             + ") — stroke risk is not graded for this atrial fibrillation."
+        )
+    # Only worth saying when a laboratory panel did come in: an encounter with no
+    # labs at all already reports that the renal gates were not applied.
+    if ascvd_incomplete and labs:
+        missing.append(
+            "ASCVD 10-year risk incomplete ("
+            + ", ".join(ascvd.get("missing") or [])
+            + ") — the primary-prevention statin decision is not graded."
         )
 
     pathway = _pathway(risk_level, indications, derived, risk_scores)
