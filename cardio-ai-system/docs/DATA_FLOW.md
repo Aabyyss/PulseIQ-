@@ -170,10 +170,13 @@ with the gap named (`missing`) instead of scoring the patient as low risk.
 
 The union rules live once, in `backend/encounter_context.py`, and are shared with
 the live loop (§4): the recorded visit details are unioned with what the
-narrative states, and the report parser's unit-aware values are flattened into
-the numeric shape the agent expects (troponin is only compared when it is
-reported in ng/mL — an abnormal flag in another unit is passed through as an
-explicit marker instead; caller-supplied `labs{}` override the parsed ones). The
+narrative states, and the report parser's unit-aware values are converted into
+the numeric shape the agent expects (each value is restated in its analyte's
+primary unit first — mmol/L cholesterol as mg/dL, µmol/L creatinine as mg/dL,
+ng/L troponin as ng/mL — and a printed unit with no defined conversion is left
+out rather than handed over in the wrong one, with an abnormal troponin still
+passing through as an explicit flag; caller-supplied `labs{}` override the parsed
+ones and must already be in the primary unit). The
 orchestrator owns symptom extraction and banding, so a medication review is
 banded exactly like `/diagnose`. Missing inputs (no allergies, no age, no
 eGFR/potassium) are returned in `missing_information` rather than assumed, and

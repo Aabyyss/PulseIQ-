@@ -572,6 +572,16 @@ is stored.
   "extracted": { "entities": { "medications": [], "durations": [], "risk_factors": [] }, "allergies_from_text": ["aspirin"], "labs_used": { "potassium": 5.8, "troponin": 0.09 } }
 }
 ```
+
+`labs_used` is the flattened numeric view the gates and the scores are judged
+against, so every value is stated in its analyte's **primary unit** whatever the
+report printed — cholesterol, LDL, HDL, non-HDL, triglycerides and glucose in mg/dL,
+creatinine in mg/dL, potassium and sodium in mmol/L, troponin in ng/mL, HbA1c as
+a percentage. A unit with no defined conversion is omitted rather than passed on
+in a unit the caller would misread. The `screen-report` payload keeps the printed
+unit beside each value (`unit`, `unit_label`, `reference`), so nothing is hidden
+by the conversion.
+
 Every option and every block names the captured fact behind it (`triggered_by`,
 `blocks[].trigger`), each allergy block ships with an alternative route, and only
 one RAAS strategy is offered (an ARB alongside an ACE inhibitor comes back as
