@@ -195,7 +195,11 @@ def _race(patient: dict, narrative: str) -> str | None:
     coefficient set per group and picking one silently is what the score refuses
     to do.
     """
-    recorded = str(patient.get("race") or patient.get("ethnicity") or "").strip()
+    # A recorded value may arrive as prose ("African American"), as a slug
+    # ("african_american") or hyphenated ("African-American"), so separators are
+    # normalised before matching rather than making the caller guess a format.
+    recorded = str(patient.get("race") or patient.get("ethnicity") or "")
+    recorded = recorded.replace("_", " ").replace("-", " ").strip()
     haystack = f"{recorded}\n{narrative}" if (recorded or narrative) else ""
     if re.search(_AFRICAN_AMERICAN, haystack, re.I):
         return "african_american"

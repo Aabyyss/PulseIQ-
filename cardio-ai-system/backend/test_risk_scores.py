@@ -664,3 +664,26 @@ def test_an_ungradable_equation_is_named_when_a_laboratory_panel_arrived():
     assert scores["ascvd"]["complete"] is False
     review = review_medications(labs={"creatinine": 1.0}, age=55, sex="Male", risk_scores=scores)
     assert any("ASCVD 10-year risk incomplete" in item for item in review["missing_information"])
+
+
+def test_a_recorded_race_selects_the_model_group_whatever_its_format():
+    for recorded in ("african_american", "African-American", "African American", "Black"):
+        scores = _ascvd_encounter(
+            encounter_text="chest discomfort, never smoked, not diabetic",
+            report_text="BP 150/90. Total cholesterol 213 mg/dL, HDL 50 mg/dL.",
+            patient={"age": "68", "sex": "Male", "race": recorded},
+        )
+        assert scores["ascvd"]["group"] == "African American men", recorded
+        assert scores["ascvd"]["race_captured"] is True
+        assert scores["ascvd"]["alternative"] is None
+
+    # With no race recorded the higher of the two sex-matched models is shown,
+    # which here is the white-men equation rather than an assumption about race.
+    unstated = _ascvd_encounter(
+        encounter_text="chest discomfort, never smoked, not diabetic",
+        report_text="BP 150/90. Total cholesterol 213 mg/dL, HDL 50 mg/dL.",
+        patient={"age": "68", "sex": "Male"},
+    )
+    assert unstated["ascvd"]["group"] == "white men"
+    assert unstated["ascvd"]["alternative"] == {"group": "African American men", "risk_pct": 14.6}
+    assert unstated["ascvd"]["risk_pct"] > unstated["ascvd"]["alternative"]["risk_pct"]
