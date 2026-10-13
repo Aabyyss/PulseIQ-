@@ -412,3 +412,18 @@ def test_a_lipid_abbreviation_is_not_matched_inside_a_longer_word():
     assert len(screen_report_text("Total cholesterol 5.5 mmol/L")["values"]) == 1
 
 
+def test_a_lipoprotein_cholesterol_is_not_also_read_as_total_cholesterol():
+    """"LDL cholesterol 120 mg/dL" states one fraction, not two.
+
+    The word "cholesterol" belongs to the fraction named in front of it, so the
+    total-cholesterol alias must not claim the same number again — which it did,
+    reporting a total of 45 mg/dL from "HDL cholesterol 45". VLDL has no band
+    here, so its number is reported as nothing rather than folded into the total.
+    """
+    values = screen_report_text(
+        "LDL cholesterol 120 mg/dL. HDL cholesterol 45 mg/dL. "
+        "VLDL cholesterol 30 mg/dL. very low density lipoprotein cholesterol 28 mg/dL."
+    )["values"]
+    assert {v["key"]: v["value"] for v in values} == {"ldl": 120.0, "hdl": 45.0}
+
+

@@ -312,6 +312,40 @@ def _compile_aliases(aliases: list[str]) -> list[re.Pattern[str]]:
     return [re.compile(rf"(?<![a-z0-9])(?:{alias})(?![a-z0-9])", re.IGNORECASE) for alias in aliases]
 
 
+# One fraction's name contains another's. "LDL cholesterol 120 mg/dL" states LDL,
+# not a total cholesterol of 120, and "non-HDL cholesterol" states neither HDL
+# nor total cholesterol — read as HDL it inverts the finding, because a high
+# non-HDL would look like a healthy HDL. A match is dropped when the label around
+# it names a different fraction; every pattern is anchored to the end of the
+# match, so it describes the candidate's own left context plus the name matched.
+_CONTEXT_EXCLUDES: dict[str, str] = {
+    "hdl": r"non[\s\-]+(?:hdl(?:[\s\-]*c)?|high[\s\-]+density(?:[\s\-]+lipoprotein)?(?:[\s\-]*c)?)$",
+    # "very low density lipoprotein" is VLDL, not LDL, and it is the one place
+    # the LDL alias fires inside another fraction's name. The prefix is required:
+    # an optional one would match "LDL" on its own and drop every LDL value.
+    "ldl": (
+        r"(?:very[\s\-]+non[\s\-]+|very[\s\-]+|non[\s\-]+)"
+        r"(?:ldl(?:[\s\-]*c)?|low[\s\-]+density(?:[\s\-]+lipoprotein)?(?:[\s\-]*c)?)$"
+    ),
+    "total_cholesterol": (
+        r"(?:non[\s\-]+)?"
+        r"(?:hdl|ldl|vldl|idl|(?:very[\s\-]+)?(?:low|high)[\s\-]+density(?:[\s\-]+lipoprotein)?)"
+        r"(?:[\s\-]*c)?[\s\-]*(?:cholesterol|chol)$"
+    ),
+}
+
+
+def _labelled_as_another_fraction(analyte: dict[str, Any], text: str, match: re.Match[str]) -> bool:
+    """True when the matched name is part of a different lipid fraction's label."""
+    pattern = _CONTEXT_EXCLUDES.get(analyte["key"])
+    if not pattern:
+        return False
+    # 48 characters covers the longest label ("very low density lipoprotein
+    # cholesterol") with room to spare; the anchor keeps it specific.
+    label = text[max(0, match.start() - 48):match.end()]
+    return re.search(pattern, label, re.IGNORECASE) is not None
+
+
 def _classify(value: float, below_limit: bool, band: Band, is_floor: bool) -> str:
     low, high, crit_low, crit_high = band
     if below_limit:
@@ -357,6 +391,8 @@ def _extract_numeric(analyte: dict[str, Any], text: str, lowered: str) -> list[d
 
     for alias in _compile_aliases(analyte["aliases"]):
         for match in alias.finditer(text):
+            if _labelled_as_another_fraction(analyte, text, match):
+                continue
             window = text[match.end():match.end() + 30]
             num_match = _NUM_RE.search(window)
             if not num_match:
