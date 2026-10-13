@@ -12,8 +12,12 @@ explainability the review asked for.
 Design
 ------
 - Deterministic, rule-based extraction: every analyte has an alias list
-  (``Troponin I``, ``Trop-I``, ``hs-TnI`` …) and a numeric pattern, so a
-  parsed value always points back to the exact matched text.
+  (``Troponin I``, ``Trop-I``, ``hs-TnI`` …, ``Chol``, ``TG``, ``non-HDL``) and a
+  numeric pattern, so a parsed value always points back to the exact matched
+  text. Aliases match whole words, and a name that contains another fraction's
+  name is resolved by the label around the match — the "cholesterol" in "LDL
+  cholesterol" belongs to LDL, and "non-HDL" is neither HDL nor the total.
+  See ADR-022.
 - Unit-aware ranges: the same analyte in different units (mg/dL vs mmol/L,
   ng/mL vs ng/L) gets the right reference band, whatever punctuation follows the
   token ("... 1.3 mmol/L." is mmol/L, not mg/dL) and however the unit is
@@ -91,7 +95,9 @@ _ANALYTES: list[dict[str, Any]] = [
     {
         "key": "total_cholesterol",
         "label": "Total cholesterol",
-        "aliases": [r"total\s+cholesterol\b", r"cholesterol\s+total\b", r"\bserum\s+cholesterol\b", r"\bcholesterol\b"],
+        # "Chol" is how a printout labels the total; the boundary keeps it out of
+        # "cholesterol", "cholestasis" and "cholesteryl".
+        "aliases": [r"total\s+cholesterol\b", r"cholesterol\s+total\b", r"\bserum\s+cholesterol\b", r"\bcholesterol\b", r"\bchol\b"],
         "ranges": {"mg/dl": (None, 200.0, None, 300.0), "mmol/l": (None, 5.2, None, 7.8)},
         "primary_unit": "mg/dl",
         "note": "≥200 mg/dL is borderline high; ≥240 mg/dL is high and lowers the LDL treatment threshold.",
@@ -115,7 +121,7 @@ _ANALYTES: list[dict[str, Any]] = [
     {
         "key": "triglycerides",
         "label": "Triglycerides",
-        "aliases": [r"triglycerides?\b", r"\btg\b"],
+        "aliases": [r"triglycerides?\b", r"\btgs?\b"],
         "ranges": {"mg/dl": (None, 150.0, None, 500.0), "mmol/l": (None, 1.7, None, 5.7)},
         "primary_unit": "mg/dl",
         "note": "≥150 mg/dL is borderline; ≥500 mg/dL carries acute pancreatitis risk and needs urgent attention.",

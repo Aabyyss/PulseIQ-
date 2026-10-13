@@ -402,3 +402,13 @@ def test_a_bare_number_is_a_value_when_it_ends_a_sentence():
     # The path the FHIR export and the metformin gate take.
     assert labs_for_review("Troponin I: 0.09 ng/mL. Potassium 6.1 mmol/L. eGFR 26.")["egfr"] == 26.0
 
+def test_a_lipid_abbreviation_is_not_matched_inside_a_longer_word():
+    """A word, not a substring: cholestasis is not a cholesterol."""
+    assert [v["key"] for v in screen_report_text("cholestasis noted, triglycerides 2.1 mmol/L")["values"]] == [
+        "triglycerides"
+    ]
+    assert screen_report_text("cholesteryl ester 40 mg/dL").get("values") == []
+    # "cholesterol" is its own alias, and the bare "chol" must not add a second entry.
+    assert len(screen_report_text("Total cholesterol 5.5 mmol/L")["values"]) == 1
+
+
