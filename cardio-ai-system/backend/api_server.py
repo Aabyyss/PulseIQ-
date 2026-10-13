@@ -211,14 +211,20 @@ def diagnose(data: dict, user: dict = Depends(get_current_user)):
         return {"error": "text is required"}
 
     # The optional patient context and report text are what the deterministic
-    # scores (HEART, GRACE, CHA₂DS₂-VASc) are graded from; without them the
-    # response still carries the model band and reports the score gaps.
+    # scores (HEART, GRACE, CHA₂DS₂-VASc, ASCVD) are graded from; without them
+    # the response still carries the model band and reports the score gaps.
+    # ``race`` travels with them because the pooled cohort equations publish a
+    # coefficient set per group: dropping it here would leave the equation to
+    # infer the group from the wording alone.
     result = run_diagnosis_from_text(
         text,
         report_text=str(payload.get("report_text") or ""),
         patient={
             key: payload.get(key)
-            for key in ("age", "sex", "conditions", "allergies", "current_medications", "labs", "vitals")
+            for key in (
+                "age", "sex", "race", "conditions", "allergies", "current_medications",
+                "labs", "vitals",
+            )
             if payload.get(key) is not None
         } or None,
     )
@@ -557,6 +563,9 @@ def medication_review(data: dict, user: dict = Depends(get_current_user)):
         patient={
             "age": context["age"],
             "sex": context["sex"],
+            # The pooled cohort equations need the model group, so a stated race
+            # is passed through rather than inferred from the wording alone.
+            "race": payload.get("race"),
             "conditions": context["conditions"],
             "allergies": context["allergies"],
             "current_medications": context["current_medications"],
