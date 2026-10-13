@@ -173,17 +173,19 @@ function AscvdBreakdown({ score }: { score: AscvdScore }) {
       <ul className="mt-1.5 space-y-1">
         {Object.entries(score.components).map(([name, term]) => (
           <li key={name} className="flex items-baseline gap-2 text-2xs">
-            <span className="w-16 shrink-0 font-medium text-fg">{term.contribution}</span>
+            <span className="w-20 shrink-0 font-medium text-fg">{term.contribution}</span>
             <span className="text-muted">
-              {name} x {term.coefficient} — {term.detail}
+              {name}: {term.value} × {term.coefficient} — {term.detail}
             </span>
           </li>
         ))}
       </ul>
       {score.linear_predictor ? (
         <p className="mt-1 text-2xs text-muted">
-          Linear predictor: {score.linear_predictor.sum} - {score.linear_predictor.mean} ={" "}
-          {Math.round((score.linear_predictor.sum - score.linear_predictor.mean) * 10000) / 10000}
+          Terms sum to {score.linear_predictor.sum}; the model's centering value{" "}
+          {score.linear_predictor.mean} is subtracted, giving{" "}
+          {Math.round((score.linear_predictor.sum - score.linear_predictor.mean) * 10000) / 10000} on the
+          model scale, against a baseline survival of {score.linear_predictor.baseline_survival}.
         </p>
       ) : null}
       {score.statin_indicated ? (
