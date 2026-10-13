@@ -702,6 +702,53 @@ reason behind the anticoagulation option rather than ordering anything.
 - **GRACE mortality is a nomogram reading.** `interpolated: true` means the value
 sits between two printed rows of the published table, with both anchors given.
 
+### ASCVD Pooled Cohort Equations (ADR-021)
+The fourth score is a *probability*, not a point total: the 2013 ACC/AHA pooled
+cohort equations estimate the 10-year risk of a first atherosclerotic event from
+age, sex, race/ethnicity, total cholesterol, HDL, systolic BP, hypertension
+treatment, smoking and diabetes. It arrives in the same `risk_scores` block as
+the other three.
+
+```json
+{
+  "ascvd": {
+    "name": "ASCVD-PCE", "score": 16.9, "risk_pct": 16.9, "complete": true,
+    "category": "low|borderline|intermediate|high", "statin_indicated": true,
+    "group": "white men", "race_captured": true, "alternative": null,
+    "linear_predictor": { "sum": 61.9071, "mean": 61.1816, "baseline_survival": 0.91436 },
+    "in_range": true, "out_of_range": [],
+    "components": {
+      "ln(age)": { "coefficient": 12.344, "value": 4.2195, "contribution": 52.0856, "detail": "ln(68) = 4.2195" }
+    },
+    "missing": [],
+    "source": "2013 ACC/AHA Pooled Cohort Equations (Goff et al., Circulation 2014) - ...",
+    "applies_to": "primary prevention (10-year risk of a first ASCVD event)",
+    "note": "..."
+  },
+  "inputs": { "race": "white", "total_cholesterol_mg_dl": 213, "hdl_mg_dl": 50, "bp_treated": false, "current_smoker": false, "diabetes_status": true }
+}
+```
+
+Rules a client must respect:
+
+- **`score` is a percentage, and `null` when any input is missing.**
+  `category` (low <5, borderline 5-7.4, intermediate 7.5-19.9, high >=20) is
+  banded on the reported value so it always agrees with the number shown, and
+  `statin_indicated` is the conventional 7.5% threshold.
+- **`group` names the model that produced the number.** Race/ethnicity selects
+  the coefficient set and is never guessed: when it was not captured, the higher
+  of the two sex-matched equations is reported, `race_captured` is false and
+  `alternative` carries the other one.
+- **`in_range` is part of the contract.** The equations were derived over age
+  40-79, total cholesterol 130-320 mg/dL, HDL 20-100 mg/dL and systolic BP
+  90-200 mmHg; outside them the number is returned with `in_range: false` and
+  `out_of_range` naming the input, and a client acting on it must check the flag.
+- **`components` is the published sum**, one entry per term of the chosen model
+  (coefficient, value, contribution), so it adds up to `linear_predictor.sum`.
+  The unused blood-pressure half and any zero-coefficient term are omitted.
+- **It is a chronic risk.** Nothing in `pathway` escalates because of it; the
+  medication review uses it for the lipid-lowering option and its notes.
+
 ## Non-goals
 - No pagination or filtering; lists are capped (200 entries, newest first;
   learned vocabulary is capped at 500 entries per clinician).
