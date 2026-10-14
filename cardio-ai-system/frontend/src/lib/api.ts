@@ -175,6 +175,12 @@ export type MedicationReviewInput = {
   reportText: string;
   age: string;
   sex: string;
+  /**
+   * Race/ethnicity as recorded, because the pooled cohort equations publish a
+   * separate model per group. "" leaves it unrecorded, and the review then
+   * reports the higher of the two sex-matched models instead of choosing one.
+   */
+  race: string;
   /** "" leaves the status unknown, which the review reports as a gap. */
   pregnancy: "" | "yes" | "no";
   /** Free text; commas separate entries. */
@@ -198,6 +204,7 @@ export async function reviewMedications(input: MedicationReviewInput): Promise<M
       report_text: input.reportText,
       age: input.age.trim(),
       sex: input.sex,
+      race: input.race.trim() || undefined,
       pregnancy: input.pregnancy === "" ? undefined : input.pregnancy === "yes",
       conditions: splitList(input.conditions),
       allergies: splitList(input.allergies),

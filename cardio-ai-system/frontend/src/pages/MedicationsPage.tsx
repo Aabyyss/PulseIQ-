@@ -20,6 +20,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { reviewMedications } from "@/lib/api";
+import { RACE_HINT, RACE_OPTIONS } from "@/lib/patientGroups";
 import type { MedicationReview } from "@/lib/types";
 import { usePageMeta } from "@/lib/usePageMeta";
 import { cn } from "@/lib/utils";
@@ -85,6 +86,7 @@ export function MedicationsPage() {
   const [reportText, setReportText] = useState("");
   const [age, setAge] = useState("");
   const [sex, setSex] = useState("");
+  const [race, setRace] = useState("");
   const [pregnancy, setPregnancy] = useState<"" | "yes" | "no">("");
   const [conditions, setConditions] = useState("");
   const [allergies, setAllergies] = useState("");
@@ -110,6 +112,7 @@ export function MedicationsPage() {
         reportText,
         age,
         sex,
+        race,
         pregnancy,
         conditions,
         allergies,
@@ -177,6 +180,22 @@ export function MedicationsPage() {
             </select>
           </Field>
         </div>
+
+        <Field label="Race / ethnicity" hint={RACE_HINT}>
+          <select
+            className={inputClass}
+            value={race}
+            onChange={(e) => setRace(e.target.value)}
+            aria-label="Patient race or ethnicity"
+          >
+            <option value="">Not recorded</option>
+            {RACE_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </Field>
 
         <Field
           label="Pregnancy status"
