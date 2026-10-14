@@ -355,6 +355,40 @@ def test_a_mmol_ldl_still_reaches_the_dyslipidaemia_indication():
     assert "dyslipidemia_lab" not in lab_tags(labs_for_review("LDL 100 mg/dL"))
 
 
+def test_the_lipid_gate_acts_at_the_high_band_for_either_fraction():
+    """The reference-range boundary is not the treatment threshold.
+
+    The screening flags LDL above 130 mg/dL and non-HDL above 160 (the
+    borderline-high boundaries), while the option is offered at the *high*
+    boundaries — 160 and 190, the same 30 mg/dL apart — so neither fraction is
+    held to the other's number, and a panel that is merely flagged offers nothing
+    automatically.
+    """
+    from backend.lab_report import labs_for_review, screen_report_text
+
+    borderline = screen_report_text("LDL 140 mg/dL. non-HDL 170 mg/dL.")
+    assert {v["key"] for v in borderline["values"] if v["severity"] == "abnormal"} == {"ldl", "non_hdl"}
+    assert lab_tags(labs_for_review("LDL 140 mg/dL. non-HDL 170 mg/dL.")) == {}
+    assert lab_tags({"ldl": 160.0, "non_hdl": 190.0}) == {"dyslipidemia_lab": 160.0, "non_hdl_high": 190.0}
+
+
+def test_both_fractions_above_threshold_give_two_reasons_one_option():
+    """Two reasons for one decision, in the order the guideline reads them.
+
+    LDL is the primary target and is named first; the non-HDL reason is added
+    rather than replacing it, and the same statin is offered once.
+    """
+    review = review_medications(symptoms=["chest pain"], labs={"ldl": 165.0, "non_hdl": 200.0})
+    statins = [rec for rec in review["recommendations"] if rec["drug_class"] == "statin"]
+    assert len(statins) == 1
+    assert statins[0]["indications"] == ["suspected_acs", "dyslipidemia_lab", "non_hdl_high"]
+    assert statins[0]["triggered_by"] == [
+        "chest pain reported (suspected acute coronary syndrome)",
+        "LDL 165 mg/dL",
+        "non-HDL 200 mg/dL",
+    ]
+
+
 def test_a_panel_that_prints_only_non_hdl_still_raises_the_statin():
     """The fraction the lipid decision turns on is not always the one printed.
 
