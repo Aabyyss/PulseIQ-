@@ -21,6 +21,8 @@ import type { MedicationReview, RealtimeConsultationEvent } from "@/lib/types";
 export type LiveVisitContext = {
   age?: string;
   sex?: string;
+  /** The pooled cohort equations need the model group, not an inference from wording. */
+  race?: string;
   conditions?: string;
   allergies?: string;
   currentMedications?: string;
@@ -44,6 +46,7 @@ function buildLivePatientContext(visit?: LiveVisitContext) {
   return {
     age: (visit.age ?? "").trim() || undefined,
     sex: (visit.sex ?? "").trim() || undefined,
+    race: (visit.race ?? "").trim() || undefined,
     conditions: splitList(visit.conditions),
     allergies: splitList(visit.allergies),
     current_medications: splitList(visit.currentMedications),
