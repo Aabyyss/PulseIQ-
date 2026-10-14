@@ -672,12 +672,17 @@ def screen_report_text(text: str) -> dict[str, Any]:
     Returns::
 
         {"values": [...], "text_flags": [...],
-         "summary": {"critical": n, "abnormal": n, "normal": n, "parsed": bool},
+         "summary": {"critical": n, "abnormal": n, "normal": n, "computed": n, "parsed": bool},
          "message": str}
+
+    ``summary["computed"]`` counts how many of the counted values the report did
+    not print (a derived lipid), so a caller reading the counts knows which of
+    them came from the panel and which were worked out.
     """
     raw = str(text or "")
     if not raw.strip():
-        return {"values": [], "text_flags": [], "summary": {"critical": 0, "abnormal": 0, "normal": 0, "parsed": False},
+        return {"values": [], "text_flags": [],
+                "summary": {"critical": 0, "abnormal": 0, "normal": 0, "computed": 0, "parsed": False},
                 "message": "No report text supplied."}
 
     values: list[dict[str, Any]] = []
@@ -703,21 +708,27 @@ def screen_report_text(text: str) -> dict[str, Any]:
     abnormal = sum(1 for v in values if v["severity"] == "abnormal") + \
         sum(1 for f in text_flags if f["severity"] == "abnormal")
     normal = sum(1 for v in values if v["severity"] == "normal")
+    computed = sum(1 for v in values if v.get("computed"))
     parsed = bool(values or text_flags)
+    # A derived value counts as a finding (it is banded like any other), but the
+    # count is qualified so "5 values" never quietly means "4 printed, 1 worked
+    # out". Nothing is added to a panel that had nothing to derive.
+    derived_note = f" {computed} of them computed from the printed panel, not printed." if computed else ""
 
     if not parsed:
         message = "No numeric lab values or ECG statements recognised — paste lines like \"Troponin I: 0.05 ng/mL\" or \"LVEF 35%\"."
     elif critical:
-        message = f"{critical} critical result(s) — review these first."
+        message = f"{critical} critical result(s) — review these first.{derived_note}"
     elif abnormal:
-        message = f"{abnormal} value(s) outside the reference range."
+        message = f"{abnormal} value(s) outside the reference range.{derived_note}"
     else:
-        message = f"All {normal} parsed value(s) within their reference ranges."
+        message = f"All {normal} parsed value(s) within their reference ranges.{derived_note}"
 
     return {
         "values": values,
         "text_flags": text_flags,
-        "summary": {"critical": critical, "abnormal": abnormal, "normal": normal, "parsed": parsed},
+        "summary": {"critical": critical, "abnormal": abnormal, "normal": normal,
+                    "computed": computed, "parsed": parsed},
         "message": message,
     }
 

@@ -541,6 +541,25 @@ def test_the_identity_runs_both_ways_when_the_hdl_is_the_fraction_left_out():
     assert derived["computed_from"] == {"total_cholesterol": 212.685, "non_hdl": 162.414}
 
 
+def test_the_summary_counts_the_values_the_report_did_not_print():
+    """A derived value is counted, and the count says how many were derived.
+
+    The screen's headline count drives what a clinician looks at first, so it
+    must not read as though the report printed the derived number. A panel with
+    nothing to derive carries no such count and no such sentence.
+    """
+    result = screen_report_text("Total cholesterol 248 mg/dL, HDL 34 mg/dL.")
+    assert result["summary"]["computed"] == 1
+    assert result["summary"]["abnormal"] == 3  # the printed pair, plus non-HDL 214
+    assert "1 of them computed" in result["message"]
+
+    plain = screen_report_text("Sodium 140 mmol/L. Potassium 4.1 mmol/L.")
+    assert plain["summary"]["computed"] == 0
+    assert plain["summary"]["normal"] == 2
+    assert "computed" not in plain["message"]
+    assert screen_report_text("")["summary"]["computed"] == 0
+
+
 def test_a_derivation_needs_both_printed_operands_and_never_overrules_one():
     """Two of the three fractions is the whole requirement, and nothing less.
 
