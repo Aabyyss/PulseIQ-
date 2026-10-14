@@ -21,6 +21,13 @@
   clinical directions, runnable via pytest **and** directly (`python
   backend/test_x.py`). New pipeline behaviour needs a directional test
   (e.g. exertional presentation → High band).
+- **A published table is pinned to its source.** Point values, band cut-offs,
+  mortality rows and equation coefficients are transcription, and the
+  behavioural tests cannot see a mistake in them — they read the same table the
+  code does, so a digit typed one row high passes everywhere. Whoever adds or
+  changes an instrument transcribes the published values in
+  `backend/test_score_sources.py` *and* names the paper and the page in the
+  module docstring; the case fails if the citation disappears.
 - **Model hygiene:** never hand-edit `models/`. Retrain via
   `backend/train_model.py`, which rewrites the pickle + metadata and asserts
   the label direction.
