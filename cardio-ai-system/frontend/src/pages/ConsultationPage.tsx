@@ -683,9 +683,19 @@ export function ConsultationPage() {
                         <span className="num ml-1.5 text-muted">{flag.value_text} {flag.unit ?? ""}</span>
                       ) : null}
                     </p>
-                    <Badge variant={flag.severity === "critical" ? "destructive" : flag.severity === "abnormal" ? "warn" : "ok"} dot>
-                      {flag.status.replace(/_/g, " ")}
-                    </Badge>
+                    <div className="flex shrink-0 items-center gap-1.5">
+                      {flag.computed ? (
+                        <Badge
+                          variant="outline"
+                          title="Worked out from the values the report printed — the report did not print this number."
+                        >
+                          computed
+                        </Badge>
+                      ) : null}
+                      <Badge variant={flag.severity === "critical" ? "destructive" : flag.severity === "abnormal" ? "warn" : "ok"} dot>
+                        {flag.status.replace(/_/g, " ")}
+                      </Badge>
+                    </div>
                   </div>
                   {flag.reference ? (
                     <p className="mt-0.5 text-2xs text-faint">Reference: {flag.reference}</p>
@@ -693,7 +703,11 @@ export function ConsultationPage() {
                   {flag.explanation ? (
                     <p className="mt-1 text-2xs leading-relaxed text-muted">{flag.explanation}</p>
                   ) : null}
-                  {flag.matched_text ? (
+                  {flag.computed && flag.derivation ? (
+                    <p className="mt-1 text-2xs italic text-faint" title={flag.derivation}>
+                      Derived: {flag.derivation}
+                    </p>
+                  ) : flag.matched_text ? (
                     <p className="mt-1 truncate text-2xs italic text-faint" title={flag.matched_text}>
                       From: “{flag.matched_text}”
                     </p>

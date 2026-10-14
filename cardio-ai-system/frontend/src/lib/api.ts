@@ -74,6 +74,10 @@ export type LabFlag = {
   value?: number;
   value_text?: string;
   unit?: string;
+  /** How the value's unit reads on screen — says "(computed)" for a derived one. */
+  unit_label?: string;
+  /** False when a printed unit could not be read; the value was banded as primary. */
+  unit_read?: boolean;
   reference?: string;
   status: string;
   severity: "critical" | "abnormal" | "normal";
@@ -81,12 +85,18 @@ export type LabFlag = {
   explanation?: string;
   note?: string;
   source?: string;
+  /** True for a lipid fraction worked out from the printed values (ADR-023). */
+  computed?: boolean;
+  /** The arithmetic behind a computed value, in the unit it is stated in. */
+  derivation?: string;
+  /** The operands as they were subtracted, in the computed value's unit. */
+  computed_from?: Record<string, number>;
 };
 
 export type ScreenReportResult = {
   values: LabFlag[];
   text_flags: LabFlag[];
-  summary: { critical: number; abnormal: number; normal: number; parsed: boolean };
+  summary: { critical: number; abnormal: number; normal: number; computed: number; parsed: boolean };
   message: string;
 };
 
