@@ -344,7 +344,13 @@ def build_fhir_bundle(payload: dict[str, Any] | None = None) -> dict[str, Any]:
                 "code": interpretation[0],
                 "display": interpretation[1],
             }]}]
-        note = " ".join(part for part in (str(value.get("explanation") or ""), str(value.get("note") or "")) if part).strip()
+        parts = [str(value.get("explanation") or ""), str(value.get("note") or "")]
+        # A value the report did not print says so in the record too, with the
+        # arithmetic behind it: a receiving system must not read a derived
+        # fraction as a measured one.
+        if value.get("computed") and value.get("derivation"):
+            parts.append(f"Derived from the printed panel: {value['derivation']}")
+        note = " ".join(part for part in parts if part).strip()
         if note:
             observation["note"] = [{"text": note}]
         observations.append(observation)

@@ -623,6 +623,23 @@ def test_a_derived_fraction_subtracts_in_one_unit_when_the_pair_is_mixed():
     assert derived["derivation"].endswith("(printed as 5.5 mmol/l, 50 mg/dl)")
 
 
+def test_a_derived_fraction_reaches_the_gates_in_its_primary_unit():
+    """The flattened map is what the safety gates read, so it carries the fraction.
+
+    A panel that prints a total and an HDL and no non-HDL states the non-HDL the
+    lipid gate reads; the value it lands there is the same number the screen
+    shows, in mg/dL, and a value the clinician supplied explicitly still wins.
+    """
+    from backend.lab_report import labs_for_review
+
+    labs = labs_for_review("Total cholesterol 5.5 mmol/L, HDL 1.3 mmol/L.")
+    assert labs["non_hdl"] == 162.41  # 212.685 - 50.271, the value the screen derived
+    assert labs["total_cholesterol"] == 212.685
+    assert labs_for_review("Total cholesterol 5.5 mmol/L, HDL 1.3 mmol/L.", {"non_hdl": 100.0})["non_hdl"] == 100.0
+    # ...and the direction that leaves HDL out reaches the map the same way.
+    assert labs_for_review("Total cholesterol 5.5 mmol/L, non-HDL 4.2 mmol/L.")["hdl"] == 50.27
+
+
 def test_the_lipid_abbreviations_reach_the_gates_in_primary_units():
     """The flattened lab map is judged in mg/dL, so the panel's short forms convert too."""
     from backend.lab_report import labs_for_review

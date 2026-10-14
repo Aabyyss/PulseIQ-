@@ -205,6 +205,20 @@ def test_laboratory_values_keep_their_quantity_unit_and_interpretation():
     assert troponin["valueQuantity"]["value"] == 0.09
 
 
+def test_a_fraction_derived_from_the_panel_is_exported_and_marked_as_derived():
+    """A computed value travels with the arithmetic, not as a measured one."""
+    result = build_fhir_bundle({
+        "text": "chest pain",
+        "report_text": "Total cholesterol 248 mg/dL, HDL 34 mg/dL.",
+        "risk_level": "Medium",
+    })
+    non_hdl = _by_code(_resources(result, "Observation"), "non-hdl")[0]
+    assert non_hdl["valueQuantity"]["value"] == 214
+    assert non_hdl["valueQuantity"]["unit"] == "mg/dl"
+    assert non_hdl["interpretation"][0]["coding"][0]["code"] == "H"
+    assert "total cholesterol 248 mg/dl - HDL cholesterol 34 mg/dl" in non_hdl["note"][0]["text"]
+
+
 def test_units_are_exported_as_text_without_a_guessed_ucum_code():
     result = build_fhir_bundle(PAYLOAD)
     for observation in _resources(result, "Observation"):
