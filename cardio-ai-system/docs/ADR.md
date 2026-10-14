@@ -938,3 +938,61 @@ mismatched pair still subtracts; a value whose unit could not be read is still
 banded against the primary band (ADR-016's convention) and is excluded only from
 derivation; and the gate's thresholds are the AHA/ACC "high" boundaries, which
 other guidelines place elsewhere.
+
+## ADR-024 · Record the group the pooled cohort equation selects its model from
+**Status:** Accepted (2026-10-15)
+
+ADR-021 added the pooled cohort equations and decided what a missing group means
+(report the higher of the two sex-matched models, with the other one beside it) —
+a fallback, not a way to record the fact. The API accepted a group from the day it
+landed, but nothing in the workspace collected one, so on the two screens that
+score an encounter the record was normally empty: the equation reported the
+fallback while the clinician believed the visit details had been recorded, and a
+family-history phrase in the narrative could override the group the record did
+state.
+
+Decision: the group becomes a visit field, like age and sex, in
+``backend/risk_score_context.py`` and the two forms that carry patient details.
+
+- **The record decides; the wording only fills the gap.** ``_race`` matches the
+  recorded value first and reads the narrative only when the record names no
+  published group. A value the equations have no model for ("Asian", "other")
+  deliberately does not map onto one of them — it leaves the wording to speak,
+  which is the same state as an unrecorded group.
+- **One list of the published groups**
+  (``frontend/src/lib/patientGroups.ts``), shared by the consultation form and the
+  medication form, because two lists would eventually offer a group the equation
+  has no coefficients for. The options are the two the equations publish and
+  nothing else; the hint says what leaving the field empty does.
+- **Neither form guesses.** An unrecorded group is sent as nothing rather than as
+  a default, so the review still reports the fallback and both numbers; the live
+  per-line rebuild carries the recorded group with the rest of the visit header.
+- **The field is per encounter and is not persisted.** It shapes the scores for the
+  visit in hand; it is not written into the saved visit, the PDF or the FHIR
+  bundle, because a demographic field in new persistence needs its own decision and
+  a retention story (CLAUDE.md rule 7), and no screen reads it back yet.
+- **It is explained where it is asked.** The field's hint and the Guidance page say
+  why the question is there (the equation is defined per group) and what an empty
+  value does.
+
+Rejected alternatives: leaving the prose-only route (the record stays empty, and
+the narrative outranks it); offering categories the equations publish no model for
+(they would be recorded and unusable, or silently mapped onto a published group);
+defaulting a recorded-but-unpublished value to one of the two; writing the group
+into the saved visit and the PDF; making the field required (it would push
+clinicians to record something they have not asked the patient).
+
+Consequences: 3 new cases — the review scoring a recorded group (2 model
+comparisons in ``backend/test_risk_scores.py``), the record-beats-wording rule, and
+the live rebuild carrying the header's group — bringing the backend suite to 212
+tests. ``npm run typecheck`` was found to be checking nothing while this work was
+being verified (the root tsconfig has ``files: []`` and ``tsc --noEmit`` does not
+follow ``references``); it now names both projects and fails on a deliberate type
+error.
+
+Known limits: the group is not written into the saved visit, so re-opening one
+cannot re-score its equation with it; the published groups are narrower than the
+population, and everyone outside them is scored on the fallback the score reports;
+and this is the one field in the workspace that is asked about the person rather
+than the illness — it exists because the instrument is defined per group, and it
+is not used to stratify anything else.

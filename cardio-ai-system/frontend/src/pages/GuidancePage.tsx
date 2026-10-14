@@ -34,7 +34,8 @@ const WORKFLOWS = [
     icon: Pill,
     title: "Medication review",
     steps: [
-      "Open Medication review, then record the encounter: the narrative (or transcript), the report text, and the patient context — age, sex, conditions and past history, allergies and everything they currently take.",
+      "Open Medication review, then record the encounter: the narrative (or transcript), the report text, and the patient context — age, sex, race/ethnicity, conditions and past history, allergies and everything they currently take.",
+      "Race/ethnicity is asked because the ten-year ASCVD equation publishes one model per group: recording it selects that model, and leaving it unrecorded reports the higher of the two sex-matched models with the other beside it rather than picking one. It is used for that score alone, and the visit forms keep it in the encounter rather than storing it.",
       "Plain phrasing works. \"Previous MI\", \"stent 2023\", \"asthma\", \"peptic ulcer\", \"pregnant\" are all recognised, and lab lines are read as numbers (eGFR, potassium, haemoglobin, LDL, LVEF, troponin).",
       "Every option comes back with the fact that triggered it (\"Because: LVEF 30%\") plus a dose note, what to monitor and the guideline behind it.",
       "Blocked agents arrive with the reason — allergy, condition/history or laboratory value — and an allergy block always names the alternative route instead of leaving a hole.",

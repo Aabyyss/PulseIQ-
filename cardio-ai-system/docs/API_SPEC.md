@@ -559,6 +559,7 @@ is stored.
   "report_text": "Troponin I: 0.09 ng/mL. Potassium 5.8 mmol/L. eGFR 28. LVEF 30%",
   "age": "68",
   "sex": "male",
+  "race": "white",
   "conditions": ["hypertension", "prior MI"],
   "allergies": ["aspirin"],
   "current_medications": ["warfarin", "metoprolol 25 mg"],
@@ -570,6 +571,7 @@ is stored.
 | field | notes |
 |---|---|
 | text / report_text | narrative and lab/ECG text; concepts, mentioned medications and allergy phrases are extracted from them |
+| age / sex / race | visit details the review is scored from; `race` (`"white"` or `"african_american"`) selects the pooled cohort equation's model, and omitting it leaves the reported two-model fallback (ADR-024) |
 | conditions | free text or canonical tags — history phrasing ("stent 2023", "previous MI", "asthma") is mapped to tags |
 | current_medications | names or common brand names (Disprin, Concor, Crestor, Xarelto…), used for interaction screening and "already documented" detection |
 | labs | optional numeric additions/overrides (e.g. platelets, which the report parser does not cover) merged with values parsed from `report_text` |
@@ -778,8 +780,11 @@ Rules a client must respect:
   `alternative` carries the other one.
   A stated race is accepted as `race` on `/diagnose` and `/medication-review`
   (inside `patient` on the live `analysis` frame) in any of the forms `white`,
-  `african_american`, `African-American` or `Black`; when none is recorded the
-  wording is read before the two-model fallback applies.
+  `african_american`, `African-American` or `Black`. The record decides and the
+  wording only fills the gap: a group the record states selects the model even
+  when the narrative mentions the other one (a family-history line must not
+  overrule the patient's own record), a value that names no published group
+  leaves the wording to speak, and with neither the two-model fallback applies.
 - **`in_range` is part of the contract.** The equations were derived over age
   40-79, total cholesterol 130-320 mg/dL, HDL 20-100 mg/dL and systolic BP
   90-200 mmHg; outside them the number is returned with `in_range: false` and
