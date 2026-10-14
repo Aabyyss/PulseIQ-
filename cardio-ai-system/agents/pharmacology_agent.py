@@ -190,6 +190,7 @@ def lab_tags(labs: dict[str, Any] | None) -> dict[str, float]:
     hb = _lab(labs, "hemoglobin", "haemoglobin", "hb")
     plt = _lab(labs, "platelets", "platelet")
     ldl = _lab(labs, "ldl", "ldl_c")
+    non_hdl = _lab(labs, "non_hdl", "non_hdl_c")
     troponin = _lab(labs, "troponin", "troponin_i", "troponin_t", "troponin_flag")
     lvef = _lab(labs, "lvef", "ef")
     alt = _lab(labs, "alt", "sgpt")
@@ -213,6 +214,13 @@ def lab_tags(labs: dict[str, Any] | None) -> dict[str, float]:
         tags["thrombocytopenia"] = plt
     if ldl is not None and ldl >= 160:
         tags["dyslipidemia_lab"] = ldl
+    # Non-HDL-C is the same reading one threshold up: the international convention
+    # puts its cut-off 30 mg/dL (0.8 mmol/L) above LDL-C's, so LDL-C's 160 is
+    # non-HDL-C's 190 (ADR-022, ADR-023). A panel that prints only non-HDL raises
+    # the lipid-lowering option through this tag, whether the number was printed
+    # or derived from a printed total and HDL.
+    if non_hdl is not None and non_hdl >= 190:
+        tags["non_hdl_high"] = non_hdl
     if troponin is not None and troponin > 0.04:
         tags["troponin_elevated"] = troponin
     if lvef is not None and lvef < 40:
@@ -276,7 +284,7 @@ DRUGS: list[dict[str, Any]] = [
         "name": "High-intensity statin (atorvastatin/rosuvastatin)",
         "drug_class": "statin",
         "priority": 2,
-        "indications": ["suspected_acs", "established_cad", "prior_mi", "prior_pci_cabg", "dyslipidemia", "dyslipidemia_lab", "diabetes", "cerebrovascular_disease"],
+        "indications": ["suspected_acs", "established_cad", "prior_mi", "prior_pci_cabg", "dyslipidemia", "dyslipidemia_lab", "non_hdl_high", "diabetes", "cerebrovascular_disease"],
         "avoid": [
             ("pregnancy", "absolute", "Statins are contraindicated in pregnancy and breastfeeding."),
             ("liver_disease", "relative", "Active hepatic disease — check transaminases before starting."),
@@ -785,6 +793,10 @@ def indications_from_presentation(symptoms: list[str], tags: list[str], derived:
         add("reduced_ef", f"LVEF {derived['reduced_ef']:g}%")
     if derived.get("dyslipidemia_lab") is not None:
         add("dyslipidemia_lab", f"LDL {derived['dyslipidemia_lab']:g} mg/dL")
+    # Named as its own reason: "dyslipidemia (LDL 165)" would be a false
+    # attribution when non-HDL is the only fraction above its threshold.
+    if derived.get("non_hdl_high") is not None:
+        add("non_hdl_high", f"non-HDL {derived['non_hdl_high']:g} mg/dL")
     if derived.get("troponin_elevated") is not None:
         add("suspected_acs", "troponin above the reference limit")
     return got
