@@ -482,7 +482,12 @@ ASCVD_VALID_RANGES: dict[str, tuple[float, float]] = {
 }
 
 # Clinical 10-year risk categories (ACC/AHA). Banded on the reported value, so
-# the category always agrees with the number on screen.
+# the category always agrees with the number on screen. The published categories
+# are <5 low, 5 to <7.5 borderline, 7.5 to <20 intermediate, >=20 high — that is,
+# each upper bound is EXCLUSIVE, unlike the point scores' bands: 5.0% is
+# borderline and 20.0% is high. ``_band_from_cutoffs`` treats its bounds as
+# inclusive, which would put both of those a band too low, so the comparison is
+# spelled out here.
 _ASCVD_CATEGORY_CUTOFFS = ((5.0, "low"), (7.5, "borderline"), (20.0, "intermediate"), (float("inf"), "high"))
 ASCVD_REPORTING_PRECISION = 1
 ASCVD_STATIN_THRESHOLD = 7.5  # intermediate and above: a statin is indicated
@@ -560,7 +565,10 @@ def _ascvd_risk(group: str, values: dict[str, float]) -> float:
 
 
 def _ascvd_category(risk_pct: float) -> str:
-    return _band_from_cutoffs(risk_pct, list(_ASCVD_CATEGORY_CUTOFFS))
+    for limit, label in _ASCVD_CATEGORY_CUTOFFS:
+        if risk_pct < limit:
+            return label
+    return _ASCVD_CATEGORY_CUTOFFS[-1][1]
 
 
 def _ascvd_components(group: str, values: dict[str, float], *, age, total_cholesterol_mg_dl, hdl_mg_dl,

@@ -21,6 +21,15 @@ Re-verifying (read the source — never edit this file to match the code):
   bins, the Killip and admission-finding points, the low/intermediate/high bands
   and the in-hospital mortality nomogram, reproduced at
   https://www.wikidoc.org/index.php/The_GRACE_risk_score
+- **CHA2DS2-VASc** (Lip et al., Chest 2010): the item points, the maximum of 9, the
+  annual stroke-risk table for untreated patients (including its non-monotonic end,
+  which is a property of the published table) and the conventional tiers, as
+  summarised at https://www.mdcalc.com/calc/801/cha2ds2-vasc-score-atrial-fibrillation-stroke-risk
+- **ASCVD pooled cohort equations** (Goff et al., Circulation 2014): the thirteen
+  terms, each group's coefficients, centering value and 10-year baseline survival,
+  the model each race/sex pair selects, the derivation ranges and the reporting
+  cut-offs, as carried by the reference implementation at
+  https://github.com/cran/PooledCohort (``R/predict_risk.R``)
 
 The thresholds that are *conventions* of this implementation rather than published
 quantities (how a chest-pain history is called typical, how serum creatinine is
@@ -36,7 +45,7 @@ import sys
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from agents import risk_scores_agent  # noqa: E402
-from agents.risk_scores_agent import grace_score, heart_score  # noqa: E402
+from agents.risk_scores_agent import ascvd_score, cha2ds2_vasc, grace_score, heart_score  # noqa: E402
 
 
 # ---------------------------------------------------------------------------
@@ -196,6 +205,205 @@ def test_grace_mortality_rows_are_the_published_nomogram():
     assert midway["interpolated"] is True
     assert 9.8 < midway["percent"] < 13.0
     assert midway["anchor"] == "180 -> 9.8%, 190 -> 13%"
+
+
+# ---------------------------------------------------------------------------
+# CHA2DS2-VASc — Lip et al., Chest 2010 (mdcalc.com/calc/801)
+# ---------------------------------------------------------------------------
+
+# Item points. The two age bands are mutually exclusive, which is what keeps the
+# maximum at 9: 1 + 1 + 2 + 1 + 2 + 1 + 1, taking one age band and the sex point.
+CHA2DS2_VASC_ITEMS = {
+    "heart_failure": 1,
+    "hypertension": 1,
+    "age_75_or_over": 2,
+    "diabetes": 1,
+    "stroke_tia": 2,
+    "vascular_disease": 1,
+    "age_65_to_74": 1,
+    "female_sex": 1,
+}
+CHA2DS2_VASC_MAXIMUM = 9
+# Annual stroke risk per score for untreated patients, from the adjusted-rate
+# table the sources reproduce. It is NOT monotonic at the top (7 reads higher
+# than 8), which is a property of the published table and not a typo here.
+CHA2DS2_VASC_STROKE_RISK_PER_YEAR = {
+    0: 0.0, 1: 1.3, 2: 2.2, 3: 3.2, 4: 4.0,
+    5: 6.7, 6: 9.8, 7: 9.6, 8: 6.7, 9: 15.2,
+}
+# Conventional anticoagulation tiers: sex is a modifier, not an indication.
+CHA2DS2_VASC_TIERS = {
+    "male": [(0, "none"), (1, "consider"), (9, "recommended")],
+    "female": [(1, "none"), (2, "consider"), (9, "recommended")],
+}
+
+
+def test_cha2ds2_vasc_item_points_and_maximum_match_the_published_score():
+    assert risk_scores_agent.CHA2DS2_VASC_STROKE_RISK == CHA2DS2_VASC_STROKE_RISK_PER_YEAR
+    assert CHA2DS2_VASC_MAXIMUM == 1 + 1 + 2 + 1 + 2 + 1 + 1
+
+    # Each item at its published value, and absent at zero.
+    items = {
+        "heart_failure": (1, lambda flag: cha2ds2_vasc(age=50, sex="male", heart_failure=flag)),
+        "hypertension": (1, lambda flag: cha2ds2_vasc(age=50, sex="male", hypertension=flag)),
+        "diabetes": (1, lambda flag: cha2ds2_vasc(age=50, sex="male", diabetes=flag)),
+        "stroke_tia": (2, lambda flag: cha2ds2_vasc(age=50, sex="male", stroke_tia=flag)),
+        "vascular_disease": (1, lambda flag: cha2ds2_vasc(age=50, sex="male", vascular_disease=flag)),
+    }
+    for item, (points, score) in items.items():
+        assert score(False)["score"] == 0, item
+        assert score(True)["score"] == points, item
+
+    # Age bands are mutually exclusive: 65-74 is 1, 75 and over is 2, never both.
+    assert cha2ds2_vasc(age=64, sex="male")["components"]["age"]["points"] == 0
+    assert cha2ds2_vasc(age=65, sex="male")["components"]["age"]["points"] == 1
+    assert cha2ds2_vasc(age=74, sex="male")["components"]["age"]["points"] == 1
+    assert cha2ds2_vasc(age=75, sex="male")["components"]["age"]["points"] == 2
+    # Female sex is worth a point but is not itself an indication to anticoagulate.
+    assert cha2ds2_vasc(age=50, sex="female")["score"] == 1
+    assert cha2ds2_vasc(age=50, sex="male")["score"] == 0
+    assert cha2ds2_vasc(age=50, sex="female")["anticoagulation_tier"] == "none"
+    full = cha2ds2_vasc(age=80, sex="female", heart_failure=True, hypertension=True, diabetes=True,
+                        stroke_tia=True, vascular_disease=True)
+    assert (full["score"], full["max_score"]) == (CHA2DS2_VASC_MAXIMUM, CHA2DS2_VASC_MAXIMUM)
+    assert full["annual_stroke_risk_pct"] == CHA2DS2_VASC_STROKE_RISK_PER_YEAR[9]
+
+
+def test_cha2ds2_vasc_reports_the_published_table_including_its_non_monotonicity():
+    """Score 8 reads lower than score 7 in the published table, and is reported as such."""
+    risks = risk_scores_agent.CHA2DS2_VASC_STROKE_RISK
+    assert risks[7] > risks[8]
+
+    eight = cha2ds2_vasc(age=75, sex="male", heart_failure=True, hypertension=True,
+                         diabetes=True, stroke_tia=True, vascular_disease=True)
+    assert (eight["score"], eight["annual_stroke_risk_pct"]) == (8, risks[8])
+    assert eight["annual_stroke_risk_pct"] < risks[7]  # the table is not smoothed
+
+    # Score 9 is the same patient with the sex point, and the top table row.
+    nine = cha2ds2_vasc(age=75, sex="female", heart_failure=True, hypertension=True,
+                        diabetes=True, stroke_tia=True, vascular_disease=True)
+    assert (nine["score"], nine["annual_stroke_risk_pct"]) == (9, risks[9])
+
+
+def test_cha2ds2_vasc_tiers_treat_sex_as_a_modifier_at_the_published_scores():
+    """The tier boundaries differ by sex: 1 in men is 2 in women, and so on."""
+    cases = [
+        ("male", cha2ds2_vasc(age=50, sex="male"), 0),
+        ("male", cha2ds2_vasc(age=70, sex="male"), 1),
+        ("male", cha2ds2_vasc(age=70, sex="male", hypertension=True), 2),
+        ("female", cha2ds2_vasc(age=50, sex="female"), 1),
+        ("female", cha2ds2_vasc(age=70, sex="female"), 2),
+        ("female", cha2ds2_vasc(age=70, sex="female", hypertension=True), 3),
+    ]
+    for sex, score, want_score in cases:
+        want_tier = next(label for limit, label in CHA2DS2_VASC_TIERS[sex] if want_score <= limit)
+        assert (score["score"], score["anticoagulation_tier"]) == (want_score, want_tier), (sex, want_score)
+
+
+# ---------------------------------------------------------------------------
+# ASCVD — 2013 ACC/AHA Pooled Cohort Equations (Goff et al., Circulation 2014)
+# ---------------------------------------------------------------------------
+
+# The thirteen terms, in the order the guideline's coefficient tables use.
+ASCVD_TERMS = (
+    "ln_age", "ln_age_squared", "ln_total_cholesterol", "ln_age_x_ln_total_cholesterol",
+    "ln_hdl", "ln_age_x_ln_hdl", "ln_treated_sbp", "ln_age_x_ln_treated_sbp",
+    "ln_untreated_sbp", "ln_age_x_ln_untreated_sbp", "current_smoker", "ln_age_x_smoker", "diabetes",
+)
+# One coefficient set per group, with the group's centering value (the guideline
+# publishes a single mean per group, not a mean per term) and the 10-year baseline
+# survival S10 in risk = 1 - S10^exp(sum(beta * x) - mean). A term the published
+# table omits is zero. Values and per-group precision as carried by the reference
+# implementation in the PooledCohort R package (R/predict_risk.R).
+ASCVD_GROUP_COEFFICIENTS = {
+    "white_men": {
+        "mean": 61.1816,
+        "baseline_survival": 0.91436,
+        "betas": (12.344, 0.0, 11.853, -2.664, -7.990, 1.769, 1.797, 0.0, 1.764, 0.0, 7.837, -1.795, 0.658),
+    },
+    "white_women": {
+        "mean": -29.1817,
+        "baseline_survival": 0.96652,
+        "betas": (-29.799, 4.884, 13.540, -3.114, -13.578, 3.149, 2.019, 0.0, 1.957, 0.0, 7.574, -1.665, 0.661),
+    },
+    "aa_men": {
+        "mean": 19.5425,
+        "baseline_survival": 0.89536,
+        "betas": (2.469, 0.0, 0.302, 0.0, -0.307, 0.0, 1.916, 0.0, 1.809, 0.0, 0.549, 0.0, 0.645),
+    },
+    "aa_women": {
+        "mean": 86.6081,
+        "baseline_survival": 0.95334,
+        "betas": (17.1141, 0.0, 0.9396, 0.0, -18.9196, 4.4748, 29.2907, -6.4321, 27.8197, -6.0873, 0.6908, 0.0, 0.8738),
+    },
+}
+# Which model a stated sex and race selects. The two published groups are the
+# only race keys, which is why an unrecorded group is reported as a fallback.
+ASCVD_RACE_SEX_MODELS = {
+    ("white", "male"): "white_men",
+    ("white", "female"): "white_women",
+    ("african_american", "male"): "aa_men",
+    ("african_american", "female"): "aa_women",
+}
+# The ranges the equations were derived and validated over (age 40-79, total
+# cholesterol 130-320 mg/dL, HDL 20-100 mg/dL, systolic BP 90-200 mmHg).
+ASCVD_VALID_INPUT_RANGES = {
+    "age": (40, 79),
+    "total_cholesterol_mg_dl": (130, 320),
+    "hdl_mg_dl": (20, 100),
+    "systolic_bp": (90, 200),
+}
+# Reporting categories, banded on the reported value, and the threshold at which
+# a statin is conventionally indicated.
+ASCVD_CATEGORY_CUT_OFFS = [(5.0, "low"), (7.5, "borderline"), (20.0, "intermediate"), (float("inf"), "high")]
+ASCVD_STATIN_THRESHOLD = 7.5
+
+
+def test_ascvd_terms_and_coefficients_match_the_published_equations():
+    assert risk_scores_agent.ASCVD_TERMS == ASCVD_TERMS
+    for group, published in ASCVD_GROUP_COEFFICIENTS.items():
+        spec = risk_scores_agent.ASCVD_GROUPS[group]
+        assert tuple(spec["betas"]) == published["betas"], group
+        assert spec["mean"] == published["mean"], group
+        assert spec["baseline_survival"] == published["baseline_survival"], group
+        # A coefficient set is one number per term, in the published order.
+        assert len(spec["betas"]) == len(ASCVD_TERMS), group
+
+
+def test_ascvd_group_selection_matches_the_published_models():
+    assert risk_scores_agent.ASCVD_SEX_GROUPS == {
+        "male": ("white_men", "aa_men"),
+        "female": ("white_women", "aa_women"),
+    }
+    assert risk_scores_agent.ASCVD_RACE_GROUPS == {
+        "white": {"male": "white_men", "female": "white_women"},
+        "african_american": {"male": "aa_men", "female": "aa_women"},
+    }
+    for (race, sex), group in ASCVD_RACE_SEX_MODELS.items():
+        assert risk_scores_agent.ASCVD_RACE_GROUPS[race][sex] == group
+
+
+def test_ascvd_valid_ranges_and_reporting_cut_offs_are_the_published_ones():
+    assert risk_scores_agent.ASCVD_VALID_RANGES == ASCVD_VALID_INPUT_RANGES
+    assert risk_scores_agent._ASCVD_CATEGORY_CUTOFFS == tuple(ASCVD_CATEGORY_CUT_OFFS)
+    assert risk_scores_agent.ASCVD_STATIN_THRESHOLD == ASCVD_STATIN_THRESHOLD
+
+    # The categories are read at the cut-off itself: 5.0 is the first borderline
+    # value, 7.5 the first intermediate, 20.0 the first high.
+    for risk_pct, want in ((4.9, "low"), (5.0, "borderline"), (7.4, "borderline"),
+                           (7.5, "intermediate"), (19.9, "intermediate"), (20.0, "high")):
+        assert risk_scores_agent._ascvd_category(risk_pct) == want, risk_pct
+
+
+def test_ascvd_category_and_statin_flag_follow_the_same_reported_value():
+    """The flag is the cut-off applied to the number on screen, not to a hidden one."""
+    example = dict(age=55, sex="male", race="white", total_cholesterol_mg_dl=213,
+                   hdl_mg_dl=50, systolic_bp=120, treated_for_hypertension=False,
+                   current_smoker=False, diabetes=False)
+    reading = ascvd_score(**example)
+    assert reading["risk_pct"] == 5.3 or reading["risk_pct"] == 5.4  # the guideline's worked example, rounded
+    assert reading["statin_indicated"] == (reading["risk_pct"] >= ASCVD_STATIN_THRESHOLD)
+    assert reading["category"] == risk_scores_agent._ascvd_category(reading["risk_pct"])
 
 
 def main() -> None:
