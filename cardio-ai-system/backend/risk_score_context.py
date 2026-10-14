@@ -182,25 +182,36 @@ def _lipid_mg_dl(text: str, patient: dict, key: str) -> float | None:
     return None
 
 
+def _race_in(text: str) -> str | None:
+    """A group named in ``text``, or ``None`` when it names none of the published ones.
+
+    African American is tested first: the equations of the two groups differ, and a
+    text that names both (a family history line, or a record carrying two words for
+    one person) is read as the group whose coefficients are the higher of the two.
+    """
+    if re.search(_AFRICAN_AMERICAN, text, re.I):
+        return "african_american"
+    if re.search(_WHITE, text, re.I):
+        return "white"
+    return None
+
+
 def _race(patient: dict, narrative: str) -> str | None:
     """The equation group's race/ethnicity term: ``"white"``, ``"african_american"`` or unknown.
 
-    Read from the record first (a stated race is a fact about the patient), then
-    from the wording, because the pooled cohort equations publish a separate
-    coefficient set per group and picking one silently is what the score refuses
-    to do.
+    The record decides, and the wording is only a fallback, because the pooled
+    cohort equations publish a separate coefficient set per group: a group the
+    record states is a fact about the patient, while a mention in the narrative is
+    an inference, and letting the inference win would let a line about family
+    history overrule the patient's own record. Nothing is assumed when neither
+    says: the score reports the fallback it used rather than choosing a group.
     """
     # A recorded value may arrive as prose ("African American"), as a slug
     # ("african_american") or hyphenated ("African-American"), so separators are
     # normalised before matching rather than making the caller guess a format.
     recorded = str(patient.get("race") or patient.get("ethnicity") or "")
     recorded = recorded.replace("_", " ").replace("-", " ").strip()
-    haystack = f"{recorded}\n{narrative}" if (recorded or narrative) else ""
-    if re.search(_AFRICAN_AMERICAN, haystack, re.I):
-        return "african_american"
-    if re.search(_WHITE, haystack, re.I):
-        return "white"
-    return None
+    return _race_in(recorded) or _race_in(narrative)
 
 
 def _smoker(tags: list[str], narrative: str) -> bool | None:

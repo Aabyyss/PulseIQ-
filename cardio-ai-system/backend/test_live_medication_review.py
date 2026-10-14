@@ -70,6 +70,33 @@ def _visit(**overrides) -> dict:
 # Visit details count from the first line
 # ---------------------------------------------------------------------------
 
+def test_the_recorded_group_reaches_the_live_screen_and_its_score_block():
+    """The group the consultation form records has to survive the per-line rebuild.
+
+    The live screen is recomputed from the visit header on every line, so a field
+    the header carries but the rebuild drops would leave the live scores on the
+    fallback model while the medication form scored the recorded one — two
+    readings of the same visit. An unrecorded group keeps the reported fallback.
+    """
+    text = "routine risk review, non-smoker, no diabetes"
+    lipids = {"total_cholesterol": 213, "hdl": 50}
+
+    recorded = medication_review_for_encounter(
+        text, patient=_visit(race="white", labs=lipids, vitals={"systolic_bp": 120})
+    )
+    assert recorded["risk_scores"]["inputs"]["race"] == "white"
+    assert recorded["risk_scores"]["ascvd"]["group"] == "white men"
+
+    line = medication_review_for_live_line(
+        text=text, patient=_visit(race="white", labs=lipids, vitals={"systolic_bp": 120})
+    )
+    assert line["risk_scores"]["ascvd"]["group"] == "white men"
+
+    unrecorded = medication_review_for_encounter(text, patient=_visit(labs=lipids, vitals={"systolic_bp": 120}))
+    assert unrecorded["risk_scores"]["ascvd"]["race_captured"] is False
+    assert unrecorded["risk_scores"]["inputs"]["race"] is None
+
+
 def test_recorded_allergy_blocks_before_a_single_line_is_spoken():
     review = medication_review_for_encounter(
         "", "", patient=_visit(allergies=["aspirin"], conditions=["hypertension", "prior MI"])

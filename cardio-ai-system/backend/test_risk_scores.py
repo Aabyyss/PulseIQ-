@@ -416,6 +416,38 @@ def test_the_diagnosis_layer_reports_the_scores_beside_the_model_band():
     assert medication["medications"]["pathway"]["urgency"] == "emergency"
 
 
+def test_the_record_decides_the_group_and_the_wording_only_fills_the_gap():
+    """A stated group is a fact about the patient; a mention in the narrative is not.
+
+    The two used to be matched over one combined string, so a family-history line
+    ("brother is African American") overruled a group the record stated — the
+    equation would score the patient on the other group's coefficients while
+    reporting that a race had been captured. The record now decides, and the
+    wording is read only when the record names no published group.
+    """
+    base = {
+        "age": 55,
+        "sex": "male",
+        "labs": {"total_cholesterol": 213, "hdl": 50},
+        "vitals": {"systolic_bp": 120},
+    }
+    text = "routine risk review, non-smoker, no diabetes, brother is African American"
+
+    recorded = build_risk_scores(text, "", {**base, "race": "white"})
+    assert recorded["ascvd"]["group"] == "white men"
+    assert recorded["inputs"]["race"] == "white"
+
+    # The record's own spelling does not matter: prose, slug and hyphenated all read.
+    assert build_risk_scores("", "", {**base, "race": "African-American"})["inputs"]["race"] == "african_american"
+    assert build_risk_scores("", "", {**base, "race": "african_american"})["inputs"]["race"] == "african_american"
+    assert build_risk_scores("", "", {**base, "ethnicity": "Caucasian"})["inputs"]["race"] == "white"
+
+    # A value that names no published group leaves the wording to speak...
+    assert build_risk_scores("patient is black", "", {**base, "race": "Asian"})["inputs"]["race"] == "african_american"
+    # ...and with nothing said at all the group stays unknown, not guessed.
+    assert build_risk_scores("", "", base)["inputs"]["race"] is None
+
+
 def test_the_medication_review_scores_the_group_the_record_states():
     """A recorded group is what the equation selects its model from (ADR-024).
 
