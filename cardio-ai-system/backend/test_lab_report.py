@@ -483,6 +483,57 @@ def test_non_hdl_is_graded_against_its_own_band_not_hdls():
     }
 
 
+def test_a_printed_pair_defines_the_fraction_it_leaves_out():
+    """Non-HDL is total minus HDL, so a panel printing both states the third.
+
+    The derived value keeps the fraction's own band — the band is about the
+    number, not about how it arrived — and says where it came from: the report
+    did not print it, and nothing in the payload may suggest it did.
+    """
+    cases = [
+        # text, value, the arithmetic as the derivation states it
+        (
+            "Total cholesterol 248 mg/dL, HDL 34 mg/dL.",
+            214.0,
+            "total cholesterol 248 mg/dl - HDL cholesterol 34 mg/dl = 214 mg/dl",
+        ),
+        (
+            "Total cholesterol 5.5 mmol/L, HDL 1.3 mmol/L.",
+            162.41,
+            "total cholesterol 212.685 mg/dl - HDL cholesterol 50.271 mg/dl = 162.41 mg/dl "
+            "(printed as 5.5 mmol/l, 1.3 mmol/l)",
+        ),
+    ]
+    for text, want_value, want_derivation in cases:
+        values = {v["key"]: v for v in screen_report_text(text)["values"]}
+        derived = values["non_hdl"]
+        assert derived["computed"] is True, text
+        # Non-HDL is graded against its own band, not against the total's or HDL's.
+        assert (derived["value"], derived["unit"], derived["unit_label"]) == (want_value, "mg/dl", "mg/dl (computed)")
+        assert (derived["status"], derived["reference"]) == ("high", "≤160.0 mg/dl")
+        assert derived["derivation"] == want_derivation
+        # The provenance a caller can redo the sum from.
+        assert set(derived["computed_from"]) == {"total_cholesterol", "hdl"}
+        # Only the derived entry is marked; the printed pair is untouched.
+        assert values["total_cholesterol"].get("computed") is None
+        assert values["hdl"].get("computed") is None
+
+
+def test_a_derived_fraction_subtracts_in_one_unit_when_the_pair_is_mixed():
+    """A difference is only arithmetically true in one unit, so both convert.
+
+    "Cholesterol 5.5 mmol/L. HDL 50 mg/dL." states the two operands in different
+    units; subtracting the printed numbers (5.5 - 50) would be nonsense, so the
+    mmol/L operand is converted first and the printed spelling is kept beside it.
+    """
+    derived = next(
+        v for v in screen_report_text("Cholesterol 5.5 mmol/L. HDL 50 mg/dL.")["values"] if v["key"] == "non_hdl"
+    )
+    assert derived["value"] == 162.69  # 212.685 - 50, not 5.5 - 50
+    assert derived["computed_from"] == {"total_cholesterol": 212.685, "hdl": 50.0}
+    assert derived["derivation"].endswith("(printed as 5.5 mmol/l, 50 mg/dl)")
+
+
 def test_the_lipid_abbreviations_reach_the_gates_in_primary_units():
     """The flattened lab map is judged in mg/dL, so the panel's short forms convert too."""
     from backend.lab_report import labs_for_review
