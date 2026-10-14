@@ -541,6 +541,29 @@ def test_the_identity_runs_both_ways_when_the_hdl_is_the_fraction_left_out():
     assert derived["computed_from"] == {"total_cholesterol": 212.685, "non_hdl": 162.414}
 
 
+def test_a_panel_that_does_not_hold_together_derives_nothing():
+    """Three refusals, so a derived fraction is never a claim the panel denies.
+
+    A total below its own HDL (a mistyped digit, or two different draws) would
+    give a negative fraction; an operand whose unit has no defined conversion
+    cannot be subtracted as though it were mg/dL; and an operand whose printed
+    unit could not be read at all is banded against the primary band as a
+    fallback — subtracting it would stack a second claim on an assumption.
+    """
+    def computed(text: str) -> list[dict]:
+        return [v for v in screen_report_text(text)["values"] if v.get("computed")]
+
+    assert computed("Total cholesterol 100 mg/dL, HDL 140 mg/dL.") == []
+    assert computed("Total cholesterol 5.0 U/L, HDL 50 mg/dL.") == []
+    unreadable = screen_report_text("Total cholesterol 5.5 mmol/kL, HDL 50 mg/dL.")
+    assert [v for v in unreadable["values"] if v.get("computed")] == []
+    # ...and the unreadable unit is still reported, with the band it was judged
+    # against named, so refusing to derive it hides nothing.
+    total = next(v for v in unreadable["values"] if v["key"] == "total_cholesterol")
+    assert (total["unit_read"], total["unit_label"]) == (False, "mmol/kL (judged as mg/dl)")
+    assert total["reference"] == "≤200.0 mmol/kL (judged as mg/dl)"
+
+
 def test_the_summary_counts_the_values_the_report_did_not_print():
     """A derived value is counted, and the count says how many were derived.
 

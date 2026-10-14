@@ -460,6 +460,15 @@ def _extract_numeric(analyte: dict[str, Any], text: str, lowered: str) -> list[d
             unit_label = unit or analyte["primary_unit"]
             if unit and not has_known_unit:
                 unit_label = f"{unit} (judged as {analyte['primary_unit']})"
+            # False only when a unit token was printed and this module could not
+            # name it: the value is banded against the primary band as a fallback,
+            # and a derived fraction refuses to subtract a number whose unit is
+            # an assumption (``_derive_lipids``). A value with no unit token at
+            # all is in its analyte's primary unit, which is the module's own
+            # convention and is trusted throughout.
+            unit_read = not (unit is None and _looks_like_unit(unit_raw))
+            if unit and not has_known_unit:
+                unit_label = f"{unit} (judged as {analyte['primary_unit']})"
             elif unit is None and _looks_like_unit(unit_raw):
                 # A unit this module cannot map must not look like the primary
                 # unit: name what was printed and what it was banded against.
@@ -479,6 +488,7 @@ def _extract_numeric(analyte: dict[str, Any], text: str, lowered: str) -> list[d
                 "value_text": ("<" if below_limit else "") + raw_value.lstrip("<>"),
                 "unit": analyte["primary_unit"] if unit is None else unit,
                 "unit_label": unit_label,
+                "unit_read": unit_read,
                 "reference": _format_band(band, unit_label if not unit else unit, is_floor),
                 "status": status,
                 "severity": _SEVERITY[status],
@@ -536,6 +546,11 @@ def _operand(printed: list[dict[str, Any]], key: str, unit: str) -> dict[str, An
     """
     for entry in printed:
         if entry["key"] != key:
+            continue
+        if entry.get("unit_read") is False:
+            # The unit beside this value could not be read, so the value was
+            # banded against the primary band as a fallback. Subtracting it would
+            # build a second claim on top of an assumption.
             continue
         try:
             number = float(entry["value"])
