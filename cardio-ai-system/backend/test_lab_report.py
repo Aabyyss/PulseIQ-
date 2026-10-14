@@ -519,6 +519,53 @@ def test_a_printed_pair_defines_the_fraction_it_leaves_out():
         assert values["hdl"].get("computed") is None
 
 
+def test_the_identity_runs_both_ways_when_the_hdl_is_the_fraction_left_out():
+    """Total minus non-HDL is HDL, and it is banded against the HDL floor.
+
+    Whichever fraction the panel leaves out, the pair that is printed defines
+    it: this is the direction a panel written in non-HDL terms needs, where the
+    missing number is the one the 40 mg/dL HDL floor is checked against.
+    """
+    derived = next(
+        v for v in screen_report_text("Total cholesterol 5.5 mmol/L, non-HDL 4.2 mmol/L.")["values"]
+        if v["key"] == "hdl"
+    )
+    assert (derived["computed"], derived["value"], derived["unit"], derived["unit_label"]) == (
+        True, 50.27, "mg/dl", "mg/dl (computed)"
+    )
+    assert (derived["status"], derived["reference"]) == ("normal", "≥40.0 mg/dl")
+    assert derived["derivation"] == (
+        "total cholesterol 212.685 mg/dl - non-HDL cholesterol 162.414 mg/dl = 50.27 mg/dl "
+        "(printed as 5.5 mmol/l, 4.2 mmol/l)"
+    )
+    assert derived["computed_from"] == {"total_cholesterol": 212.685, "non_hdl": 162.414}
+
+
+def test_a_derivation_needs_both_printed_operands_and_never_overrules_one():
+    """Two of the three fractions is the whole requirement, and nothing less.
+
+    A panel printing all three is left exactly as printed (the report's own
+    numbers win), a panel printing one has nothing to subtract from, and two
+    fractions give exactly one derived value — a derived value is never an
+    operand of another derivation.
+    """
+    def computed(text: str) -> list[dict]:
+        return [v for v in screen_report_text(text)["values"] if v.get("computed")]
+
+    all_three = "Total cholesterol 5.5 mmol/L, HDL 1.3 mmol/L, non-HDL 4.2 mmol/L."
+    assert computed(all_three) == []
+    assert computed("HDL 1.3 mmol/L.") == []
+    assert computed("Total cholesterol 5.5 mmol/L.") == []
+    # Two fractions on one line, and on separate lines, both define the third.
+    assert [v["key"] for v in computed("Total cholesterol 5.5 mmol/L, HDL 1.3 mmol/L.")] == ["non_hdl"]
+    assert [v["key"] for v in computed("Cholesterol 5.5 mmol/L.\nHDL 1.3 mmol/L.")] == ["non_hdl"]
+    # A pair inside its band is reported as normal, with no explanation invented
+    # for a value that is not out of range.
+    in_band = computed("Total cholesterol 190 mg/dL, HDL 40 mg/dL.")[0]
+    assert (in_band["value"], in_band["status"]) == (150.0, "normal")
+    assert "explanation" not in in_band
+
+
 def test_a_derived_fraction_subtracts_in_one_unit_when_the_pair_is_mixed():
     """A difference is only arithmetically true in one unit, so both convert.
 
