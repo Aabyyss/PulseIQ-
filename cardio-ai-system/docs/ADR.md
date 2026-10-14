@@ -859,3 +859,82 @@ fraction, since no band is defined for either; a non-HDL is not derived from a
 printed total and HDL; and the lipid-lowering gate in the pharmacology agent
 still keys on LDL alone, so a report stating only non-HDL does not raise that
 indication — which this key now makes possible to fix.
+
+## ADR-023 · Work out the lipid fraction a panel implies, and gate on non-HDL as well as LDL
+**Status:** Accepted (2026-10-15)
+
+ADR-022 gave non-HDL its own fraction and its own band, and stopped deliberately
+at two boundaries: it would not derive a fraction inside the parser, and it left
+the lipid-lowering gate reading LDL alone. Both were the right scope for that
+change, and both leave the same hole — the fraction the lipid decision turns on is
+not always the one the report prints. Measured against the module before this
+change: "Total cholesterol 248 mg/dL, HDL 34 mg/dL." reported two values and no
+non-HDL, so a non-HDL of 214 mg/dL, over its own 160 mg/dL band, was invisible;
+and a panel written "non-HDL 4.2 mmol/L" reached the medication review as 162
+mg/dL with no lipid-lowering option offered, because ``lab_tags()`` read LDL alone.
+
+Decision: the derived fraction and the gate both change, in
+``backend/lab_report.py`` and ``agents/pharmacology_agent.py``.
+
+- **The identity is worked out where the values are read.**
+  ``non-HDL = total cholesterol - HDL`` and, rearranged, ``HDL = total cholesterol
+  - non-HDL``: a panel that prints two of the three fractions states the third, so
+  the third is computed once at parse time and every consumer — the screening
+  payload, the flattened lab map, the FHIR export — sees one number instead of
+  three opinions about it.
+- **A derived value is a value, and says it is derived.** It carries the
+  fraction's own band and severity (the band is about the number, not about how it
+  arrived), plus ``computed: true``, ``unit_label`` "mg/dL (computed)",
+  ``derivation`` (the arithmetic, with the printed spelling beside it when the
+  report wrote the operands in another unit), ``computed_from`` (the operands as
+  they were subtracted) and ``summary.computed``. Its ``matched_text`` is the
+  arithmetic, which is the whole of its provenance.
+- **The derivation refuses what the panel does not support.** A fraction the
+  report printed is never overruled; a derived value is never an operand of the
+  next derivation; an operand whose printed unit could not be read
+  (``unit_read: false``) is not subtracted, because that value was only *banded*
+  as if it were in the primary unit; an operand whose unit has no defined
+  conversion is skipped; and a total below its own constituent yields nothing
+  rather than a negative fraction.
+- **The result is stated in the fraction's primary unit** (mg/dL) after converting
+  both operands into it, because a panel can print the pair in different units and
+  a difference is only arithmetically true in one of them.
+- **The gate reads the fraction's own threshold**: 190 mg/dL for non-HDL, which is
+  LDL-C's 160 shifted by the 30 mg/dL (0.8 mmol/L) the international convention
+  places between them — the same relationship ADR-022's band already uses. It
+  travels as its own tag and indication (``non_hdl_high``), so an option's reason
+  names the fraction that was high ("non-HDL 193 mg/dL") instead of attributing to
+  the panel an LDL figure it never printed.
+
+Rejected alternatives: deriving inside the flattened lab map or the gate (the
+clinician would not see the number, and the screening and the gates could disagree
+about one panel); a second ``derived`` list in the payload (every consumer would
+have to union it, and the screen would need a second list to render); leaving the
+gate on LDL alone (the hole above); keeping both a printed and a derived value for
+the same fraction; estimating LDL from total, HDL and triglycerides (Friedewald) —
+a third identity, but it assumes fasting and fails above 400 mg/dL triglycerides,
+while the panel's own arithmetic is exact; holding non-HDL to LDL's 160 mg/dL (one
+fraction's number applied to another); and reporting the derivation in prose only,
+with no structured field a caller can act on.
+
+Consequences: 7 new cases in ``backend/test_lab_report.py``, 3 in
+``backend/test_pharmacology_agent.py`` and 1 in ``backend/test_fhir_export.py`` —
+bringing the backend suite to 209 tests. One existing case changes count rather
+than meaning: "HDL 1.3 mmol/L. Total cholesterol 5.5 mmol/L." now also yields
+non-HDL 162.4 mg/dL, which is over its band, so it reports two abnormal values
+instead of one — neither of them the HDL, which is what that case is about.
+``/screen-report`` values gain ``computed`` / ``derivation`` / ``computed_from`` /
+``unit_read`` and the summary gains ``computed``; the flattened ``labs_used`` map
+can carry a derived fraction; the FHIR export marks a derived observation in its
+note; the consultation screen shows a computed badge and the arithmetic where a
+printed value shows the snippet it came from; and ``lab_tags()`` gains
+``non_hdl_high``.
+
+Known limits: the derived number inherits the printed pair's rounding, so a panel
+printed in mmol/L gives a rougher non-HDL than one printed in mg/dL — which is why
+the arithmetic travels with it instead of being hidden; nothing checks that the
+printed total and HDL came from the same draw, so an internally consistent but
+mismatched pair still subtracts; a value whose unit could not be read is still
+banded against the primary band (ADR-016's convention) and is excluded only from
+derivation; and the gate's thresholds are the AHA/ACC "high" boundaries, which
+other guidelines place elsewhere.
