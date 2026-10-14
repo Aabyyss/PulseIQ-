@@ -49,6 +49,7 @@ import {
   useConsultationCapture,
   type CardiacRegionEntry
 } from "@/lib/useConsultationCapture";
+import { RACE_HINT, RACE_OPTIONS } from "@/lib/patientGroups";
 import type { DiagnosisResponse, ReportImageAnalysis } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -121,6 +122,7 @@ export function ConsultationPage() {
   const [patientName, setPatientName] = useState("");
   const [patientAge, setPatientAge] = useState("");
   const [patientGender, setPatientGender] = useState("");
+  const [patientRace, setPatientRace] = useState("");
   const [visitDate, setVisitDate] = useState(new Date().toISOString().slice(0, 10));
   const [doctorName, setDoctorName] = useState("");
   const [chiefComplaint, setChiefComplaint] = useState("");
@@ -132,6 +134,7 @@ export function ConsultationPage() {
   const capture = useConsultationCapture(() => ({
     age: patientAge,
     sex: patientGender,
+    race: patientRace,
     conditions,
     allergies,
     currentMedications,
@@ -763,6 +766,20 @@ export function ConsultationPage() {
             <option value="Male">Male</option>
           </select>
         </div>
+        <select
+          className={inputClass}
+          value={patientRace}
+          onChange={(e) => setPatientRace(e.target.value)}
+          aria-label="Patient race or ethnicity"
+          title={RACE_HINT}
+        >
+          <option value="">Race / ethnicity…</option>
+          {RACE_OPTIONS.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
         <div className="grid grid-cols-2 gap-2">
           <input
             className={inputClass}
