@@ -28,6 +28,12 @@ Design
   whose printed unit cannot be mapped is judged against the analyte's primary
   band and labelled with the unit it was actually read as, so no band is
   assumed silently.
+- Derived lipids, labelled as derived: the three lipid fractions are not
+  independent — ``non-HDL = total cholesterol - HDL`` and, the same identity
+  rearranged, ``HDL = total cholesterol - non-HDL`` — so a panel that prints two
+  of them states the third. It is worked out from the printed pair and returned
+  as a value of its own with ``computed: true`` and the arithmetic that produced
+  it, so nothing a clinician reads as printed was in fact inferred. See ADR-023.
 - Severity ordering: ``critical`` → ``abnormal`` → ``normal``. Criticals
   (potassium 6.4, EF 25%, anterior ST elevation) always sort first.
 - Explainability: each flagged value carries ``matched_text`` (the snippet
@@ -219,6 +225,10 @@ _ANALYTES: list[dict[str, Any]] = [
         "floor": True,
     },
 ]
+
+# The analytes a derived value can belong to, by key (bands, labels and notes
+# live on the analyte entry, so a computed fraction is banded like a printed one).
+_ANALYTE_BY_KEY: dict[str, dict[str, Any]] = {analyte["key"]: analyte for analyte in _ANALYTES}
 
 _UNIT_ALIASES = {
     "mg/dl": "mg/dl", "mg/dl": "mg/dl", "mgdl": "mg/dl",
@@ -498,6 +508,128 @@ def _explain(entry: dict[str, Any], band: Band, is_floor: bool) -> str:
     return f"{base} {entry['note']}"
 
 
+# ---------------------------------------------------------------------------
+# Derived lipids
+# ---------------------------------------------------------------------------
+
+# (the fraction that can be worked out, (the two operands, in the order the
+# subtraction is written)). The identities are exact, so the only reason a
+# derived value is second-class is provenance — which is why it is labelled.
+_LIPID_IDENTITY: list[tuple[str, tuple[str, str]]] = [
+    ("non_hdl", ("total_cholesterol", "hdl")),
+]
+
+_LIPID_LABELS = {
+    "total_cholesterol": "total cholesterol",
+    "hdl": "HDL cholesterol",
+    "non_hdl": "non-HDL cholesterol",
+}
+
+
+def _operand(printed: list[dict[str, Any]], key: str, unit: str) -> dict[str, Any] | None:
+    """The first printed value for ``key``, restated in ``unit``.
+
+    ``None`` when the fraction was not printed at all or its unit cannot be
+    mapped onto the target unit — a value that cannot be converted is never
+    subtracted as if it were already the target's unit.
+    """
+    for entry in printed:
+        if entry["key"] != key:
+            continue
+        try:
+            number = float(entry["value"])
+        except (TypeError, ValueError, KeyError):
+            continue
+        converted = to_primary_unit(key, number, str(entry.get("unit") or "").lower() or None)
+        if converted is not None:
+            return {"entry": entry, "converted": converted}
+    return None
+
+
+def _derivation_text(key: str, operands: list[dict[str, Any]], value: float, unit: str) -> str:
+    """The arithmetic, spelled out in the unit the result is stated in.
+
+    Both operands are shown in the result's unit — a difference is only
+    arithmetically true in one unit — and the printed spelling is added when the
+    report wrote them in another ("printed as 5.5 mmol/L, 1.3 mmol/L"), so the
+    line can be checked against the report rather than taken on trust.
+    """
+    left, right = operands
+    spelled = [f"{operand['entry']['value_text']} {operand['entry']['unit']}" for operand in operands]
+    text = (
+        f"{_LIPID_LABELS[left['entry']['key']]} {left['converted']:g} {unit} - "
+        f"{_LIPID_LABELS[right['entry']['key']]} {right['converted']:g} {unit} = {value:g} {unit}"
+    )
+    if any(str(operand["entry"].get("unit")) != unit for operand in operands):
+        text += f" (printed as {', '.join(spelled)})"
+    return text
+
+
+def _computed_entry(analyte: dict[str, Any], value: float, unit: str, operands: list[dict[str, Any]]) -> dict[str, Any]:
+    """A derived fraction as a value of its own, carrying how it was reached."""
+    band = analyte["ranges"][unit]
+    status = _classify(value, False, band, bool(analyte.get("floor")))
+    derivation = _derivation_text(analyte["key"], operands, value, unit)
+    entry: dict[str, Any] = {
+        "key": analyte["key"],
+        "name": analyte["label"],
+        "value": value,
+        "value_text": f"{value:g}",
+        "unit": unit,
+        "unit_label": f"{unit} (computed)",
+        "reference": _format_band(band, unit, False),
+        "status": status,
+        "severity": _SEVERITY[status],
+        # A printed value points at the snippet that produced it; a derived one
+        # points at the arithmetic, which is the whole of its provenance.
+        "matched_text": derivation,
+        "derivation": derivation,
+        "computed": True,
+        # The operands as they were subtracted, in the derived value's unit, so a
+        # caller can redo the sum instead of trusting the result.
+        "computed_from": {str(operand["entry"]["key"]): round(float(operand["converted"]), 4) for operand in operands},
+        "note": analyte["note"],
+    }
+    if status != "normal":
+        entry["explanation"] = _explain(entry, band, False)
+    return entry
+
+
+def _derive_lipids(printed: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """The lipid fractions the printed pair defines, each marked as computed.
+
+    Three rules keep this honest:
+
+    1. **A printed value is never overruled** — a fraction the report states is
+       left exactly as printed, and a derivation never feeds another derivation,
+       so nothing is computed from something that was itself computed.
+    2. **The result is stated in the fraction's primary unit** (mg/dL), after
+       converting both operands into it, because a panel can print the pair in
+       different units and a difference is only meaningful in one of them.
+    3. **The result carries the printed values' rounding**, which the derivation
+       line lets a clinician see and redo rather than having to trust it.
+    """
+    derived: list[dict[str, Any]] = []
+    printed_keys = {entry["key"] for entry in printed}
+    for key, operand_keys in _LIPID_IDENTITY:
+        analyte = _ANALYTE_BY_KEY[key]
+        if key in printed_keys:
+            continue
+        unit = analyte["primary_unit"]
+        operands = [_operand(printed, operand_key, unit) for operand_key in operand_keys]
+        if any(operand is None for operand in operands):
+            continue
+        resolved = [operand for operand in operands if operand is not None]
+        value = round(resolved[0]["converted"] - resolved[1]["converted"], 2)
+        if value <= 0:
+            # A total below its own constituent is an internally inconsistent
+            # panel (a mistyped digit, or two different draws); a negative or zero
+            # fraction is a claim nothing in the report supports.
+            continue
+        derived.append(_computed_entry(analyte, value, unit, resolved))
+    return derived
+
+
 def _extract_text_flags(text: str, parsed_keys: set[str]) -> list[dict[str, Any]]:
     flags: list[dict[str, Any]] = []
     lowered = text.lower()
@@ -554,6 +686,10 @@ def screen_report_text(text: str) -> dict[str, Any]:
         if entries:
             parsed_keys.add(analyte["key"])
             values.extend(entries)
+
+    # After every printed value is in hand, so a derivation reads the printed
+    # panel and never another derivation's output.
+    values.extend(_derive_lipids(values))
 
     text_flags = _extract_text_flags(raw, parsed_keys)
 

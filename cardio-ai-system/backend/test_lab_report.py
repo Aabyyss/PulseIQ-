@@ -202,7 +202,11 @@ def test_an_mmol_lipid_is_not_flagged_against_the_mgdl_band():
     assert values["hdl"]["status"] == "normal"
     assert values["hdl"]["reference"] == "≥1.0 mmol/l"
     assert values["total_cholesterol"]["status"] == "high"
-    assert result["summary"]["abnormal"] == 1  # the cholesterol, not the HDL
+    # The two printed values also define non-HDL (212.7 - 50.3 = 162.4 mg/dL),
+    # which is over its own 160 mg/dL band — so the count is two abnormal values
+    # now. Neither of them is the HDL, which is what this case is about.
+    assert (values["non_hdl"]["computed"], values["non_hdl"]["status"]) == (True, "high")
+    assert result["summary"]["abnormal"] == 2
 
 
 def test_the_unit_normaliser_ignores_punctuation_and_spacing():
