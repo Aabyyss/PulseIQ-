@@ -146,7 +146,8 @@ screen (ADR-018).
    │     ├─ extract_entities            (medical_entities: medications, risk factors)
    │     ├─ detect_conditions           (pharmacology_agent: condition vocabulary)
    │     ├─ extract_allergy_mentions    (pharmacology_agent: "allergic to …")
-   │     ├─ labs_for_review → labs{}    (lab_report: unit-aware eGFR, K+, Hb, LDL, LVEF, troponin)
+   │     ├─ labs_for_review → labs{}    (lab_report: unit-aware eGFR, K+, Hb, LDL, LVEF, troponin;
+   │     │                              a lipid fraction the panel leaves out is derived — ADR-023)
    │     └─ extract_symptoms_from_text  (nlp_symptom_agent: the narrative's vocabulary)
    ├─ run_diagnosis_from_text           (same 5-stage pipeline as §1 → risk band)
    ├─ build_risk_scores                 (risk_score_context: HEART, GRACE, CHA₂DS₂-VASc, ASCVD-PCE)
@@ -173,7 +174,11 @@ the live loop (§4): the recorded visit details are unioned with what the
 narrative states, and the report parser's unit-aware values are converted into
 the numeric shape the agent expects (each value is restated in its analyte's
 primary unit first — mmol/L cholesterol as mg/dL, µmol/L creatinine as mg/dL,
-ng/L troponin as ng/mL — and a printed unit with no defined conversion is left
+ng/L troponin as ng/mL; a lipid fraction the panel states implicitly rather than
+printing is worked out from the printed pair in mg/dL and marked `computed`, so
+the gates read the same number the screening screen shows, and a fraction whose
+printed unit could not be read at all is not subtracted from anything — and a
+printed unit with no defined conversion is left
 out rather than handed over in the wrong one, with an abnormal troponin still
 passing through as an explicit flag; caller-supplied `labs{}` override the parsed
 ones and must already be in the primary unit). The
