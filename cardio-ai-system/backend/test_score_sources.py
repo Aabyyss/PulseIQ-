@@ -406,6 +406,59 @@ def test_ascvd_category_and_statin_flag_follow_the_same_reported_value():
     assert reading["category"] == risk_scores_agent._ascvd_category(reading["risk_pct"])
 
 
+# ---------------------------------------------------------------------------
+# The sources the docstring quotes
+# ---------------------------------------------------------------------------
+
+# A table pinned against a source is only pinned while the source is still named:
+# if a rewrite drops the reference, the assertions above become claims about
+# nothing in particular. So each instrument's name and the page or paper its
+# numbers were taken from must still be in the module docstring.
+SCORE_SOURCE_REFERENCES = {
+    "HEART": ("Backus", "mdcalc.com/calc/1752"),
+    "GRACE": ("Granger", "wikidoc.org/index.php/The_GRACE_risk_score"),
+    "CHA2DS2-VASc": ("Lip", "mdcalc.com/calc/801"),
+    "ASCVD-PCE": ("Goff", "PooledCohort"),
+}
+# The citation each score's own `source` string must carry, so a clinician
+# reading a score sees which instrument produced it.
+SCORE_CITATIONS = {
+    "HEART": "Backus et al. 2008",
+    "GRACE": "Granger et al., Arch Intern Med 2003",
+    "CHA2DS2-VASc": "Lip et al., Chest 2010",
+    "ASCVD-PCE": "Goff et al., Circulation 2014",
+}
+ASCVD_EXAMPLE = dict(age=55, sex="male", race="white", total_cholesterol_mg_dl=213,
+                     hdl_mg_dl=50, systolic_bp=120, treated_for_hypertension=False,
+                     current_smoker=False, diabetes=False)
+
+
+def test_the_module_docstring_still_quotes_the_source_of_every_table():
+    docstring = risk_scores_agent.__doc__ or ""
+    for score, (instrument, reference) in SCORE_SOURCE_REFERENCES.items():
+        assert instrument in docstring, f"{score}: the docstring no longer names {instrument}"
+        assert reference in docstring, f"{score}: the docstring no longer cites {reference}"
+
+
+def test_every_score_reports_the_citation_for_the_tables_it_used():
+    scored = {
+        "HEART": _heart(),
+        "GRACE": _grace(),
+        "CHA2DS2-VASc": cha2ds2_vasc(age=70, sex="male"),
+        "ASCVD-PCE": ascvd_score(**ASCVD_EXAMPLE),
+    }
+    expected = {
+        "HEART": risk_scores_agent.HEART_SOURCE,
+        "GRACE": risk_scores_agent.GRACE_SOURCE,
+        "CHA2DS2-VASc": risk_scores_agent.CHA2DS2_VASC_SOURCE,
+        "ASCVD-PCE": risk_scores_agent.ASCVD_SOURCE,
+    }
+    for name, payload in scored.items():
+        assert payload["name"] == name or name in payload["name"], name
+        assert payload["source"] == expected[name], name
+        assert SCORE_CITATIONS[name] in payload["source"], name
+
+
 def main() -> None:
     """Run the suite directly (no pytest needed)."""
     tests = [(name, fn) for name, fn in sorted(globals().items()) if name.startswith("test_") and callable(fn)]
