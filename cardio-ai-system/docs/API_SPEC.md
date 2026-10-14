@@ -493,16 +493,35 @@ group after a comma is not, so nothing is invented where the two
 conventions disagree. The panel's short forms are read too (Chol,
 TG/TGs, HDL-C, LDL-C, non-HDL), and a fraction's name is never read as
 another's: "non-HDL" is neither HDL nor total cholesterol, and "LDL
-cholesterol" states LDL alone (ADR-022).
+cholesterol" states LDL alone (ADR-022). The lipid fractions that are not
+independent are worked out from the pair the report does print, and labelled as
+worked out (ADR-023): `non-HDL = total cholesterol − HDL`, and the same identity
+the other way, `HDL = total cholesterol − non-HDL`.
 
 **Request** `{ "text": "Troponin I: 0.05 ng/mL. Potassium 6.4 mmol/L. LVEF 35%." }`
 
 **200** `{ "values": [{ "key", "name", "value", "value_text", "unit",
-"reference", "status", "severity" (critical|abnormal|normal),
-"matched_text", "explanation", "note" }], "text_flags": [{ "name",
+"unit_label", "unit_read", "reference", "status", "severity"
+(critical|abnormal|normal), "matched_text", "explanation", "note",
+"computed"?, "derivation"?, "computed_from"? }], "text_flags": [{ "name",
 "severity", "matched_text", "explanation" }], "summary": {
-"critical", "abnormal", "normal", "parsed" }, "message" }`
+"critical", "abnormal", "normal", "computed", "parsed" }, "message" }`
 **401** unauthenticated · **200** with `"error": "text is required"` on empty input
+
+| field | notes |
+|---|---|
+| unit_read | `false` when a unit token was printed that the screener could not read: the value is banded against the analyte's primary band and `unit_label` says so ("mmol/kL (judged as mg/dl)"). Such a value is never an operand of a derived fraction, because the derivation would then be stacked on the fallback. |
+| computed | `true` for a derived fraction — a number the report did not print. |
+| derivation | the arithmetic a computed value came from, stated in the unit the value is in, with the printed spelling beside it when the report wrote the operands in another unit: `"total cholesterol 212.685 mg/dl - HDL cholesterol 50.271 mg/dl = 162.41 mg/dl (printed as 5.5 mmol/l, 1.3 mmol/l)"`. |
+| computed_from | the operands as they were subtracted, in the computed value's unit (`{ "total_cholesterol": 212.685, "hdl": 50.271 }`). |
+| summary.computed | how many of the counted values were derived rather than printed; the message names the number when it is not zero. |
+
+A derived value is banded and counted like a printed one — the band is about the
+number — and it is never a substitute for one: a fraction the report states is
+left exactly as printed, a derived value is never an operand of another
+derivation, and nothing is derived from a panel that does not hold together (a
+total below its own HDL, an operand whose unit has no defined conversion). Its
+`matched_text` is the arithmetic, since that is the whole of its provenance.
 
 ## POST /soap-note *(auth)*
 Structured SOAP note built strictly from the encounter content —
@@ -585,9 +604,10 @@ against, so every value is stated in its analyte's **primary unit** whatever the
 report printed — cholesterol, LDL, HDL, non-HDL, triglycerides and glucose in mg/dL,
 creatinine in mg/dL, potassium and sodium in mmol/L, troponin in ng/mL, HbA1c as
 a percentage. A unit with no defined conversion is omitted rather than passed on
-in a unit the caller would misread. The `screen-report` payload keeps the printed
-unit beside each value (`unit`, `unit_label`, `reference`), so nothing is hidden
-by the conversion.
+in a unit the caller would misread. A lipid fraction derived from the printed
+pair (ADR-023) reaches this map too, in mg/dL like the rest of the panel. The
+`screen-report` payload keeps the printed unit beside each value (`unit`,
+`unit_label`, `reference`), so nothing is hidden by the conversion.
 
 Every option and every block names the captured fact behind it (`triggered_by`,
 `blocks[].trigger`), each allergy block ships with an alternative route, and only
