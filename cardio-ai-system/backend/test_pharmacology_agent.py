@@ -353,3 +353,35 @@ def test_a_mmol_ldl_still_reaches_the_dyslipidaemia_indication():
     assert labs["ldl"] == 162.414
     assert lab_tags(labs)["dyslipidemia_lab"] == 162.414
     assert "dyslipidemia_lab" not in lab_tags(labs_for_review("LDL 100 mg/dL"))
+
+
+def test_a_panel_that_prints_only_non_hdl_still_raises_the_statin():
+    """The fraction the lipid decision turns on is not always the one printed.
+
+    A report written in non-HDL terms — and a panel whose non-HDL is derived from
+    a printed total and HDL — reached the review as a number no gate read, so no
+    lipid-lowering option was offered at all. The gate reads the fraction's own
+    threshold (190 mg/dL, LDL-C's 160 shifted by the convention's 30 mg/dL) and
+    names it as the reason, rather than attributing an LDL figure to the panel.
+    """
+    from backend.lab_report import labs_for_review
+
+    printed = labs_for_review("non-HDL 5.0 mmol/L")
+    assert printed["non_hdl"] == 193.35
+    assert lab_tags(printed)["non_hdl_high"] == 193.35
+
+    derived = labs_for_review("Total cholesterol 220 mg/dL, HDL 30 mg/dL.")  # non-HDL 190, not printed
+    assert lab_tags(derived)["non_hdl_high"] == 190.0
+
+    review = review_medications(symptoms=["chest pain"], labs=printed)
+    statin = next(rec for rec in review["recommendations"] if rec["drug_class"] == "statin")
+    assert "non_hdl_high" in statin["indications"]
+    assert "non-HDL 193.35 mg/dL" in statin["triggered_by"]
+    assert any(
+        item["name"] == "non_hdl_high" and "non-HDL 193.35 mg/dL" == item["triggered_by"]
+        for item in review["indications"]
+    )
+    # Below the fraction's own threshold nothing is offered for it, and LDL's
+    # threshold is not quietly applied to a number that is not an LDL.
+    assert "non_hdl_high" not in lab_tags({"non_hdl": 189.0})
+    assert "non_hdl_high" not in lab_tags({"non_hdl": 0.0})
