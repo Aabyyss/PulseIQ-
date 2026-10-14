@@ -66,6 +66,10 @@ HEART_SOURCE = (
 
 _HISTORY_POINTS = {"non_specific": 0, "atypical": 1, "typical": 2}
 _ECG_POINTS = {"normal": 0, "repolarisation": 1, "st_deviation": 2}
+# The published score bands (inclusive upper bound, label). Named rather than
+# written into the call, because a band is a published quantity like a point
+# value and is pinned against its source by backend/test_score_sources.py.
+_HEART_BANDS: list[tuple[float, str]] = [(3, "low"), (6, "intermediate"), (10, "high")]
 
 
 def _band_from_cutoffs(value: float, cutoffs: list[tuple[float, str]]) -> str:
@@ -156,7 +160,7 @@ def heart_score(
     known_points = sum(item["points"] for item in components.values())
     complete = not missing
     score = known_points if complete else None
-    band = _band_from_cutoffs(score, [(3, "low"), (6, "intermediate"), (10, "high")]) if complete else None
+    band = _band_from_cutoffs(score, _HEART_BANDS) if complete else None
 
     return {
         "name": "HEART",
@@ -185,6 +189,9 @@ _GRACE_CREATININE = [(0.399, 1), (0.799, 4), (1.199, 7), (1.599, 10), (1.999, 13
 _GRACE_KILLIP = {"I": 0, "II": 20, "III": 39, "IV": 59}
 
 GRACE_MAX_SCORE = 372
+# Published risk bands (inclusive upper bound, label): <109 low, 109-140
+# intermediate, >140 high. Named for the same reason as HEART's.
+_GRACE_BANDS: list[tuple[float, str]] = [(108, "low"), (140, "intermediate"), (float("inf"), "high")]
 GRACE_SOURCE = (
     "GRACE in-hospital mortality, classic point score (Granger et al., Arch Intern Med 2003) — "
     "points summed over admission values."
@@ -281,7 +288,7 @@ def grace_score(
     band = None
     mortality: dict[str, Any] | None = None
     if complete:
-        band = "low" if score < 109 else ("intermediate" if score <= 140 else "high")
+        band = _band_from_cutoffs(score, _GRACE_BANDS)
         mortality = _grace_mortality_from_table(score)
 
     if mortality is None:
