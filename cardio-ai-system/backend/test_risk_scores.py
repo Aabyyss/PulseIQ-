@@ -416,6 +416,42 @@ def test_the_diagnosis_layer_reports_the_scores_beside_the_model_band():
     assert medication["medications"]["pathway"]["urgency"] == "emergency"
 
 
+def test_the_medication_review_scores_the_group_the_record_states():
+    """A recorded group is what the equation selects its model from (ADR-024).
+
+    The form field is only worth having if it reaches the equation: a stated
+    group must select that group's coefficients in the review the medication
+    screen reports, and the review must name the model it used, because a
+    ten-year risk means nothing without knowing which coefficient set produced
+    it. An unrecorded group is untouched behaviour: the higher of the two
+    sex-matched models, with the other one reported beside it.
+    """
+    patient = {
+        "age": 55,
+        "sex": "male",
+        "labs": {"total_cholesterol": 213, "hdl": 50},
+        "vitals": {"systolic_bp": 120},
+    }
+    text = "routine risk review, non-smoker, no diabetes"
+
+    stated = run_medication_review(text=text, patient={**patient, "race": "african_american"})
+    ascvd = stated["risk_scores"]["ascvd"]
+    assert (ascvd["group"], ascvd["risk_pct"]) == ("African American men", 6.1)
+    assert (ascvd["race_captured"], ascvd["alternative"]) == (True, None)
+    assert stated["risk_scores"]["inputs"]["race"] == "african_american"
+
+    # The other published group is a different equation, not a different label.
+    other_group = run_medication_review(text=text, patient={**patient, "race": "white"})
+    assert other_group["risk_scores"]["ascvd"]["risk_pct"] == 5.4
+
+    unrecorded = run_medication_review(text=text, patient={**patient, "race": ""})
+    fallback = unrecorded["risk_scores"]["ascvd"]
+    assert (fallback["group"], fallback["risk_pct"]) == ("African American men", 6.1)
+    assert fallback["race_captured"] is False
+    assert fallback["alternative"] == {"group": "white men", "risk_pct": 5.4}
+    assert unrecorded["risk_scores"]["inputs"]["race"] is None
+
+
 def test_the_live_frame_carries_the_same_scores_the_review_used():
     original_translate = realtime_service.translate_to_english
     original_plan = realtime_service.generate_ai_copilot_plan
