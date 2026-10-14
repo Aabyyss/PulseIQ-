@@ -517,6 +517,7 @@ def _explain(entry: dict[str, Any], band: Band, is_floor: bool) -> str:
 # derived value is second-class is provenance — which is why it is labelled.
 _LIPID_IDENTITY: list[tuple[str, tuple[str, str]]] = [
     ("non_hdl", ("total_cholesterol", "hdl")),
+    ("hdl", ("total_cholesterol", "non_hdl")),
 ]
 
 _LIPID_LABELS = {
