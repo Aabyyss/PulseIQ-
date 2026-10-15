@@ -129,33 +129,80 @@ function normalizeUrduText(text: string): string {
  * \b only bounds ASCII words: Urdu-script patterns are plain multi-word
  * substrings (wrapping them in \b made them unmatchable), and Roman-Urdu
  * lists every spelling ASR tends to produce.
+ *
+ * Each region is now generated from the same two lists — the words for the part
+ * and the words for how it feels — so the map moves as one grammar instead of as
+ * a fixed list of phrases: "back pain" matched and "my back aches" did not,
+ * because every pattern required the symptom word to sit immediately after the
+ * body part, and the natural English and Urdu constructions put a verb or two in
+ * between. A short list of linking words is allowed in between; anything wider
+ * (or a character window) started lighting up the wrong region when two
+ * complaints shared a sentence.
  */
+/**
+ * How a part of the body is said to feel. One list, because the region map and
+ * the side-less fallback both ask the same question, and because a verb form
+ * missing from here is a region silently dropped from the map.
+ */
+const FEELING =
+  "pain|pains|painful|paining|aches?|aching|achy|hurts?|hurting|sore|soreness|" +
+  "tender|tenderness|burn(?:s|ing)?|pressure|tight(?:ness)?|heavy|heaviness|" +
+  "discomfort|numb(?:ness)?|stiff(?:ness)?|cramp(?:s|ing)?|swell(?:ing|en)?|" +
+  "throbbing|sharp|dull|pounding";
+
+/**
+ * Words that may sit between the part and the feeling — "my back IS aching",
+ * "the chest has been hurting". Deliberately only linking words: allowing any
+ * word (or a character window) here made "back is fine but chest pain" light up
+ * the back, so a false region is exactly what the narrow list prevents.
+ */
+const LINKING = "(?:is|are|was|were|be|been|being|feels?|felt|feeling|gets?|got|has|have|had|really|very|so|too|now|still|also|and|my)";
+
+/** "<part> [linking words] <how it feels>" — the shape most complaints take. */
+function feelingAfter(parts: string): RegExp {
+  return new RegExp(`\\b(?:${parts})\\b(?:\\s+${LINKING}){0,3}\\s*(?:${FEELING})\\b`, "i");
+}
+
+/**
+ * The same complaint in the other order — "aching in my back", "a burning in
+ * the chest". The feeling comes first here, so the link is a preposition rather
+ * than a verb, and both orders have to be built or half the ward's phrasing
+ * leaves the map empty.
+ */
+function feelingBefore(parts: string): RegExp {
+  return new RegExp(
+    `\\b(?:${FEELING})\\b\\s+(?:in|of|at|around|near|over|on)\\s+(?:my\\s+|the\\s+|both\\s+|both\\s+my\\s+)?(?:${parts})\\b`,
+    "i"
+  );
+}
+
+/** A region's patterns: both shared shapes plus whatever it alone needs. */
+function region(parts: string, extra: RegExp[] = []): RegExp[] {
+  return [feelingAfter(parts), feelingBefore(parts), ...extra];
+}
+
 const REGION_PATTERNS: Record<BodyRegionId, RegExp[]> = {
-  head: [
-    /\bhead\s*(pain|ache|aches|hurts?|paining)\b/,
-    /\bpain(?:s)?\s+(?:in|of)\s+(?:my\s+|the\s+)?head\b/,
-    /\bheadache\b/, /\bmigraine\b/,
+  head: region("head|heads", [
+    /\bheadache\b/,
+    /\bmigraine\b/,
     /\b(?:sar|sir|sirr)\s+(?:mein|main|me)?\s*dard\b/,
     /سر(?:\s+میں)?\s+درد/
-  ],
-  neck: [
-    /\bneck\s*(pain|ache|aches|hurts?|stiffness|stiff|paining)\b/,
-    /\bpain(?:s)?\s+(?:in|of)\s+(?:my\s+|the\s+)?neck\b/, /\bcervical\s+pain\b/,
+  ]),
+  neck: region("neck", [
+    /\bpain(?:s)?\s+(?:in|of)\s+(?:my\s+|the\s+)?neck\b/,
+    /\bcervical\s+pain\b/,
     /\bgardan\s+(?:mein|main|me)?\s*dard\b/,
     /گردن(?:\s+میں)?\s+درد/
-  ],
-  chest: [
-    /\bchest\s*(pain|pressure|tightness|discomfort|hurts?|heavy|heaviness|burning|paining)\b/,
+  ]),
+  chest: region("chest|chests|heart", [
     /\bpain(?:s)?\s+(?:in|of)\s+(?:my\s+|the\s+)?chest\b/,
     /\b(?:pressure|tightness|heaviness|burning)\s+in\s+(?:my\s+|the\s+)?chest\b/,
-    /\btight\s+chest\b/, /\bangina\b/,
-    // Patients say "heart", not "chest" — every cardiac phrasing maps here.
-    /\bheart\s*(pain|pains|hurts?|ache|aches|paining|burning)\b/,
+    /\btight\s+chest\b/,
+    /\bangina\b/,
     /\bpain(?:s)?\s+(?:in|of)\s+(?:my\s+|the\s+)?heart\b/,
     /\bheart\s*area\b/,
     /\b(?:left|right)\s+side\s+of\s+(?:my\s+|the\s+)?(?:heart|chest)\b/,
     /\bpain\s+(?:in|on)\s+(?:my\s+|the\s+)?(?:left|right)\s+side\b/,
-    /\bheart\s+pain\b/,
     // Roman Urdu incl. the spellings ASR produces ("sine me dard").
     /\b(?:seene|seenay|sine|sene)\s+(?:mein|main|me)?\s*(?:dard|darad|drad|jalan)\b/,
     /\b(?:chat|chati)\s+(?:mein|main|me)?\s*dard\b/,
@@ -163,55 +210,78 @@ const REGION_PATTERNS: Record<BodyRegionId, RegExp[]> = {
     // Urdu script as plain substrings (\b never matches Urdu).
     /سینے(?:\s+میں|\s+کا)?\s+درد/, /چھاتی\s+میں\s+درد/, /سینے\s+میں\s+جلن/,
     /دل(?:\s+میں|\s+کا)?\s+درد/
-  ],
-  left_arm: [
-    /\bleft\s+arm\b/, /\bpain\s+in\s+(?:my\s+|the\s+)?left\s+arm\b/,
-    /\bleft\s+shoulder\b/, /\bleft\s+hand\s+numbness\b/,
+  ]),
+  left_arm: region("left\\s+(?:arm|arms|hand|hands|shoulder|shoulders|elbow|elbows|wrist|wrists|finger|fingers)", [
+    /\bpain\s+(?:radiating\s+)?(?:to|in|of)\s+(?:my\s+|the\s+)?left\s+(?:arm|hand)\b/,
     /\b(?:baen|bayen|bayay)\s+bazu(?:\s+(?:mein|main|me))?\s*dard\b/,
     /بائیں\s+بازو(?:\s+میں)?\s+درد/
-  ],
-  right_arm: [
-    /\bright\s+arm\b/, /\bpain\s+in\s+(?:my\s+|the\s+)?right\s+arm\b/,
-    /\bright\s+shoulder\b/,
+  ]),
+  right_arm: region("right\\s+(?:arm|arms|hand|hands|shoulder|shoulders|elbow|elbows|wrist|wrists|finger|fingers)", [
+    /\bpain\s+(?:radiating\s+)?(?:to|in|of)\s+(?:my\s+|the\s+)?right\s+(?:arm|hand)\b/,
     /\bdayan\s+bazu(?:\s+(?:mein|main|me))?\s*dard\b/,
     /دایاں\s+بازو(?:\s+میں)?\s+درد/
-  ],
-  upper_abdomen: [
-    /\bupper\s+(?:abdomen|stomach|belly)\s*(pain|ache|hurts?)?/,
-    /\bepigastric\b/, /\bstomach\s+burning\b/,
-    /\bpain\s+(?:in|of)\s+(?:my\s+|the\s+)?upper\s+(?:stomach|abdomen)\b/
-  ],
-  lower_abdomen: [
-    /\blower\s+(?:abdomen|stomach|belly)\s*(pain|ache|hurts?)?/,
-    /\bpelvic\s+pain\b/, /\babdominal\s+cramps\b/,
+  ]),
+  upper_abdomen: region("upper\\s+(?:abdomen|stomach|belly)|epigastrium|epigastric", [
+    /\bstomach\s+burning\b/,
+    /\bpain\s+(?:in|of)\s+(?:my\s+|the\s+)?upper\s+(?:stomach|abdomen|belly)\b/
+  ]),
+  lower_abdomen: region("lower\\s+(?:abdomen|stomach|belly)|pelvis|pelvic", [
+    /\babdominal\s+cramps\b/,
     /\bpain\s+(?:in|of)\s+(?:my\s+|the\s+)?lower\s+(?:stomach|abdomen|belly)\b/
-  ],
-  back: [
-    /\bback\s*(pain|ache|hurts?|paining)\b/,
-    /\bpain(?:s)?\s+(?:in|of)\s+(?:my\s+|the\s+)?back\b/,
-    /\bupper\s+back\b/, /\blower\s+back\b/,
+  ]),
+  back: region("back|backs|spine", [
+    /\bupper\s+back\b/,
+    /\blower\s+back\b/,
     /\bkamar\s+(?:mein|main|me)?\s*dard\b/,
     /کمر(?:\s+میں)?\s+درد/
-  ],
-  left_leg: [
-    /\bleft\s+(?:leg|calf|thigh|knee|ankle|foot|feet)\b/,
+  ]),
+  left_leg: region("left\\s+(?:leg|legs|calf|calves|thigh|thighs|knee|knees|ankle|ankles|foot|feet|toe|toes)", [
     /\bpain\s+(?:in|of)\s+(?:my\s+|the\s+)?left\s+leg\b/,
     /\b(?:baen|bayen|bayay)\s+tang(?:\s+(?:mein|main|me))?\s*dard\b/,
     /بائیں\s+ٹانگ(?:\s+میں)?\s+درد/
-  ],
-  right_leg: [
-    /\bright\s+(?:leg|calf|thigh|knee|ankle|foot|feet)\b/,
+  ]),
+  right_leg: region("right\\s+(?:leg|legs|calf|calves|thigh|thighs|knee|knees|ankle|ankles|foot|feet|toe|toes)", [
     /\bpain\s+(?:in|of)\s+(?:my\s+|the\s+)?right\s+leg\b/,
     /\bdayan\s+tang(?:\s+(?:mein|main|me))?\s*dard\b/,
     /دایاں\s+ٹانگ(?:\s+میں)?\s+درد/
-  ]
+  ])
 };
 
-/** Bare "leg pain" / "dard" without a side maps to both sides. */
+/**
+ * Bare "leg pain" / "dard" without a side maps to both sides — including the
+ * plural and the Urdu word for legs, which is how a patient says it.
+ */
 const GENERIC_PATTERNS: { pattern: RegExp; targets: BodyRegionId[] }[] = [
-  { pattern: /\barm\s*(pain|ache|hurts?|paining)\b|\bshoulder\s+pain\b/, targets: ["left_arm", "right_arm"] },
-  { pattern: /\bleg\s*(pain|ache|hurts?|paining)\b/, targets: ["left_leg", "right_leg"] },
-  { pattern: /\bstomach\s*(pain|ache|hurts?)\b|\bbelly\s+pain\b|\bpet\s+(?:mein|main|me)?\s*dard\b/, targets: ["upper_abdomen"] }
+  {
+    pattern: feelingAfter("arms?|shoulders?|hands?|elbows?|wrists?|fingers?"),
+    targets: ["left_arm", "right_arm"]
+  },
+  {
+    pattern: feelingAfter("legs?|calves|calf|thighs?|knees?|ankles?|feet|foot|toes?"),
+    targets: ["left_leg", "right_leg"]
+  },
+  {
+    // Urdu script needs no \b and must not have one: JS treats Urdu letters as
+    // non-word characters, so a boundary assertion before them can never match.
+    pattern: /\btang(?:on|en|ein)?\s*(?:mein|main|me)?\s*dard\b|(?:پیر|پاؤں|ٹانگ)(?:وں|یں)?\s*(?:میں|می)?\s*درد/,
+    targets: ["left_leg", "right_leg"]
+  },
+  {
+    pattern: feelingAfter("stomach|belly|abdomen"),
+    targets: ["upper_abdomen"]
+  },
+  {
+    pattern: /\bpet\s+(?:mein|main|me)?\s*dard\b/,
+    targets: ["upper_abdomen"]
+  },
+  {
+    pattern: /\bboth\s+(?:arms?|shoulders?|hands?)\b/,
+    targets: ["left_arm", "right_arm"]
+  },
+  {
+    pattern: /\bboth\s+(?:legs?|knees?|feet|calves)\b/,
+    targets: ["left_leg", "right_leg"]
+  }
 ];
 
 const REGION_LABELS: Record<BodyRegionId, string> = {
@@ -319,7 +389,14 @@ export function inferBodyPainInsights(transcript: string, reportText: string): B
 
   // Generic fallbacks when side isn't stated.
   GENERIC_PATTERNS.forEach(({ pattern, targets }) => {
-    if (!pattern.test(text)) return;
+    const match = pattern.exec(text);
+    if (!match) return;
+    // A phrase that names its own side is not side-less: "my left hand is numb"
+    // must not also light up the right arm just because the fallback matched too.
+    // The side word usually sits just outside the match ("[left] hand is numb"),
+    // so the words before it are checked as well as the match itself.
+    const before = text.slice(Math.max(0, match.index - 12), match.index);
+    if (/\b(?:left|right)\b/i.test(match[0]) || /\b(?:left|right)\b/i.test(before)) return;
     targets
       .filter((region) => !seen.has(region))
       .forEach((region) => {

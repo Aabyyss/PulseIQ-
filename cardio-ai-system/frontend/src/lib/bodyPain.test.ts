@@ -28,6 +28,48 @@ describe("inferBodyPainInsights", () => {
     }
   });
 
+  it("matches the constructions a complaint is actually spoken in", () => {
+    // Each of these used to leave the map empty: the pattern wanted the symptom
+    // word straight after the body part, and the sentence puts a verb there.
+    const cases: [string, string][] = [
+      ["my back aches", "back"],
+      ["aching in my back", "back"],
+      ["my chest is hurting", "chest"],
+      ["head is aching", "head"],
+      ["neck is stiff and hurts", "neck"],
+      ["my heart burns", "chest"],
+      ["shoulder hurts when I lift it", "left_arm"],
+      ["pain in both shoulders", "right_arm"],
+      ["pain radiating to my left hand", "left_arm"],
+      ["my left hand is numb", "left_arm"],
+      ["my legs ache after walking", "left_leg"],
+      ["legs are aching", "right_leg"],
+      ["tangon mein dard", "left_leg"],
+      ["پیر میں درد", "left_leg"]
+    ];
+    for (const [spoken, region] of cases) {
+      const regions = inferBodyPainInsights(spoken, "").map((insight) => insight.region);
+      expect(regions, spoken).toContain(region);
+    }
+  });
+
+  it("does not light up a region that was mentioned but not complained about", () => {
+    // Found thanks to the wider window: with a loose gap the back lit up here.
+    const regions = inferBodyPainInsights("the chest pain goes through to my back", "").map(
+      (insight) => insight.region
+    );
+    expect(regions).toEqual(["chest"]);
+  });
+
+  it("keeps a sided complaint on its own side", () => {
+    // The side-less fallback also matches "hand is numb"; it must not add the
+    // other arm to a patient who named one.
+    const regions = inferBodyPainInsights("my left hand is numb", "").map((i) => i.region);
+    expect(regions).toEqual(["left_arm"]);
+    const leg = inferBodyPainInsights("right knee aches", "").map((i) => i.region);
+    expect(leg).toEqual(["right_leg"]);
+  });
+
   it("reads the report text as well as the transcript", () => {
     const regions = inferBodyPainInsights("routine visit", "patient reports left arm pain").map(
       (insight) => insight.region
