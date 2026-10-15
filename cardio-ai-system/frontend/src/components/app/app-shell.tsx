@@ -28,11 +28,17 @@ interface NavItem {
   icon: LucideIcon;
   group: string;
   end?: boolean;
+  /**
+   * The workspace's main action, drawn larger and bolder than the rest so the
+   * sidebar leads with what a clinician opens the app to do, rather than with
+   * the overview page they are already looking at.
+   */
+  primary?: boolean;
 }
 
 const NAV: NavItem[] = [
+  { to: "/consultation", label: "Consultation", short: "Consult", icon: Stethoscope, group: "Workspace", primary: true },
   { to: "/", label: "Overview", short: "Overview", icon: LayoutGrid, group: "Workspace", end: true },
-  { to: "/consultation", label: "Consultation", short: "Consult", icon: Stethoscope, group: "Workspace" },
   { to: "/medications", label: "Medication review", short: "Meds", icon: Pill, group: "Workspace" },
   { to: "/history", label: "History & visits", short: "History", icon: History, group: "Records" },
   { to: "/notes", label: "My notes", short: "Notes", icon: NotebookPen, group: "Records" },
@@ -88,10 +94,16 @@ function SidebarNav() {
                   end={item.end}
                   className={({ isActive }) =>
                     cn(
-                      "group relative flex items-center gap-2.5 rounded-lg py-2 pl-3.5 pr-2.5 text-sm transition-colors duration-150",
+                      "group relative flex items-center gap-2.5 rounded-lg pl-3.5 pr-2.5 transition-colors duration-150",
+                      item.primary ? "py-2.5 text-[15px] font-semibold" : "py-2 text-sm",
                       isActive
-                        ? "bg-elev font-medium text-fg shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]"
-                        : "text-muted hover:bg-elev/50 hover:text-fg"
+                        ? cn(
+                            "bg-elev text-fg shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]",
+                            !item.primary && "font-medium"
+                          )
+                        : item.primary
+                          ? "text-fg hover:bg-elev/60"
+                          : "text-muted hover:bg-elev/50 hover:text-fg"
                     )
                   }
                 >
@@ -99,16 +111,22 @@ function SidebarNav() {
                     <>
                       <span
                         className={cn(
-                          "absolute left-0 top-1/2 h-3.5 w-[2px] -translate-y-1/2 rounded-r-full bg-accent transition-opacity duration-200",
+                          "absolute left-0 top-1/2 w-[2px] -translate-y-1/2 rounded-r-full bg-accent transition-opacity duration-200",
+                          item.primary ? "h-4" : "h-3.5",
                           isActive ? "opacity-100" : "opacity-0"
                         )}
                       />
                       <item.icon
                         className={cn(
-                          "h-4 w-4 shrink-0 transition-colors",
-                          isActive ? "text-accent" : "text-faint group-hover:text-muted"
+                          "shrink-0 transition-colors",
+                          item.primary ? "h-[18px] w-[18px]" : "h-4 w-4",
+                          isActive
+                            ? "text-accent"
+                            : item.primary
+                              ? "text-accent/80 group-hover:text-accent"
+                              : "text-faint group-hover:text-muted"
                         )}
-                        strokeWidth={1.75}
+                        strokeWidth={item.primary ? 2 : 1.75}
                       />
                       <span className="truncate">{item.label}</span>
                     </>
@@ -305,7 +323,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const active =
     NAV.filter((item) => (item.end ? pathname === item.to : pathname.startsWith(item.to))).sort(
       (a, b) => b.to.length - a.to.length
-    )[0] ?? NAV[0];
+    )[0] ??
+    // Unknown path: the breadcrumb names the overview page, not whichever item
+    // happens to sit first now that the main action leads the sidebar.
+    NAV.find((item) => item.end) ??
+    NAV[0];
 
   return (
     <div className="min-h-screen lg:flex">
