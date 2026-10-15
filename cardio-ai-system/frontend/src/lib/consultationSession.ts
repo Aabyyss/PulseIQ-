@@ -1,4 +1,4 @@
-import { authFetch } from "@/lib/auth";
+import { authFetch } from "@/lib/authSession";
 import type { RiskLevel } from "@/components/app/risk-pill";
 import { exportConsultationPdf } from "@/lib/pdfReport";
 import { saveConsultation } from "@/lib/history";

@@ -16,7 +16,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { authFetch } from "@/lib/auth";
+import { authFetch } from "@/lib/authSession";
 import { cn } from "@/lib/utils";
 
 type Session = {

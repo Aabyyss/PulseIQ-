@@ -7,7 +7,7 @@ import { LogoMark, Wordmark } from "@/components/app/logo";
 import { ThemeToggle } from "@/components/app/theme-toggle";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { useAuth } from "@/lib/auth";
+import { useAuth } from "@/lib/authContext";
 
 type Mode = "signin" | "signup";
 

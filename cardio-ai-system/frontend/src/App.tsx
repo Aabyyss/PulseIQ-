@@ -14,7 +14,7 @@ import { NotFoundPage } from "@/pages/NotFoundPage";
 import { PrivacyPage } from "@/pages/PrivacyPage";
 import { TermsPage } from "@/pages/TermsPage";
 import { ThankYouPage } from "@/pages/ThankYouPage";
-import { useAuth } from "@/lib/auth";
+import { useAuth } from "@/lib/authContext";
 import { IDLE_LOCK_MS, useIdleAutoLock } from "@/lib/idle-lock";
 import { PageViewTracker } from "@/lib/analytics";
 import { StorageNotice } from "@/components/app/storage-notice";

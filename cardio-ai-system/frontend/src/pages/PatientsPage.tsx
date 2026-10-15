@@ -18,7 +18,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { StatTile } from "@/components/app/stat-tile";
-import { authFetch } from "@/lib/auth";
+import { authFetch } from "@/lib/authSession";
 import { cn } from "@/lib/utils";
 
 export type PatientSummary = {

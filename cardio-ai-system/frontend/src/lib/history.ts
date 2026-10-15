@@ -1,4 +1,4 @@
-import { authFetch } from "@/lib/auth";
+import { authFetch } from "@/lib/authSession";
 import type { DiagnosisHistoryItem, DiagnosisResponse } from "@/lib/types";
 
 /**

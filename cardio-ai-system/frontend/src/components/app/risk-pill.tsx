@@ -8,10 +8,6 @@ const TONES: Record<RiskLevel, { variant: "ok" | "warn" | "destructive"; label: 
   High: { variant: "destructive", label: "High risk" }
 };
 
-export function riskVariant(level: RiskLevel) {
-  return TONES[level]?.variant ?? "secondary";
-}
-
 export function RiskPill({
   level,
   withLabel = true,

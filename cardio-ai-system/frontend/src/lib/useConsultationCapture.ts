@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { RiskLevel } from "@/components/app/risk-pill";
-import { getToken } from "@/lib/auth";
+import { getToken } from "@/lib/authSession";
 import {
   deriveLocalClinicalGuidance,
   extractPainCharacteristics,

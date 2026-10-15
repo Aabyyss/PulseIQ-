@@ -9,7 +9,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
-import { authFetch } from "@/lib/auth";
+import { authFetch } from "@/lib/authSession";
 import { cn } from "@/lib/utils";
 
 export type ClinicianNote = {
