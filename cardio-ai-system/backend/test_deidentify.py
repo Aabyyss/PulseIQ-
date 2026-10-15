@@ -29,6 +29,32 @@ def test_pakistani_mobile_removed():
         assert "angina" in text
 
 
+def test_landline_removed():
+    for variant in ("021-34567890", "042 35761234", "051 2345678"):
+        text, counts = deidentify(f"Reachable on {variant} for follow up")
+        assert variant not in text, variant
+        assert counts.get("phone") == 1, variant
+        assert "follow up" in text
+
+
+def test_redaction_does_not_eat_the_surrounding_words():
+    # The separator before a phone number is not part of the number.
+    text, counts = deidentify("phone 0300-1234567 today")
+    assert text == "phone [REDACTED PHONE] today"
+    assert counts.get("phone") == 1
+    joined, _ = deidentify("CNIC3520212345671")
+    assert "[REDACTED CNIC]" in joined
+
+
+def test_clinical_numbers_survive_the_phone_rules():
+    text, counts = deidentify(
+        "BP 120/80, heart rate 92, LDL 130 mg/dL, eGFR 26, dose 0.5-1.5 mg"
+    )
+    assert "120/80" in text and "92" in text and "130" in text
+    assert "0.5-1.5" in text and "eGFR 26" in text
+    assert counts == {}
+
+
 def test_email_removed():
     text, counts = deidentify("Send reports to ali.khan@example.com please")
     assert "example.com" not in text.split("@")[-1] or "@" not in text

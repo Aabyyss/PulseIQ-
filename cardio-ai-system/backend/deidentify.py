@@ -10,8 +10,9 @@ What it removes (conservative, Pakistan-aware, zero false positives on
 clinical text by construction):
 - CNIC numbers: ``35202-1234567-1`` and the un-dashed 13-digit form.
 - Phone numbers: Pakistani mobile/landline formats (``0300-1234567``,
-  ``+92 321 1234567``, ``92...``) plus generic long digit runs that look
-  like international numbers.
+  ``+92 321 1234567``, ``92...``, ``021-34567890``) plus generic long digit
+  runs that look like international numbers. Only the number itself is
+  replaced, so the words around it keep their spacing.
 - Email addresses.
 - Patient-name declarations: ``patient name: Ali Khan`` / ``name is Ali``,
   after honorifics (Mr., Mrs., Dr., Mx.) and the possessive patterns the
@@ -38,8 +39,18 @@ from typing import Any
 _CNIC = re.compile(r"\b\d{5}-\d{7}-\d\b")
 _CNIC_UNDASHED = re.compile(r"(?<!\d)\d{13}(?!\d)")
 
+# Every alternative starts on a digit: an optional leading separator used to
+# be part of the match, so redacting "phone 0300-1234567" ate the space and
+# returned "phone[REDACTED PHONE]". The country code keeps its own separator
+# because that one is genuinely inside the number; landlines (0XX-XXXXXXX,
+# which the module always claimed to cover) are given their own alternative
+# rather than being read as a mobile prefix that never matches them.
 _PHONE_PK = re.compile(
-    r"(?<!\d)(?:\+?92|0092)?[\s\-]?0?3\d{2}[\s\-]?\d{7}(?!\d)"
+    r"(?<![\d\-])(?:"
+    r"(?:\+?92|0092)[\s\-]?0?3\d{2}[\s\-]?\d{7}"
+    r"|0?3\d{2}[\s\-]?\d{7}"
+    r"|0\d{1,3}[\s\-]\d{7,8}"
+    r")(?!\d)"
 )
 _PHONE_INTL = re.compile(r"\+\d{1,3}[\s\-]\d{2,4}(?:[\s\-]\d{2,4}){1,3}(?!\d)")
 
