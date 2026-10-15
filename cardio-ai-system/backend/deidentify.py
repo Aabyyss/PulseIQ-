@@ -13,6 +13,10 @@ clinical text by construction):
   ``+92 321 1234567``, ``92...``, ``021-34567890``) plus generic long digit
   runs that look like international numbers. Only the number itself is
   replaced, so the words around it keep their spacing.
+- Record numbers: ``MRN: 88123``, ``Hospital No 0045-998877``, ``Patient ID``
+  and the other names a hospital file is filed under. A record number is a
+  direct identifier exactly like a CNIC — it is the key to the file — so it
+  is removed with the same tag.
 - Email addresses.
 - Patient-name declarations: ``patient name: Ali Khan`` / ``name is Ali``,
   after honorifics (Mr., Mrs., Dr., Mx.) and the possessive patterns the
@@ -56,6 +60,16 @@ _PHONE_INTL = re.compile(r"\+\d{1,3}[\s\-]\d{2,4}(?:[\s\-]\d{2,4}){1,3}(?!\d)")
 
 _EMAIL = re.compile(r"\b[\w.+-]+@[\w-]+\.[\w.-]+\b")
 
+# Record numbers: the label is required (a bare digit run is a lab value, a
+# dose or a date far more often than it is a file number), and the value must
+# start with a digit so "patient identification" -- a label prefix that is not
+# a record number -- cannot match.
+_MRN = re.compile(
+    r"(?i:\b(?:mrn|m\.?r\.?\s*no\.?|medical record (?:number|no\.?)|hospital (?:number|no\.?|id)|"
+    r"patient (?:id|number|no\.?)|reg(?:istration)? (?:number|no\.?)|file (?:number|no\.?)))"
+    r"\s*[:#=\-]?\s*([A-Za-z]{0,4}[-/]?\d[\w\-/]{1,17})"
+)
+
 # Name declarations only — never bare capitals.
 #   "patient name: Ali Khan", "Pt Name - Ali", "name is Ali",
 #   "Mr. Ali Khan reported...", "Patient: Ali Khan"
@@ -80,6 +94,7 @@ REDACTIONS = {
     "phone": "[REDACTED PHONE]",
     "email": "[REDACTED EMAIL]",
     "name": "[REDACTED NAME]",
+    "mrn": "[REDACTED MRN]",
 }
 
 
@@ -107,6 +122,7 @@ def deidentify(text: str) -> tuple[str, dict[str, int]]:
     result = _PHONE_PK.sub(_tag("phone"), result)
     result = _PHONE_INTL.sub(_tag("phone"), result)
     result = _EMAIL.sub(_tag("email"), result)
+    result = _MRN.sub(_tag("mrn"), result)
     # Names: only the identifier group is replaced, keeping the label so
     # the record still reads naturally ("patient name: [REDACTED NAME]").
     def _name_fn(match: re.Match[str]) -> str:

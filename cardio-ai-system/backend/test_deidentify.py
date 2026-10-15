@@ -101,6 +101,26 @@ def test_lowercase_label_keeps_its_expected_behaviour():
     assert counts == {}
 
 
+def test_record_number_removed():
+    for written, number in (
+        ("MRN: 88123", "88123"),
+        ("Hospital No 0045-998877", "0045-998877"),
+        ("Patient ID A-102938", "A-102938"),
+        ("registration no. 55210", "55210"),
+    ):
+        text, counts = deidentify(f"{written} — chest pain since morning")
+        assert number not in text, written
+        assert counts.get("mrn") == 1, written
+        assert "chest pain" in text
+
+
+def test_a_labelled_word_is_not_a_record_number():
+    # Only the identifier is replaced; a label that never carries one is left.
+    text, counts = deidentify("patient identification confirmed before the procedure")
+    assert text == "patient identification confirmed before the procedure"
+    assert counts == {}
+
+
 def test_clinical_capitals_never_redacted():
     # Capitalised clinical terms must survive: no bare-capital redaction.
     text, counts = deidentify(
