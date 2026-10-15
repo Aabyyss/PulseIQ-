@@ -48,8 +48,16 @@ _EMAIL = re.compile(r"\b[\w.+-]+@[\w-]+\.[\w.-]+\b")
 # Name declarations only — never bare capitals.
 #   "patient name: Ali Khan", "Pt Name - Ali", "name is Ali",
 #   "Mr. Ali Khan reported...", "Patient: Ali Khan"
+#
+# The label and the separator are matched case-insensitively; only the
+# captured name stays case-sensitive. A sentence-initial label is capitalised
+# ("Name: Ali Khan", "Patient Name: Ali Khan", "PT: Ali Khan"), and reading
+# the label case-sensitively let exactly those forms through — the commonest
+# way a name is written down leaked the name. The clinical-capital rule is
+# untouched: the name group still requires capitalised words, so "patient
+# ecg showed..." is still never redacted.
 _NAME_LABELED = re.compile(
-    r"\b(?:patient|pt|pt\.?|patient's|name)\s*(?:name)?\s*(?:is|:|-|=)\s*"
+    r"(?i:\b(?:patient|pt|pt\.?|patient's|name))\s*(?i:name)?\s*(?i:is|:|-|=)\s*"
     r"([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+){0,3})"
 )
 _NAME_HONORIFIC = re.compile(

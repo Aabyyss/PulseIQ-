@@ -52,6 +52,29 @@ def test_honorific_name_removed():
     assert "hypertension" in text
 
 
+def test_capitalised_label_is_still_a_label():
+    # A label at the start of a line is capitalised; reading it case-
+    # sensitively let the name through.
+    for written in (
+        "Name: Ali Khan",
+        "Patient Name: Ali Khan",
+        "PT: Ali Khan",
+        "Patient: Ali Khan",
+        "NAME IS Ali Khan",
+    ):
+        text, counts = deidentify(written)
+        assert "Ali Khan" not in text, written
+        assert counts.get("name") == 1, written
+
+
+def test_lowercase_label_keeps_its_expected_behaviour():
+    # The label is case-insensitive, the NAME is not: an uncapitalised value
+    # after a label is not treated as a name ("name: not recorded").
+    text, counts = deidentify("patient name: not recorded")
+    assert text == "patient name: not recorded"
+    assert counts == {}
+
+
 def test_clinical_capitals_never_redacted():
     # Capitalised clinical terms must survive: no bare-capital redaction.
     text, counts = deidentify(
