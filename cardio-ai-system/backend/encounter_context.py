@@ -14,7 +14,12 @@ outcome for a safety screen. So the union rules live here, once:
   field mentions it).
 - **allergies** — the recorded list plus explicit "allergic to …" phrases.
 - **current medications** — names and brands from the record plus the ones the
-  encounter names, de-duplicated case-insensitively.
+  encounter names.
+
+The record comes first and wins on spelling: every list is merged
+case-insensitively (a recorded "Aspirin" and a spoken "aspirin" are one
+allergy, not two), and the spelling that is kept is the one the clinician
+typed.
 - **labs** — numeric findings parsed from the report text *and* from what was
   said out loud (unit-aware, via :func:`backend.lab_report.labs_for_review`):
   a clinician reading "eGFR 26" off the note is the same fact as pasting it,
@@ -38,6 +43,47 @@ from backend.lab_report import labs_for_review
 from backend.medical_entities import extract_entities
 
 
+class _Merge:
+    """An order-preserving, case-insensitive set of clinical terms.
+
+    The review's lists are read by a clinician and matched by rules, so a term
+    that is recorded and then said out loud has to appear once, with the spelling
+    the record used: "Aspirin" in the allergies field plus "allergic to aspirin"
+    in the transcript is one allergy, and showing it twice reads as two.
+    Whitespace is collapsed and case is folded for the comparison only.
+    """
+
+    def __init__(self, existing: list[str]) -> None:
+        self._items: list[str] = []
+        self._seen: set[str] = set()
+        for item in existing:
+            self.add(item)
+
+    @staticmethod
+    def _key(value: str) -> str:
+        return " ".join(str(value or "").split()).casefold()
+
+    def add(self, value: str) -> None:
+        cleaned = " ".join(str(value or "").split())
+        if not cleaned:
+            return
+        key = self._key(cleaned)
+        if key in self._seen:
+            return
+        self._seen.add(key)
+        self._items.append(cleaned)
+
+    def __iter__(self):
+        return iter(self._items)
+
+    def __len__(self) -> int:
+        return len(self._items)
+
+
+def _merge(values: list[str]) -> _Merge:
+    return _Merge(values)
+
+
 def build_medication_context(
     encounter_text: str = "",
     report_text: str = "",
@@ -52,25 +98,18 @@ def build_medication_context(
     }
     allergies_from_text = extract_allergy_mentions(narrative)
 
-    conditions = as_list(context.get("conditions"))
+    conditions = _merge(as_list(context.get("conditions")))
     stated = list(entities.get("risk_factors") or []) + detect_conditions(narrative)
     for candidate in stated:
-        tag = str(candidate).strip()
-        if tag and tag not in conditions:
-            conditions.append(tag)
+        conditions.add(candidate)
 
-    allergies = as_list(context.get("allergies"))
+    allergies = _merge(as_list(context.get("allergies")))
     for term in allergies_from_text:
-        if term not in allergies:
-            allergies.append(term)
+        allergies.add(term)
 
-    current = as_list(context.get("current_medications"))
-    documented = {name.lower() for name in current}
+    current = _merge(as_list(context.get("current_medications")))
     for medication in entities.get("medications") or []:
-        name = str(medication.get("name", "")).strip()
-        if name and name.lower() not in documented:
-            current.append(name)
-            documented.add(name.lower())
+        current.add(str(medication.get("name", "")))
 
     try:
         age = int(str(context.get("age")).strip()) if str(context.get("age") or "").strip() else None
@@ -94,9 +133,9 @@ def build_medication_context(
         "narrative": narrative,
         "entities": entities,
         "allergies_from_text": allergies_from_text,
-        "conditions": conditions,
-        "allergies": allergies,
-        "current_medications": current,
+        "conditions": list(conditions),
+        "allergies": list(allergies),
+        "current_medications": list(current),
         "age": age,
         "sex": context.get("sex") or None,
         "labs": labs,

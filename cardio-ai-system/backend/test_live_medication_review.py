@@ -467,6 +467,25 @@ def test_a_line_ack_never_waits_for_the_previous_lines_plan():
         realtime_service.translate_to_english = original_translate
 
 
+def test_a_fact_recorded_and_then_spoken_is_one_fact():
+    # The record and the transcript name the same allergy in different case; the
+    # merged context must not read as two allergies, and the spelling kept is the
+    # one the clinician typed.
+    # Prior MI gives the review a reason to reach for aspirin, so the allergy has
+    # something to block — that is where a doubled entry would show up.
+    visit = _visit(conditions=["Hypertension", "prior MI"], allergies=["aspirin"])
+    context = build_medication_context(
+        "he is allergic to Aspirin and is a known hypertensive", "", visit
+    )
+    assert context["allergies"] == ["aspirin"]
+    assert "hypertension" not in context["conditions"]  # the case variant is gone
+    assert "Hypertension" in context["conditions"]
+    # And the safety consequence is unchanged: one alert, one blocked option.
+    review = medication_review_for_encounter("he is allergic to Aspirin", "", patient=visit)
+    assert [alert["drug"].casefold() for alert in review["allergy_alerts"]] == ["aspirin"]
+    assert _allergy_alert(review, "aspirin") is not None
+
+
 def main() -> None:
     """Run the suite directly (no pytest needed)."""
     tests = [(name, fn) for name, fn in sorted(globals().items()) if name.startswith("test_") and callable(fn)]
