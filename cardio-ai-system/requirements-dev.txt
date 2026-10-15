@@ -1,0 +1,20 @@
+# Everything needed to VERIFY PulseIQ — not to run it.
+#
+# `requirements.txt` is the runtime set, and it is deliberately small: the
+# documented test command (`make test` / `pytest backend`) did not work from a
+# fresh clone, because the suite imports `pytest` and `httpx` — FastAPI's
+# TestClient is built on httpx, and the auth/learning/realtime suites use its
+# ASGI transport — and neither was in any requirements file. The demo pipeline
+# (`scripts/convert_demo.py`) needs an ffmpeg binary, which imageio-ffmpeg ships.
+#
+#   pip install -r requirements-dev.txt
+#   python -m pytest backend -q
+#
+# The frontend's own gates are npm scripts: `npm ci && npm run typecheck &&
+# npm run test && npm run lint && npm run build`.
+
+-r requirements.txt
+
+pytest>=8.3
+httpx>=0.28
+imageio-ffmpeg>=0.5

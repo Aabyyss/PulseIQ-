@@ -9,7 +9,7 @@
 **An open-source clinical workspace that turns a patient's own words into an explained
 risk estimate — then carries the encounter through to a structured report.**
 
-Runs locally. No accounts. No API keys. No data leaves the device.
+Runs locally. No cloud account, no API keys, no data leaves the device — the clinician account the first launch asks for is a row in a SQLite file on your own machine.
 
 [![Test suite](https://github.com/Aabyyss/PulseIQ-/actions/workflows/tests.yml/badge.svg)](https://github.com/Aabyyss/PulseIQ-/actions/workflows/tests.yml)
 [![Publish project page](https://github.com/Aabyyss/PulseIQ-/actions/workflows/deploy-pages.yml/badge.svg)](https://github.com/Aabyyss/PulseIQ-/actions/workflows/deploy-pages.yml)
@@ -45,8 +45,8 @@ detected, which model inputs they produced, and what a clinician would reach for
 | 📄 | **Consultation reports** | Structured visit capture → one-click PDF export of summary, advice, plan and red flags |
 | 🌍 | **Multilingual capture** | 9 capture languages — English, Urdu (script + Roman), Hindi, Arabic, Korean, French, Spanish, German, Mandarin — normalised to English for analysis |
 | 🖼️ | **Report reading** | Lab reports and scans parsed for key findings (needs a vision model) |
-| 🕘 | **History & review** | Last 20 screenings kept on-device, with band distribution and mean probability |
-| 🤖 | **17 clinical agents** | Guidelines, uncertainty, causality, fairness, robustness, explainability — each an isolated, replaceable module |
+| 🕘 | **History & review** | Screenings, notes and consultations kept in the local database (newest 200), with band distribution and mean probability |
+| 🤖 | **20 clinical agents** | Guidelines, uncertainty, causality, fairness, robustness, explainability — each an isolated, replaceable module |
 
 <div align="center">
 
@@ -120,20 +120,26 @@ Random Forest over the public heart dataset (1,025 rows · 13 features).
 
 ```
 frontend  React 18 · Vite · TypeScript · Tailwind
-  ├── /               overview & pipeline
-  ├── /diagnose       POST /diagnose · /ai-insights · /analyze-report-image
-  ├── /live           WS   /ws/consultation
-  ├── /workflow/*     structured visit → POST /final-report → PDF
-  ├── /history        local browser storage
-  └── /agents         GET  /research-agents
+  ├── /               overview
+  ├── /consultation   live capture  WS /ws/consultation · POST /diagnose
+  │                                POST /medication-review · POST /lab-report
+  ├── /medications    narrative + record → POST /medication-review
+  ├── /history        account-scoped screenings and saved consultations
+  ├── /notes          private notes    /patients   per-patient timeline
+  ├── /security       sessions, password, audit trail
+  ├── /agents         GET /research-agents      /guidance   how to use it
+  └── /login /privacy /terms /thank-you
 
-backend  FastAPI
-  ├── api_server.py       routes, CORS, /health
-  ├── orchestrator.py     extraction → feature mapping → model → risk band
-  ├── ai_assistant.py     three-tier reasoning, none of it required
-  └── realtime_service.py per-line fusion across the clinical agents
+backend  FastAPI (routes in api_server.py)
+  ├── orchestrator.py       extraction → feature mapping → model → risk band
+  ├── realtime_service.py   per-line fusion across the clinical agents
+  ├── ai_assistant.py       three-tier reasoning, none of it required
+  ├── auth_store.py         accounts, sessions, screenings, notes (SQLite)
+  ├── risk_score_context.py record + wording → HEART · GRACE · CHA₂DS₂-VASc · ASCVD
+  ├── lab_report.py         report text → reference-range flags (+ derived lipids)
+  └── fhir_export.py        findings → a FHIR R4 Bundle, written to a file
 
-agents/    17 rule-grounded clinical modules
+agents/    20 rule-grounded clinical modules
 models/    trained model + metadata
 ```
 
@@ -141,13 +147,13 @@ models/    trained model + metadata
 
 ```
 cardio-ai-system/
-├── backend/     FastAPI server, training script, pipeline checks
-├── agents/      rule-grounded clinical modules
-├── frontend/    React application
+├── backend/     FastAPI server, training script, pytest suite
+├── agents/      20 rule-grounded clinical modules
+├── frontend/    React application (vitest for the non-React logic)
 ├── models/      trained model and metadata
 ├── data/        dataset
-├── docs/        screenshots & demo video
-├── scripts/     screenshot capture helper
+├── docs/        design notes (ADR, API spec, data flow, security) · screenshots · walkthrough video
+├── scripts/     demo recording + video encode, screenshot capture, E2E journey, UI audit
 └── setup.ps1 · run-*.ps1 · Start-PulseIQ.cmd
 ```
 
@@ -155,18 +161,28 @@ cardio-ai-system/
 
 | Gate | Runs | What it proves |
 |---|---|---|
-| Backend pipeline | CI · every push | 8 clinical test scripts (symptom text → expected risk band, negation, feature mapping, explainability) — exits nonzero on failure |
+| Backend pytest suite | CI · every push | 259 cases: clinical direction (symptom text → expected risk band), the published scores pinned row-by-row against their sources, de-identification, the local stores, the login limiter, the FHIR bundle, the live medication screen |
+| Backend script checks | CI · every push | The older password-free runners, including the end-to-end pipeline walk (symptom text → mapped features → prediction) — nonzero exit fails the job |
+| Frontend unit tests | CI · every push | `npm run test` (vitest + jsdom): extraction patterns, session and retry behaviour, page metadata, PDF pagination |
 | Frontend typecheck & build | CI · every push | `tsc -b` plus a production Vite build |
 | UI contrast & layout audit | CI · every push | WCAG AA contrast of every text node at 1440/390 px, plus horizontal-overflow, clipped-text and tap-target sweeps of 8 routes × 4 viewports — any violation fails the run |
-| Lint | local | `npm run lint` — zero errors |
+| Lint | local | `npm run lint` — zero errors, zero warnings without a `--max-warnings` guard |
 | E2E journey | local | `npm run e2e` — Playwright walks sign-in → dictation → save → thank-you → history against real servers and fails on any console error or failed API call |
 
 ## 🤝 Contributing
 
 Issues and pull requests are welcome. Good first areas: more symptom vocabulary, additional
-capture languages, and extending the agent registry. Run
-`npm run typecheck && npm run lint && npm run build` in `cardio-ai-system/frontend` before
-submitting — `npm run e2e` and `npm run ui-audit` cover the full journey and the UI gates.
+capture languages, and extending the agent registry.
+
+Before submitting, run the suites that CI runs:
+
+```bash
+cd cardio-ai-system && make install-dev && python -m pytest backend -q   # 259 cases
+cd frontend && npm ci && npm run typecheck && npm run test && npm run lint && npm run build
+```
+
+`npm run e2e` and `npm run ui-audit` (both need the servers up) cover the full journey and the
+UI gates; `make check` chains the tests, typecheck, lint and build.
 
 ## ⚠️ Scope
 

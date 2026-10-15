@@ -16,8 +16,8 @@ PORT_B := 8000
 PORT_F := 5173
 
 .DEFAULT_GOAL := help
-.PHONY: help setup install-backend install-frontend train run-backend run-frontend \
-        test test-backend test-frontend typecheck build ui-audit check docker-up docker-down clean
+.PHONY: help setup install-backend install-dev install-frontend train run-backend run-frontend \
+        test test-backend test-frontend typecheck lint build ui-audit check docker-up docker-down clean
 
 help: ## Show available targets
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*?## "}{printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}'
@@ -30,6 +30,9 @@ install-backend: ## Create venv, install Python deps + spaCy model
 	$(PIP) install --upgrade pip
 	$(PIP) install -r requirements.txt
 	-$(PY) -m spacy download en_core_web_sm
+
+install-dev: ## Runtime deps + the test/tooling deps (pytest, httpx, ffmpeg)
+	$(PIP) install -r requirements-dev.txt
 
 install-frontend: ## npm install for the frontend
 	cd $(FE) && npm install

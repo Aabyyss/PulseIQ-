@@ -4,12 +4,15 @@ name: Test suite
 # push and pull request.
 #
 # Coverage notes:
-# - backend/test_orchestrator.py carries the clinical assertions (symptom text
-#   → expected risk band) and exits nonzero on failure. It exercises the NLP,
-#   mapper, prediction and explainability agents end-to-end.
-# - The remaining backend/test_*.py scripts are smoke checks: they fail the
-#   job when the code raises (broken imports, missing model, bad data) via
-#   their exit code.
+# - `pytest backend` runs the collected suite: clinical direction cases, the
+#   published scores pinned against their sources, de-identification, the local
+#   stores, the login limiter, the FHIR bundle, the live medication screen.
+# - The script checks below are the older, password-free runners:
+#   backend/test_orchestrator.py carries the clinical assertions (symptom text
+#   → expected risk band) and its siblings are smoke checks that fail the job
+#   when the code raises (broken imports, missing model, bad data).
+# - The frontend job runs the vitest suite for the logic no other check
+#   reaches (extraction patterns, session/retry behaviour, PDF layout).
 # - The spaCy model install is best-effort: when unavailable the symptom
 #   agent falls back to its dictionary matcher and the suite still runs.
 
@@ -47,14 +50,22 @@ jobs:
       - name: Install backend dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
 
       - name: Install spaCy model (best effort)
         run: |
           pip install https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl \
             || echo "::warning::spaCy model unavailable; tests will run on the dictionary fallback"
 
-      - name: Run backend tests
+      # The whole pytest suite first — it covers far more than the script
+      # checks below (score tables against their sources, de-identification,
+      # the stores, the limiter, the FHIR bundle, the live medication screen),
+      # and running it here is the only way a regression in one of those areas
+      # is caught before merge.
+      - name: Run pytest suite
+        run: python -m pytest backend -q
+
+      - name: Run backend script checks
         run: |
           set -e
           failed=0

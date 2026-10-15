@@ -21,13 +21,13 @@ frontend and model.**
 
 | Path | Contents |
 |---|---|
-| `backend/` | FastAPI server, training script (with the inverted-label fix), pipeline checks |
-| `agents/` | 18 rule-grounded clinical modules — guidelines, uncertainty, causality, fairness, pharmacology, explainability… |
+| `backend/` | FastAPI server, training script (with the inverted-label fix), pytest suite |
+| `agents/` | 20 rule-grounded clinical modules — guidelines, uncertainty, causality, fairness, pharmacology, explainability… |
 | `frontend/` | React 18 + Vite + TypeScript application (see its [own README](frontend/README.md)) |
 | `models/` | Trained model and metadata |
 | `data/` | Public heart dataset |
-| `docs/` | Screenshots and the demo walkthrough |
-| `scripts/` | Screenshot/video capture helpers — regenerate the documentation media |
+| `docs/` | Design notes (ADR, API spec, data flow, security, conventions), screenshots and the walkthrough video |
+| `scripts/` | Demo recording + video encode, screenshot capture, E2E journey, UI audit — regenerate the documentation media and verify the journey |
 | `*.ps1`, `*.cmd` | Setup, run and one-click launcher scripts |
 
 ## Fast start
@@ -55,6 +55,16 @@ cd frontend && npm install && npm run dev                  # terminal 2
 No API keys. First launch asks you to create a clinician account — it is stored locally on
 your machine only. The built-in clinical engine works fully offline; an optional
 [Ollama](https://ollama.com) install upgrades the text quality automatically.
+
+### Verifying it
+
+```bash
+pip install -r requirements-dev.txt   # pytest, httpx, ffmpeg — the test/tooling set
+python -m pytest backend -q           # 259 cases
+cd frontend && npm ci && npm run test # vitest: extraction, session, meta, PDF layout
+```
+
+`make test` runs both, and `make check` adds typecheck, lint and a production build.
 
 ## Scope
 
