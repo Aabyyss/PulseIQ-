@@ -9,6 +9,12 @@ readers until a collection happened to run. Each call must now close what it
 opened, which is what this module checks: it records every connection the stores
 create and asserts that all of them are unusable by the time the call returns.
 
+Both stores read their path once, at import, and in a full run another module has
+usually imported them first — so setting the environment variable here is not
+enough, and a case that relied on it would write test accounts and taught phrases
+into the clinician's real databases. Each case redirects the stores at its own
+throwaway file instead.
+
 Runnable via pytest and directly
 (``python backend/test_store_connections.py``).
 """
@@ -20,12 +26,23 @@ import tempfile
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-# Throwaway databases, set before the stores are imported.
-_tmpdir = tempfile.mkdtemp(prefix="pulseiq-store-test-")
-os.environ.setdefault("PULSEIQ_DB", os.path.join(_tmpdir, "auth.db"))
-os.environ.setdefault("PULSEIQ_LEARNED_DB", os.path.join(_tmpdir, "learned.db"))
+os.environ.setdefault(
+    "PULSEIQ_DB", os.path.join(tempfile.mkdtemp(prefix="pulseiq-store-test-"), "auth.db")
+)
+
+import pytest  # noqa: E402
 
 from backend import auth_store, learned_vocabulary  # noqa: E402
+
+
+@pytest.fixture(autouse=True)
+def _private_stores(tmp_path, monkeypatch):
+    """A throwaway pair of databases per case, whatever the import order was."""
+    monkeypatch.setattr(auth_store, "_DB_PATH", str(tmp_path / "auth.db"))
+    monkeypatch.setattr(auth_store, "_initialised", False)
+    monkeypatch.setattr(learned_vocabulary, "_DB_PATH", str(tmp_path / "learned.db"))
+    monkeypatch.setattr(learned_vocabulary, "_initialised", False)
+    yield
 
 
 class _Recorder:
@@ -102,8 +119,4 @@ def test_a_rejected_write_still_closes_its_connection():
 
 
 if __name__ == "__main__":  # pragma: no cover - manual run convenience
-    for name, case in sorted(globals().items()):
-        if name.startswith("test_") and callable(case):
-            case()
-            print(f"[PASS] {name}")
-    print("store connection hygiene: ok")
+    raise SystemExit(pytest.main([__file__, "-q"]))
