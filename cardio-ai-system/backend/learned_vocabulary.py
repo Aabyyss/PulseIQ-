@@ -51,6 +51,10 @@ VALID_CONCEPTS = frozenset({
 _MAX_PHRASE = 120
 _MAX_PATTERN = 200
 _MAX_LEARNED_PER_OWNER = 500
+# Suppression patterns are recompiled and run over every spoken line, so they
+# are capped too: the phrase list had a limit and this one did not, which is the
+# side of the store where an accidental loop in the UI would grow without end.
+_MAX_SUPPRESSIONS_PER_OWNER = 100
 
 _DB_PATH = os.environ.get(
     "PULSEIQ_LEARNED_DB",
@@ -214,6 +218,14 @@ def teach_suppression(owner_id: int, pattern: str, note: str = "") -> dict[str, 
         ).fetchone()
         if existing:
             raise ValueError("That pattern is already taught.")
+        count = conn.execute(
+            "SELECT COUNT(*) AS n FROM suppression_patterns WHERE owner_id = ?", (owner_id,)
+        ).fetchone()["n"]
+        if count >= _MAX_SUPPRESSIONS_PER_OWNER:
+            raise ValueError(
+                f"Suppression patterns are full ({_MAX_SUPPRESSIONS_PER_OWNER} entries). "
+                "Remove some first."
+            )
         created_at = _now()
         cursor = conn.execute(
             "INSERT INTO suppression_patterns (owner_id, pattern, note, created_at) "
