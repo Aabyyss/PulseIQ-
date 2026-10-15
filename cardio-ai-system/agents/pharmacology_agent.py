@@ -86,6 +86,21 @@ _ALLERGY_PHRASE = re.compile(
 )
 
 
+# Where a substance list ends. A sentence break, a contrast, a new actor — the
+# actor cut is what keeps "allergic to aspirin and I take warfarin" from making
+# "I take warfarin" an allergy — and a clause that carries a verb of its own,
+# which is the commoner shape of the same mistake: "allergic to Aspirin and is a
+# known hypertensive" used to record "is a known hypertensive" as an allergy and
+# put that phrase in front of the clinician as the thing to avoid.
+_ALLERGY_CLAUSE_BREAK = re.compile(
+    r"\b(?:but|however|though|no other|nkda)\b|[.;\n]"
+    r"|\b(?:and\s+)?(?:i|he|she|they|we|patient|the patient)\b"
+    r"|\b(?:and\s+)?(?:is|are|was|were|has|have|had|takes?|taking|on|denies|"
+    r"reports?|complains?|otherwise|noted)\b",
+    re.I,
+)
+
+
 def extract_allergy_mentions(text: str) -> list[str]:
     """Allergy statements in a narrative — "allergic to aspirin and sulfa".
 
@@ -94,17 +109,7 @@ def extract_allergy_mentions(text: str) -> list[str]:
     """
     found: list[str] = []
     for match in _ALLERGY_PHRASE.finditer(str(text or "")):
-        chunk = re.split(
-            # A substance list ends at the next statement: a sentence break, a
-            # contrast, or a new actor. The actor cut matters most — without it
-            # "allergic to aspirin and I take warfarin" made "I take warfarin"
-            # an allergy term, which blocked a drug the patient was actually
-            # taking, while "allergic to aspirin and sulfa" stays two substances.
-            r"\b(?:but|however|though|no other|nkda)\b|[.;\n]"
-            r"|\b(?:and\s+)?(?:i|he|she|they|we|patient|the patient)\b",
-            match.group(1),
-            flags=re.I,
-        )[0]
+        chunk = _ALLERGY_CLAUSE_BREAK.split(match.group(1))[0]
         for term in as_list(chunk):
             if len(term) > 1 and term not in found:
                 found.append(term)

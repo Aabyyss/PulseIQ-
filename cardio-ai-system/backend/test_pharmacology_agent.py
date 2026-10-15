@@ -133,6 +133,21 @@ def test_the_allergy_clause_ends_where_the_next_statement_starts():
     assert "sulfa" in " ".join(both).lower()
 
 
+def test_a_following_clause_is_not_read_as_an_allergy():
+    """The words after the allergy belong to the next statement, not to the list."""
+    for spoken, expected in (
+        ("he is allergic to Aspirin and is a known hypertensive", ["aspirin"]),
+        ("allergic to penicillin and was started on amoxicillin yesterday", ["penicillin"]),
+        ("she is allergic to sulfa and has asthma", ["sulfa"]),
+        ("allergic to iodine and takes metformin", ["iodine"]),
+    ):
+        mentions = [term.lower() for term in extract_allergy_mentions(spoken)]
+        assert mentions == expected, spoken
+    # A substance list with no verb is still a list.
+    two = [term.lower() for term in extract_allergy_mentions("allergic to aspirin and sulfa")]
+    assert two == ["aspirin", "sulfa"]
+
+
 def test_sulfonamide_history_flags_furosemide_without_blocking_it():
     review = review_medications(
         symptoms=["leg swelling", "shortness of breath"],
