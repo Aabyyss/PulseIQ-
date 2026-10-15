@@ -11,7 +11,7 @@ frontend and model.**
 
 [**📘 Full overview, screenshots and quickstart**](../README.md) ·
 [**🌐 Project page**](https://aabyyss.github.io/PulseIQ-/) ·
-[**▶ Walkthrough video**](docs/demo/pulseiq-demo.mp4)
+[**▶ Walkthrough video**](docs/demo/pulseiq-walkthrough.mp4)
 
 </div>
 

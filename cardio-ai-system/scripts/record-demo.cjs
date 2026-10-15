@@ -1,10 +1,15 @@
 /**
  * Records the PulseIQ demo video (light mode, 1440x940) in two takes:
- *   take 1 — first-visit storage notice → login → overview → consultation:
- *            listening meter, English line + concept chips, Urdu line,
- *            body map, patient details, consent → Save → /thank-you
- *   take 2 — fresh session: History with the saved visit, then a tour of
- *            guidance / agents / security and a dark-mode pass of the app
+ *   take 1 — storage notice → sign in → overview → live consultation:
+ *            listening meter, an English line ("it pains in my heart") and an
+ *            Urdu line, visit details including race/ethnicity, a report line
+ *            that prints only total cholesterol and HDL (so the derived
+ *            non-HDL appears, badged as computed), then Save visit and the
+ *            thank-you page
+ *   take 2 — fresh session: History with the saved visit, a medication review
+ *            built from a spoken narrative (allergy block, statin for the
+ *            derived lipid, risk scores with the recorded group), then the
+ *            guidance / agents / security tour and a dark-mode pass
  *
  * The save is recorded through to the thank-you page; with the built-in
  * rule engine that is quick, with an on-device LLM it can take ~30s of
@@ -31,6 +36,17 @@ const VIEWPORT = { width: 1440, height: 940 };
 // state from test runs, which would pre-fill the concepts panel on camera.
 const EMAIL = "demo@cardio.local";
 const PASSWORD = "DemoPass123";
+
+const VISIT = {
+  name: "Demo Patient",
+  age: "58",
+  race: "african_american",
+  conditions: "hypertension, prior MI 2021",
+  allergies: "aspirin",
+  medications: "metoprolol 25 mg",
+  // Prints the pair, not the fraction: non-HDL is worked out and badged.
+  report: "Total cholesterol 213 mg/dL. HDL 50 mg/dL."
+};
 
 const errors = [];
 const TAKE2_ONLY = process.argv.includes("--take2-only"); // keep an existing raw-take1.webm
@@ -97,73 +113,93 @@ async function login(page, noticeDwell) {
   if (TAKE2_ONLY) {
     console.log("skipping take 1 — keeping the existing raw-take1.webm");
   } else {
-  const ctx1 = await browser.newContext({
-    viewport: VIEWPORT,
-    colorScheme: "light",
-    recordVideo: { dir: OUT, size: VIEWPORT },
-  });
-  const p1 = await ctx1.newPage();
-  p1.on("pageerror", (err) => errors.push(`pageerror: ${err.message}`));
+    const ctx1 = await browser.newContext({
+      viewport: VIEWPORT,
+      colorScheme: "light",
+      recordVideo: { dir: OUT, size: VIEWPORT },
+    });
+    const p1 = await ctx1.newPage();
+    p1.on("pageerror", (err) => errors.push(`pageerror: ${err.message}`));
 
-  t0 = Date.now();
-  await login(p1, 2500); // full dwell: the notice is a new-version highlight
+    t0 = Date.now();
+    await login(p1, 2500); // full dwell: the notice is a new-version highlight
 
-  await p1.waitForTimeout(2500); // overview page dwell
-  await p1.goto(`${BASE}/consultation`, { waitUntil: "domcontentloaded" });
-  await p1.waitForTimeout(2000);
+    await p1.waitForTimeout(2500); // overview page dwell
+    await p1.goto(`${BASE}/consultation`, { waitUntil: "domcontentloaded" });
+    await p1.waitForTimeout(2000);
 
-  // Consent first — the mic gate asks for it before recording may start.
-  await p1.locator('[aria-label="Patient consents to recording"]').click();
-  await p1.waitForTimeout(800);
+    // Consent first — the mic gate asks for it before recording may start.
+    await p1.locator('[aria-label="Patient consents to recording"]').click();
+    await p1.waitForTimeout(800);
 
-  // Hands-free visual: start listening, show the mic level bar, stop.
-  await p1.getByRole("button", { name: /Start listening/i }).click();
-  await p1.waitForTimeout(4000);
-  console.log(stamp(Date.now() - t0), "listening state shown");
-  await p1.getByRole("button", { name: /Stop listening/i }).click();
-  await p1.waitForTimeout(800);
+    // Hands-free visual: start listening, show the mic level bar, stop.
+    await p1.getByRole("button", { name: /Start listening/i }).click();
+    await p1.waitForTimeout(4000);
+    console.log(stamp(Date.now() - t0), "listening state shown");
+    await p1.getByRole("button", { name: /Stop listening/i }).click();
+    await p1.waitForTimeout(800);
 
-  // Line 1 — English exertional chest pain ("it pains in my heart" wording).
-  await p1
-    .locator("textarea")
-    .first()
-    .fill("I get tight chest pain walking uphill that eases with rest, and it pains in the left side of my heart.");
-  await p1.getByRole("button", { name: /Submit line/i }).click();
-  await p1
-    .locator("span")
-    .filter({ hasText: /^chest pain$/ })
-    .first()
-    .waitFor({ timeout: 45000 }); // instant line_ack chip
-  console.log(stamp(Date.now() - t0), "line 1 ack");
-  await p1.waitForTimeout(3000); // dwell on concepts + body map
+    // Line 1 — English exertional chest pain with a radiation and a second
+    // site, so the body map has something to draw.
+    await p1
+      .locator("textarea")
+      .first()
+      .fill(
+        "I get tight chest pain walking uphill that eases with rest, and it pains in the left side of my heart. My back aches after the walk too."
+      );
+    await p1.getByRole("button", { name: /Submit line/i }).click();
+    await p1
+      .locator("span")
+      .filter({ hasText: /^chest pain$/ })
+      .first()
+      .waitFor({ timeout: 45000 }); // instant line_ack chip
+    console.log(stamp(Date.now() - t0), "line 1 ack");
+    await p1.waitForTimeout(4000); // dwell on concepts + body map
 
-  // Line 2 — Urdu: chest pain + sweating.
-  await p1.locator("textarea").first().fill("دل میں درد ہے اور پسینہ آ رہا ہے");
-  await p1.getByRole("button", { name: /Submit line/i }).click();
-  await p1
-    .locator("span")
-    .filter({ hasText: /^sweat/i })
-    .first()
-    .waitFor({ timeout: 45000 });
-  console.log(stamp(Date.now() - t0), "line 2 ack (Urdu)");
-  await p1.waitForTimeout(6000); // dwell on concepts + body map
+    // Line 2 — Urdu: chest pain + sweating.
+    await p1.locator("textarea").first().fill("دل میں درد ہے اور پسینہ آ رہا ہے");
+    await p1.getByRole("button", { name: /Submit line/i }).click();
+    await p1
+      .locator("span")
+      .filter({ hasText: /^sweat/i })
+      .first()
+      .waitFor({ timeout: 45000 });
+    console.log(stamp(Date.now() - t0), "line 2 ack (Urdu)");
+    await p1.waitForTimeout(5000); // dwell on concepts + body map
 
-  // Fill visit details so the saved record carries a name.
-  await p1.getByRole("tab", { name: /Full consult/i }).click();
-  await p1.waitForTimeout(800);
-  await p1.getByPlaceholder(/patient name/i).fill("Demo Patient");
-  await p1.getByPlaceholder(/age/i).fill("58");
-  await p1.waitForTimeout(1000);
+    // Visit details, including the group the pooled cohort equations need.
+    await p1.getByRole("tab", { name: /Full consult/i }).click();
+    await p1.waitForTimeout(800);
+    await p1.getByLabel("Patient name").fill(VISIT.name);
+    await p1.getByLabel("Patient age").fill(VISIT.age);
+    await p1.getByLabel("Patient gender").selectOption("Male"); // this form spells its options out
+    await p1.getByLabel("Patient race or ethnicity").selectOption(VISIT.race);
+    await p1.getByLabel("Known allergies").fill(VISIT.allergies);
+    await p1.getByLabel("Conditions and history").fill(VISIT.conditions);
+    await p1.getByLabel("Current medications").fill(VISIT.medications);
+    await p1.waitForTimeout(1200);
 
-  await p1.getByRole("button", { name: /Save visit & export PDF/i }).click();
-  console.log(stamp(Date.now() - t0), "save clicked — recording through to the thank-you page");
-  const tSave = Date.now();
-  await p1.waitForURL("**/thank-you", { timeout: 150000 });
-  console.log(stamp(Date.now() - t0), `thank-you reached after ${((Date.now() - tSave) / 1000).toFixed(1)}s`);
-  await p1.waitForTimeout(6000); // dwell on the confirmation + next-steps cards
+    // A report that prints the pair, not the fraction: the derived non-HDL is
+    // worked out and badged as computed, which is the point of the shot.
+    await p1.locator("#consult-report").fill(VISIT.report);
+    await p1.waitForTimeout(600);
+    const rangeButton = p1.getByRole("button", { name: /Check against reference ranges/i });
+    await rangeButton.scrollIntoViewIfNeeded();
+    await rangeButton.click();
+    await p1.getByText("computed", { exact: true }).first().waitFor({ timeout: 20000 });
+    console.log(stamp(Date.now() - t0), "derived lipid shown (computed badge)");
+    await p1.getByText(/^Derived:/).first().waitFor({ timeout: 20000 });
+    await p1.waitForTimeout(5000); // dwell on the derived value and its arithmetic
 
-  await ctx1.close(); // flush + finalize take 1 video
-  await p1.video().saveAs(path.join(OUT, "raw-take1.webm"));
+    await p1.getByRole("button", { name: /Save visit & export PDF/i }).click();
+    console.log(stamp(Date.now() - t0), "save clicked — recording through to the thank-you page");
+    const tSave = Date.now();
+    await p1.waitForURL("**/thank-you", { timeout: 150000 });
+    console.log(stamp(Date.now() - t0), `thank-you reached after ${((Date.now() - tSave) / 1000).toFixed(1)}s`);
+    await p1.waitForTimeout(6000); // dwell on the confirmation + next-steps cards
+
+    await ctx1.close(); // flush + finalize take 1 video
+    await p1.video().saveAs(path.join(OUT, "raw-take1.webm"));
   }
 
   // ---------------------------------------------------------------- take 2
@@ -182,9 +218,34 @@ async function login(page, noticeDwell) {
   await p2.goto(`${BASE}/history`, { waitUntil: "domcontentloaded" });
   await p2.waitForTimeout(1200);
   await p2.getByRole("tab", { name: /Consultations/i }).click();
-  await p2.getByText("Demo Patient").first().waitFor({ timeout: 20000 });
+  await p2.getByText(VISIT.name).first().waitFor({ timeout: 20000 });
   console.log(stamp(Date.now() - t0), "take 2: history shows the saved visit");
   await p2.waitForTimeout(6000); // dwell on the saved visit card
+
+  // Medication review of the same patient: the recorded allergy blocks
+  // aspirin, the derived lipid raises the statin option, and the recorded
+  // group selects the published equation.
+  await p2.goto(`${BASE}/medications`, { waitUntil: "domcontentloaded" });
+  await p2.waitForTimeout(1500);
+  await p2
+    .getByPlaceholder(/Crushing chest pain/)
+    .fill(
+      "I get tight chest pain walking uphill that eases with rest, and my back aches after the walk. Patient is allergic to aspirin."
+    );
+  await p2.getByPlaceholder(/Troponin I/).fill(VISIT.report);
+  await p2.getByLabel("Patient age").fill(VISIT.age);
+  await p2.getByLabel("Patient sex").selectOption("male");
+  await p2.getByLabel("Patient race or ethnicity").selectOption(VISIT.race);
+  await p2.getByLabel("Known allergies").fill(VISIT.allergies);
+  await p2.getByLabel("Current medications").fill(VISIT.medications);
+  await p2.getByPlaceholder(/Hypertension, prior MI/).fill(VISIT.conditions);
+  await p2.waitForTimeout(800);
+  await p2.getByRole("button", { name: /Review medications/i }).click();
+  await p2.getByText(/statins?|Atorvastatin|Rosuvastatin/i).first().waitFor({ timeout: 90000 });
+  console.log(stamp(Date.now() - t0), "take 2: medication review shown");
+  await p2.waitForTimeout(3000);
+  await p2.getByText(/Allergy/i).first().scrollIntoViewIfNeeded();
+  await p2.waitForTimeout(4000); // dwell on the block and the reason
 
   // Feature tour of the new version.
   await p2.goto(`${BASE}/guidance`, { waitUntil: "domcontentloaded" });

@@ -1,11 +1,16 @@
-"""Build the PulseIQ demo MP4 from the two recorded takes.
+"""Build the PulseIQ walkthrough MP4 from the two recorded takes.
 
 Usage:
     .venv/Scripts/python.exe scripts/convert_demo.py
 
 Reads  docs/demo/raw-take1.webm + docs/demo/raw-take2.webm
-Writes docs/demo/pulseiq-demo.mp4 and docs/demo/pulseiq-linkedin.mp4
-(same content, two names — the README links one, LinkedIn gets the other).
+Writes docs/demo/pulseiq-walkthrough.mp4
+
+One file, deliberately. The pipeline used to write the same encode twice, as
+``pulseiq-demo.mp4`` and ``pulseiq-linkedin.mp4``, and both were committed — two
+identical 4 MB blobs in the repository, and a project page that described them as
+a landscape cut and a vertical cut when they were byte-for-byte the same
+footage. A post attaches the same file the README links.
 
 Pipeline: normalize both takes to 30 fps, speed up 1.2x (removes dead air,
 keeps motion readable), concatenate, encode H.264 yuv420p + faststart so
@@ -13,7 +18,6 @@ LinkedIn/GitHub accept it. The slow on-device LLM wait is already cut
 between the takes; no audio track (the app demo is visual).
 """
 
-import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -24,7 +28,7 @@ TAKE2 = DEMO / "raw-take2.webm"
 SPEED = 1.2
 FPS = 30
 
-OUTS = [DEMO / "pulseiq-demo.mp4", DEMO / "pulseiq-linkedin.mp4"]
+OUT = DEMO / "pulseiq-walkthrough.mp4"
 
 
 def main() -> int:
@@ -53,19 +57,14 @@ def main() -> int:
         "-c:v", "libx264", "-preset", "medium", "-crf", "23",
         "-pix_fmt", "yuv420p", "-movflags", "+faststart",
         "-an",
-        str(OUTS[0]),
+        str(OUT),
     ]
     print("encoding…")
     proc = subprocess.run(cmd, capture_output=True, text=True)
     if proc.returncode != 0:
         print(proc.stderr[-2000:])
         return 1
-
-    import shutil as _shutil
-    _shutil.copyfile(OUTS[0], OUTS[1])
-    for out in OUTS:
-        mb = out.stat().st_size / 1_048_576
-        print(f"  {out.name}  {mb:.1f} MB")
+    print(f"  {OUT.name}  {OUT.stat().st_size / 1_048_576:.1f} MB")
     return 0
 
 
