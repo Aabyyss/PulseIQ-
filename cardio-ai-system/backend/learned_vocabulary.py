@@ -32,12 +32,13 @@ generation counter changed — a single cheap SELECT on each line, no timers.
 
 from __future__ import annotations
 
+import contextlib
 import os
 import re
 import sqlite3
 import threading
 import time
-from typing import Any
+from typing import Any, Iterator
 
 # The nine clinical concepts the pipeline maps to model features. Learned
 # vocabulary can only extend HOW these are recognised, never invent new
@@ -67,12 +68,29 @@ def _connect() -> sqlite3.Connection:
     return conn
 
 
+@contextlib.contextmanager
+def _open() -> Iterator[sqlite3.Connection]:
+    """A connection that commits on success and is closed on the way out.
+
+    Extraction reads this store on every spoken line, so the connection count is
+    what keeps the file handles stable over a long consultation: ``with
+    sqlite3.connect(...) as conn`` commits but never closes, leaving each handle
+    to the garbage collector.
+    """
+    conn = _connect()
+    try:
+        with conn:
+            yield conn
+    finally:
+        conn.close()
+
+
 def _init() -> None:
     global _initialised
     if _initialised:
         return
     os.makedirs(os.path.dirname(_DB_PATH), exist_ok=True)
-    with _connect() as conn:
+    with _open() as conn:
         conn.executescript(
             """
             CREATE TABLE IF NOT EXISTS learned_phrases (
@@ -118,7 +136,7 @@ def _bump_generation(conn: sqlite3.Connection) -> None:
 def get_generation() -> int:
     """Monotonic-ish change counter; compared by the hot-reload check."""
     _init()
-    with _connect() as conn:
+    with _open() as conn:
         row = conn.execute("SELECT value FROM meta WHERE key = 'generation'").fetchone()
     return int(row["value"]) if row else 0
 
@@ -146,7 +164,7 @@ def teach_phrase(owner_id: int, concept: str, phrase: str, origin: str = "manual
         raise ValueError("Phrase is required.")
     if origin not in ("feedback", "manual"):
         origin = "manual"
-    with _lock, _connect() as conn:
+    with _lock, _open() as conn:
         existing = conn.execute(
             "SELECT id, created_at FROM learned_phrases WHERE owner_id = ? AND concept = ? AND phrase = ?",
             (owner_id, concept_key, cleaned),
@@ -189,7 +207,7 @@ def teach_suppression(owner_id: int, pattern: str, note: str = "") -> dict[str, 
         re.compile(cleaned, re.IGNORECASE)
     except re.error as exc:
         raise ValueError(f"Not a valid regular expression: {exc}") from exc
-    with _lock, _connect() as conn:
+    with _lock, _open() as conn:
         existing = conn.execute(
             "SELECT id FROM suppression_patterns WHERE owner_id = ? AND pattern = ?",
             (owner_id, cleaned),
@@ -208,7 +226,7 @@ def teach_suppression(owner_id: int, pattern: str, note: str = "") -> dict[str, 
 
 def forget_phrase(owner_id: int, learned_id: int) -> bool:
     _init()
-    with _lock, _connect() as conn:
+    with _lock, _open() as conn:
         cursor = conn.execute(
             "DELETE FROM learned_phrases WHERE id = ? AND owner_id = ?", (learned_id, owner_id)
         )
@@ -219,7 +237,7 @@ def forget_phrase(owner_id: int, learned_id: int) -> bool:
 
 def forget_suppression(owner_id: int, suppression_id: int) -> bool:
     _init()
-    with _lock, _connect() as conn:
+    with _lock, _open() as conn:
         cursor = conn.execute(
             "DELETE FROM suppression_patterns WHERE id = ? AND owner_id = ?",
             (suppression_id, owner_id),
@@ -232,7 +250,7 @@ def forget_suppression(owner_id: int, suppression_id: int) -> bool:
 def clear_all(owner_id: int) -> int:
     """Forget everything this clinician taught. Returns the rows removed."""
     _init()
-    with _lock, _connect() as conn:
+    with _lock, _open() as conn:
         a = conn.execute("DELETE FROM learned_phrases WHERE owner_id = ?", (owner_id,)).rowcount
         b = conn.execute("DELETE FROM suppression_patterns WHERE owner_id = ?", (owner_id,)).rowcount
         if a or b:
@@ -246,7 +264,7 @@ def clear_all(owner_id: int) -> int:
 
 def list_vocabulary(owner_id: int) -> dict[str, Any]:
     _init()
-    with _connect() as conn:
+    with _open() as conn:
         phrases = conn.execute(
             "SELECT id, concept, phrase, origin, created_at FROM learned_phrases "
             "WHERE owner_id = ? ORDER BY id DESC",
@@ -271,7 +289,7 @@ def overlay_for(owner_id: int) -> dict[str, Any]:
     (defensive recompile) rather than allowed to break extraction.
     """
     _init()
-    with _connect() as conn:
+    with _open() as conn:
         rows = conn.execute(
             "SELECT concept, phrase FROM learned_phrases WHERE owner_id = ?", (owner_id,)
         ).fetchall()

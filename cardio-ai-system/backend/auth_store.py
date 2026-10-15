@@ -15,6 +15,7 @@ Security model
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import hmac
 import os
@@ -22,7 +23,7 @@ import secrets
 import sqlite3
 import threading
 import time
-from typing import Any
+from typing import Any, Iterator
 
 _DB_PATH = os.environ.get(
     "PULSEIQ_DB",
@@ -84,12 +85,30 @@ def _connect() -> sqlite3.Connection:
     return conn
 
 
+@contextlib.contextmanager
+def _open() -> Iterator[sqlite3.Connection]:
+    """A connection that commits on success and is closed on the way out.
+
+    ``with sqlite3.connect(...) as conn`` only ends the transaction: the handle
+    itself stays open until the garbage collector happens to reach it, so a
+    request-per-call server kept one file handle and one WAL reader alive per
+    call instead of one per call in flight. Every short-lived connection in this
+    module goes through here instead.
+    """
+    conn = _connect()
+    try:
+        with conn:
+            yield conn
+    finally:
+        conn.close()
+
+
 def _init() -> None:
     global _initialised
     if _initialised:
         return
     os.makedirs(os.path.dirname(_DB_PATH), exist_ok=True)
-    with _connect() as conn:
+    with _open() as conn:
         conn.executescript(
             """
             CREATE TABLE IF NOT EXISTS users (
@@ -151,7 +170,9 @@ def _init() -> None:
                 ON consultations(owner_id, id DESC);
             """
         )
-    _migrate(conn)
+        # Inside the block: _migrate uses the same connection, which is now
+        # closed as soon as this function returns.
+        _migrate(conn)
     _initialised = True
 
 
@@ -200,7 +221,7 @@ def create_user(email: str, password: str, name: str = "") -> dict[str, Any]:
     password_hash = _hash_password(password, salt)
     now = time.time()
 
-    with _lock, _connect() as conn:
+    with _lock, _open() as conn:
         try:
             cursor = conn.execute(
                 "INSERT INTO users (email, name, password_hash, salt, created_at) "
@@ -216,7 +237,7 @@ def verify_user(email: str, password: str) -> dict[str, Any] | None:
     """Return the user row when the credentials match, else None."""
     _init()
     email = _normalise_email(email)
-    with _lock, _connect() as conn:
+    with _lock, _open() as conn:
         row = conn.execute(
             "SELECT id, email, name, password_hash, salt FROM users WHERE email = ?", (email,)
         ).fetchone()
@@ -232,7 +253,7 @@ def verify_user(email: str, password: str) -> dict[str, Any] | None:
 
 def get_user_by_id(user_id: int) -> dict[str, Any] | None:
     _init()
-    with _connect() as conn:
+    with _open() as conn:
         row = conn.execute(
             "SELECT id, email, name FROM users WHERE id = ?", (user_id,)
         ).fetchone()
@@ -241,7 +262,7 @@ def get_user_by_id(user_id: int) -> dict[str, Any] | None:
 
 def count_users() -> int:
     _init()
-    with _connect() as conn:
+    with _open() as conn:
         return int(conn.execute("SELECT COUNT(*) FROM users").fetchone()[0])
 
 
@@ -254,7 +275,7 @@ def issue_token(user_id: int) -> str:
     _init()
     token = secrets.token_urlsafe(32)
     now = time.time()
-    with _lock, _connect() as conn:
+    with _lock, _open() as conn:
         conn.execute(
             "INSERT INTO tokens (token_hash, user_id, created_at, expires_at) VALUES (?, ?, ?, ?)",
             (_token_hash(token), user_id, now, now + TOKEN_TTL_SECONDS),
@@ -270,7 +291,7 @@ def resolve_token(token: str) -> dict[str, Any] | None:
     if not token:
         return None
     now = time.time()
-    with _connect() as conn:
+    with _open() as conn:
         row = conn.execute(
             "SELECT u.id, u.email, u.name FROM tokens t "
             "JOIN users u ON u.id = t.user_id "
@@ -282,7 +303,7 @@ def resolve_token(token: str) -> dict[str, Any] | None:
 
 def revoke_token(token: str) -> None:
     _init()
-    with _lock, _connect() as conn:
+    with _lock, _open() as conn:
         conn.execute("DELETE FROM tokens WHERE token_hash = ?", (_token_hash(token),))
 
 
@@ -291,7 +312,7 @@ def list_sessions(user_id: int, current_token: str | None = None) -> list[dict[s
     _init()
     current_hash = _token_hash(current_token) if current_token else None
     now = time.time()
-    with _connect() as conn:
+    with _open() as conn:
         rows = conn.execute(
             "SELECT token_hash, created_at, expires_at FROM tokens "
             "WHERE user_id = ? AND expires_at > ? ORDER BY created_at DESC",
@@ -317,7 +338,7 @@ def list_sessions(user_id: int, current_token: str | None = None) -> list[dict[s
 def revoke_session(user_id: int, session_id: str) -> bool:
     """Revoke one of the clinician's sessions by its public id prefix."""
     _init()
-    with _lock, _connect() as conn:
+    with _lock, _open() as conn:
         rows = conn.execute(
             "SELECT token_hash FROM tokens WHERE user_id = ? AND expires_at > ?",
             (user_id, time.time()),
@@ -333,7 +354,7 @@ def revoke_other_sessions(user_id: int, current_token: str) -> int:
     """Sign out every session except the current one. Returns count revoked."""
     _init()
     current_hash = _token_hash(current_token)
-    with _lock, _connect() as conn:
+    with _lock, _open() as conn:
         cursor = conn.execute(
             "DELETE FROM tokens WHERE user_id = ? AND token_hash != ?",
             (user_id, current_hash),
@@ -347,7 +368,7 @@ def change_password(user_id: int, current_password: str, new_password: str) -> b
     All other sessions are revoked so stolen tokens die with the change.
     """
     _init()
-    with _connect() as conn:
+    with _open() as conn:
         row = conn.execute(
             "SELECT password_hash, salt FROM users WHERE id = ?", (user_id,)
         ).fetchone()
@@ -357,7 +378,7 @@ def change_password(user_id: int, current_password: str, new_password: str) -> b
         raise ValueError("New password must be 8-256 characters.")
     salt = secrets.token_bytes(16).hex()
     new_hash = _hash_password(new_password, salt)
-    with _lock, _connect() as conn:
+    with _lock, _open() as conn:
         conn.execute(
             "UPDATE users SET password_hash = ?, salt = ? WHERE id = ?",
             (new_hash, salt, user_id),
@@ -378,7 +399,7 @@ def add_screening(user_id: int, item: dict[str, Any]) -> dict[str, Any]:
     symptoms = item.get("symptoms") or []
     features = item.get("features") or []
     created_at = item.get("createdAt") or time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime()) + "Z"
-    with _lock, _connect() as conn:
+    with _lock, _open() as conn:
         cursor = conn.execute(
             "INSERT INTO screenings (owner_id, created_at, text, patient_name, probability, risk_level, "
             "prediction, symptoms, features) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
@@ -400,7 +421,7 @@ def add_screening(user_id: int, item: dict[str, Any]) -> dict[str, Any]:
 
 def list_screenings(user_id: int, limit: int = _MAX_HISTORY_ITEMS) -> list[dict[str, Any]]:
     _init()
-    with _connect() as conn:
+    with _open() as conn:
         rows = conn.execute(
             "SELECT id, created_at, text, patient_name, probability, risk_level, prediction, symptoms, features "
             "FROM screenings WHERE owner_id = ? ORDER BY id DESC LIMIT ?",
@@ -426,7 +447,7 @@ def list_screenings(user_id: int, limit: int = _MAX_HISTORY_ITEMS) -> list[dict[
 
 def delete_screening(user_id: int, screening_id: int) -> bool:
     _init()
-    with _lock, _connect() as conn:
+    with _lock, _open() as conn:
         cursor = conn.execute(
             "DELETE FROM screenings WHERE id = ? AND owner_id = ?", (screening_id, user_id)
         )
@@ -435,7 +456,7 @@ def delete_screening(user_id: int, screening_id: int) -> bool:
 
 def clear_screenings(user_id: int) -> None:
     _init()
-    with _lock, _connect() as conn:
+    with _lock, _open() as conn:
         conn.execute("DELETE FROM screenings WHERE owner_id = ?", (user_id,))
 
 
@@ -448,7 +469,7 @@ def record_audit(user_id: int | None, action: str, detail: str = "") -> None:
     try:
         _init()
         created_at = time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime()) + "Z"
-        with _lock, _connect() as conn:
+        with _lock, _open() as conn:
             conn.execute(
                 "INSERT INTO audit_log (user_id, action, detail, created_at) VALUES (?, ?, ?, ?)",
                 (user_id, str(action)[:64], str(detail or "")[:512], created_at),
@@ -460,7 +481,7 @@ def record_audit(user_id: int | None, action: str, detail: str = "") -> None:
 def list_audit(user_id: int, limit: int = 100) -> list[dict[str, Any]]:
     """The clinician's own audit trail, newest first."""
     _init()
-    with _connect() as conn:
+    with _open() as conn:
         rows = conn.execute(
             "SELECT action, detail, created_at FROM audit_log "
             "WHERE user_id = ? ORDER BY id DESC LIMIT ?",
@@ -485,7 +506,7 @@ def upsert_note(user_id: int, patient_name: str, body: str) -> dict[str, Any]:
     patient = _normalise_patient(patient_name)
     body = str(body or "")[:20000]
     updated_at = time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime()) + "Z"
-    with _lock, _connect() as conn:
+    with _lock, _open() as conn:
         conn.execute(
             "INSERT INTO patient_notes (owner_id, patient_name, body, updated_at) "
             "VALUES (?, ?, ?, ?) "
@@ -498,7 +519,7 @@ def upsert_note(user_id: int, patient_name: str, body: str) -> dict[str, Any]:
 
 def list_notes(user_id: int) -> list[dict[str, Any]]:
     _init()
-    with _connect() as conn:
+    with _open() as conn:
         rows = conn.execute(
             "SELECT patient_name, body, updated_at FROM patient_notes "
             "WHERE owner_id = ? ORDER BY updated_at DESC",
@@ -522,7 +543,7 @@ def list_patients(user_id: int) -> list[dict[str, Any]]:
     """
     _init()
     merged: dict[str, dict[str, Any]] = {}
-    with _connect() as conn:
+    with _open() as conn:
         for table, count_key, stamp_col, extra in (
             ("screenings", "screenings", "created_at", "AND patient_name != ''"),
             ("patient_notes", "notes", "updated_at", ""),
@@ -565,7 +586,7 @@ def patient_timeline(user_id: int, patient_name: str) -> dict[str, Any] | None:
     if not canonical_key:
         raise ValueError("Patient name is required.")
 
-    with _connect() as conn:
+    with _open() as conn:
         variants: list[str] = []
         for table in ("screenings", "patient_notes", "consultations"):
             for row in conn.execute(
@@ -661,7 +682,7 @@ def add_consultation(user_id: int, payload: dict[str, Any]) -> dict[str, Any]:
     if not title:
         patient = str(payload.get("patient_name") or "").strip()
         title = f"Consultation — {patient}" if patient else "Consultation"
-    with _lock, _connect() as conn:
+    with _lock, _open() as conn:
         cursor = conn.execute(
             "INSERT INTO consultations (owner_id, created_at, title, patient_name, payload) "
             "VALUES (?, ?, ?, ?, ?)",
@@ -672,7 +693,7 @@ def add_consultation(user_id: int, payload: dict[str, Any]) -> dict[str, Any]:
 
 def list_consultations(user_id: int, limit: int = _MAX_HISTORY_ITEMS) -> list[dict[str, Any]]:
     _init()
-    with _connect() as conn:
+    with _open() as conn:
         rows = conn.execute(
             "SELECT id, created_at, title, patient_name, payload FROM consultations "
             "WHERE owner_id = ? ORDER BY id DESC LIMIT ?",
@@ -695,7 +716,7 @@ def list_consultations(user_id: int, limit: int = _MAX_HISTORY_ITEMS) -> list[di
 
 def delete_consultation(user_id: int, consultation_id: int) -> bool:
     _init()
-    with _lock, _connect() as conn:
+    with _lock, _open() as conn:
         cursor = conn.execute(
             "DELETE FROM consultations WHERE id = ? AND owner_id = ?", (consultation_id, user_id)
         )
@@ -704,7 +725,7 @@ def delete_consultation(user_id: int, consultation_id: int) -> bool:
 
 def clear_consultations(user_id: int) -> None:
     _init()
-    with _lock, _connect() as conn:
+    with _lock, _open() as conn:
         conn.execute("DELETE FROM consultations WHERE owner_id = ?", (user_id,))
 
 
