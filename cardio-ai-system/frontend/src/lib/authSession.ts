@@ -66,10 +66,20 @@ async function fetchWithTimeout(path: string, init: RequestInit, timeoutMs: numb
   return fetch(path, { ...init, signal: AbortSignal.timeout(timeoutMs) });
 }
 
+/** Methods that can be sent twice without the second one doing work again. */
+const RETRYABLE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
+
 /**
  * Fetch with the bearer token attached, a 15s timeout and one automatic retry
  * for transient network failures (backend restart, momentary drop). On 401
  * the local session is cleared so the app returns to the sign-in screen.
+ *
+ * Only reads are retried. A write that failed at the network level may well have
+ * been applied at the other end — the response is what was lost — so retrying it
+ * is how one "Save visit" becomes two consultations in History, and how a
+ * report the local model spent a minute on is generated twice. A caller that
+ * wants a write tried again has to make that decision itself, knowing what the
+ * request was for.
  */
 export async function authFetch(path: string, init: RequestInit & { timeoutMs?: number } = {}): Promise<Response> {
   const { timeoutMs = FETCH_TIMEOUT_MS, ...restInit } = init;
@@ -79,10 +89,12 @@ export async function authFetch(path: string, init: RequestInit & { timeoutMs?: 
   if (restInit.body && !headers.has("Content-Type")) headers.set("Content-Type", "application/json");
 
   const requestInit = { ...restInit, headers };
+  const method = (requestInit.method ?? "GET").toUpperCase();
   let response: Response;
   try {
     response = await fetchWithTimeout(path, requestInit, timeoutMs);
   } catch (firstError) {
+    if (!RETRYABLE_METHODS.has(method)) throw firstError;
     // One retry for network-level failures only (not HTTP errors).
     await new Promise((resolve) => setTimeout(resolve, 400));
     try {

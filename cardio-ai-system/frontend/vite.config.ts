@@ -16,7 +16,12 @@ export default defineConfig({
   // localStorage and the PDF writer measures text through the DOM API.
   test: {
     environment: "jsdom",
+    // An explicit non-opaque origin: without one jsdom refuses storage access, and
+    // the session tests would be exercising a missing `localStorage` instead of
+    // the code that writes to it.
+    environmentOptions: { jsdom: { url: "http://localhost:5173" } },
     include: ["src/**/*.test.ts", "src/**/*.test.tsx"],
+    setupFiles: ["./src/test-setup.ts"],
     restoreMocks: true
   },
   server: {
