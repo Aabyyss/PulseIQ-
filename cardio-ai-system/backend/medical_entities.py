@@ -92,8 +92,17 @@ _WORD_NUMBERS = {
 
 _RISK_FACTORS: list[tuple[str, re.Pattern[str]]] = [
     ("diabetes", re.compile(r"\b(?:diabet(?:es|ic)|sugar\s+(?:problem|high)|type\s*[12]\s*diabet)", re.I)),
-    ("hypertension", re.compile(r"\b(?:hypertension|high\s+(?:blood\s+pressure|bp)|bp\s+(?:high|raised))\b", re.I)),
-    ("smoking", re.compile(r"\b(?:smok(?:e|es|ing|er)|cigarette|bidis?)\b", re.I)),
+    # "hypertension" alone missed the adjective clinicians actually write
+    # ("known hypertensive") and the word orders the same sentence takes
+    # ("bp is high", "blood pressure high"); "cigarette" missed the plural
+    # it is almost always written in ("10 cigarettes a day").
+    ("hypertension", re.compile(
+        r"\b(?:hypertensi(?:on|ve)|"
+        r"(?:high|raised|elevated)\s+(?:blood\s+pressure|bp)|"
+        r"blood\s+pressure\s+(?:is\s+|was\s+)?(?:high|raised|elevated)|"
+        r"bp\s+(?:is\s+|was\s+)?(?:high|raised|elevated))\b", re.I)),
+    ("smoking", re.compile(
+        r"\b(?:smok(?:e|es|ing|er|ers)|cigarettes?|bidis?|tobacco)\b", re.I)),
     ("family history of premature CAD", re.compile(
         r"\b(?:family\s+history|fhx|father(?:'s)?\s+(?:side\s+)?(?:had\s+)?" +
         r"(?:heart\s+attack|mi)|mother(?:'s)?\s+(?:had\s+)?heart\s+attack)\b", re.I)),

@@ -57,6 +57,21 @@ def test_a_denial_does_not_hide_a_later_confirmation():
     assert "diabetes" in extract_risk_factors("No chest pain, but he is diabetic.")
 
 
+def test_the_adjective_plural_and_word_order_are_read():
+    # The ways these facts are written down in a note, none of which the
+    # single-noun patterns matched.
+    assert "hypertension" in extract_risk_factors("Known hypertensive, on amlodipine")
+    assert "hypertension" in extract_risk_factors("Blood pressure high at the clinic")
+    assert "hypertension" in extract_risk_factors("bp is high today")
+    assert "smoking" in extract_risk_factors("10 cigarettes a day for 20 years")
+    assert "smoking" in extract_risk_factors("chews tobacco")
+
+
+def test_negation_still_beats_the_newer_spellings():
+    assert extract_risk_factors("not hypertensive, never smoked, no cigarettes") == []
+    assert "hypertension" not in extract_risk_factors("denies being hypertensive")
+
+
 def test_a_factor_only_ever_denied_stays_absent():
     factors = extract_risk_factors("No diabetes. Denies hypertension. Never smoked, no family history.")
     assert factors == []
