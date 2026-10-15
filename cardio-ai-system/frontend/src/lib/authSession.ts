@@ -45,6 +45,17 @@ export function clearSession() {
   localStorage.removeItem(USER_KEY);
 }
 
+/**
+ * Adopt a token the server issued for the session already on disk — the fresh
+ * one a password change returns while revoking every older token. Callers must
+ * not write the storage key themselves: the key is private to this module, and
+ * a caller that guessed it (`"pulseiq.token"` for `"pulseiq_token"`) left the
+ * app sending a token the server had just revoked.
+ */
+export function replaceToken(token: string) {
+  localStorage.setItem(TOKEN_KEY, token);
+}
+
 async function parseError(response: Response, fallback: string): Promise<string> {
   try {
     const body = (await response.json()) as { detail?: string };
@@ -104,8 +115,11 @@ export async function authFetch(path: string, init: RequestInit & { timeoutMs?: 
     }
   }
 
-  if (response.status === 401 && token) {
-    // Expired/revoked session — sign out locally. Best-effort server revoke skipped.
+  if (response.status === 401 && token && getToken() === token) {
+    // Expired/revoked session — sign out locally. Best-effort server revoke
+    // skipped. Only while the refused token is still the stored one: a request
+    // sent by the previous clinician can be answered after someone else has
+    // signed in, and clearing then would sign the new clinician out.
     clearSession();
   }
   return response;

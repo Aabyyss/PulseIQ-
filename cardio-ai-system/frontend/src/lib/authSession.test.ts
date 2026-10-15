@@ -1,5 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { authFetch, clearSession, getToken, initialsOf, persistSession } from "@/lib/authSession";
+import {
+  authFetch,
+  clearSession,
+  getToken,
+  initialsOf,
+  persistSession,
+  replaceToken
+} from "@/lib/authSession";
 
 /**
  * The session layer is what every authenticated call goes through, and its two
@@ -70,6 +77,38 @@ describe("authFetch", () => {
     await authFetch("/api/history/screenings");
 
     expect(getToken()).toBe("token-123");
+  });
+
+  it("does not clear a session that replaced the one being refused", async () => {
+    // A request sent by the previous clinician can be answered after someone
+    // else has signed in. Clearing there would sign the new clinician out.
+    persistSession("old-token", { id: 1, email: "a@hospital.org", name: "Dr A" });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        persistSession("new-token", { id: 2, email: "b@hospital.org", name: "Dr B" });
+        return new Response("{}", { status: 401 });
+      })
+    );
+
+    await authFetch("/api/history/screenings");
+
+    expect(getToken()).toBe("new-token");
+  });
+
+  it("carries a rotated token on the next request", async () => {
+    // A password change revokes every older token and returns a fresh one; if
+    // the app does not adopt it, every later request is sent with the revoked
+    // token and the clinician is signed out on the next call.
+    persistSession("original-token", { id: 1, email: "doc@cardio.local", name: "Doc" });
+    replaceToken("rotated-token");
+    const fetchMock = vi.fn(async () => new Response("{}", { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await authFetch("/api/auth/sessions");
+
+    const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect((init.headers as Headers).get("Authorization")).toBe("Bearer rotated-token");
   });
 
   it("keeps the token out of a signed-out request", async () => {

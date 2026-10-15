@@ -25,15 +25,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setReady(true);
         return;
       }
+      // This check is in flight while the sign-in form is usable, so its answer
+      // may belong to a session that no longer exists. Everything below is
+      // applied only while the token it verified is still the stored one:
+      // otherwise a reply for the clinician who was signed in before would
+      // re-apply them over whoever just signed in (or signed out).
+      const stillCurrent = () => !cancelled && getToken() === token;
       try {
         const response = await fetch("/api/auth/me", {
           headers: { Authorization: `Bearer ${token}` },
           signal: AbortSignal.timeout(5000)
         });
-        if (cancelled) return;
+        if (!stillCurrent()) return;
         if (response.ok) {
           const body = (await response.json()) as { user: User };
-          if (!cancelled) {
+          if (stillCurrent()) {
             persistSession(token, body.user);
             setUser(body.user);
           }
@@ -43,7 +49,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       } catch {
         // Backend unreachable: keep the cached session so the UI still works
         // for a local-first product; a 401 on any API call will clear it.
-        if (!cancelled) setUser(stored);
+        if (stillCurrent()) setUser(stored);
       }
       if (!cancelled) setReady(true);
     };

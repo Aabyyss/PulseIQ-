@@ -16,7 +16,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { authFetch } from "@/lib/authSession";
+import { authFetch, replaceToken } from "@/lib/authSession";
 import { cn } from "@/lib/utils";
 
 type Session = {
@@ -113,7 +113,7 @@ export function SecurityPage() {
       const payload = (await response.json()) as { token?: string };
       if (payload.token) {
         try {
-          localStorage.setItem("pulseiq.token", payload.token);
+          replaceToken(payload.token);
         } catch {
           /* storage unavailable */
         }
