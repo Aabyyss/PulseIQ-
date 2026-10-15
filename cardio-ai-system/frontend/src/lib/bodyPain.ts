@@ -42,15 +42,24 @@ const CHARACTER_PATTERNS: { label: string; pattern: RegExp }[] = [
 
 const DURATION_PATTERNS: { label: string; pattern: RegExp }[] = [
   { label: "Constant", pattern: /\b(?:constant|continuous|non-stop|continuously|always)\b/ },
-  { label: "Comes and goes", pattern: /\b(?:comes and goes|comes and goes|intermittent|on and off|episodes?|recurring|occasional)\b/ },
-  { label: "Seconds to minutes", pattern: /\b\d+(?:\.\d+)?\s*(?:second|sec|min|minute)s\b|\bfew minutes\b/ },
-  { label: "Hours", pattern: /\b\d+(?:\.\d+)?\s*hours?\b|\bfor hours\b/ },
-  { label: "Days or longer", pattern: /\b\d+(?:\.\d+)?\s*days?\b|\bfor weeks?\b|\bfor months?\b|\bsince (?:yesterday|last)/ },
+  // "comes and goes" was listed twice — the intended second spelling, "come and
+  // go", was the one that was missing, along with the wave phrasing.
+  { label: "Comes and goes", pattern: /\b(?:come[s]? and go(?:es)?|intermittent|on and off|off and on|in waves|episodes?|recurring|occasional)\b/ },
+  { label: "Seconds to minutes", pattern: /\b\d+(?:\.\d+)?\s*(?:second|sec|min|minute)s\b|\bfew minutes\b|\b(?:half|quarter)\s+(?:an?\s+)?(?:minute|hour)\b/ },
+  { label: "Hours", pattern: /\b\d+(?:\.\d+)?\s*hours?\b|\bfor hours\b|\b(?:an?|one|two|three|several)\s+hours?\b/ },
+  { label: "Days or longer", pattern: /\b\d+(?:\.\d+)?\s*days?\b|\b(?:a|one|two|three|several|few)\s+days?\b|\bfor weeks?\b|\bfor months?\b|\bsince (?:yesterday|last)/ },
 ];
 
 const TRIGGER_PATTERNS: { label: string; pattern: RegExp }[] = [
-  { label: "Exertion / climbing stairs", pattern: /\b(?:exertion|exertional|climbing|stairs|walking fast|exercise|running|effort|mehnat)\b/ },
-  { label: "Rest relieves", pattern: /\b(?:relieved by rest|eases? with rest|better with rest|rest (?:helps|relieves)|rest karne se)\b/ },
+  // "worse with walking" and "worse when I walk uphill" are how a patient
+  // describes exertional pain; only "walking fast" used to be recognised, so the
+  // commonest trigger there is was recorded as no trigger at all.
+  { label: "Exertion / climbing stairs", pattern: /\b(?:exertion|exertional|climb(?:ing|s)?|stairs|walk(?:ing|s)?|exercise|running|jogging|effort|mehnat)\b/ },
+  {
+    label: "Worse on exertion",
+    pattern: /\b(?:worse|worsens?|brought on|brought about|triggered|aggravated)\s+(?:with|by|on|during|when)\b/
+  },
+  { label: "Rest relieves", pattern: /\b(?:relieved by rest|eases? with rest|better with rest|rest (?:helps|relieves)|rest karne se|settles? (?:with|on|at) rest|subsides? with rest|goes? away when I (?:rest|sit|lie))\b/ },
   { label: "Breathing triggers", pattern: /\b(?:worse (?:when |while )?breathing|on deep breath|pleuritic|breathing deeply|saans lene par)\b/ },
   { label: "Lying flat", pattern: /\b(?:lying flat|when lying down|flat on (?:my |the )?back|sone par)\b/ },
   { label: "Meals / food", pattern: /\b(?:after (?:meals?|eating|food)|worse (?:after|post) (?:meal|food)|khanay k baad)\b/ },
@@ -61,9 +70,12 @@ const TRIGGER_PATTERNS: { label: string; pattern: RegExp }[] = [
 
 const RADIATION_PATTERNS: { label: string; pattern: RegExp }[] = [
   { label: "Left arm", pattern: /\b(?:left (?:arm|hand)|baen bazu|down (?:the )?left arm)\b/ },
-  { label: "Both arms / shoulders", pattern: /\b(?:both arms|either arm|(?:left|right) shoulder|bayen dayan kandha)\b/ },
+  { label: "Both arms / shoulders", pattern: /\b(?:both arms|either arm|(?:left|right) shoulder|bayen dayan kandha|\b(?:going|goes|went|spreading|spreads|radiating|radiates|referred)\s+to\s+(?:my\s+|the\s+)?shoulders?)\b/ },
   { label: "Jaw / neck", pattern: /\b(?:jaw|throat|gardan|chabba|neck (?:pain|ache|radiation))\b/ },
-  { label: "Back", pattern: /\b(?:between (?:the )?shoulder blades|upper back|mere back|kamar|dorsum)\b/ },
+  {
+    label: "Back",
+    pattern: /\b(?:between (?:the )?shoulder blades|upper back|mere back|kamar|dorsum|(?:going|goes|went|spreading|spreads|radiating|radiates|referred)\s+to\s+(?:my\s+|the\s+)?(?:back|upper back))\b/
+  },
   { label: "Epigastrium / stomach", pattern: /\b(?:epigastr|upper stomach|pet k upper|below (?:the )?breastbone|sternum)\b/ },
 ];
 

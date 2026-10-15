@@ -119,6 +119,24 @@ describe("extractPainCharacteristics", () => {
     expect(painCharacteristicsComplete(characteristics)).toBe(true);
   });
 
+  it("reads the phrasings a patient uses for duration, trigger and radiation", () => {
+    const walking = extractPainCharacteristics("chest pain worse with walking, relieved by rest");
+    expect(walking.triggers).toContain("Worse on exertion");
+    expect(walking.triggers).toContain("Exertion / climbing stairs");
+    expect(walking.triggers).toContain("Rest relieves");
+
+    expect(extractPainCharacteristics("it comes and goes").duration).toContain("Comes and goes");
+    expect(extractPainCharacteristics("they come and go").duration).toContain("Comes and goes");
+    expect(extractPainCharacteristics("lasts for about half an hour").duration).toContain(
+      "Seconds to minutes"
+    );
+
+    expect(extractPainCharacteristics("pain referred to the back").radiation).toContain("Back");
+    expect(extractPainCharacteristics("it went to my shoulder").radiation).toContain(
+      "Both arms / shoulders"
+    );
+  });
+
   it("leaves a class empty rather than inventing one", () => {
     const characteristics = extractPainCharacteristics("my chest hurts");
     expect(characteristics.character).toEqual([]);
