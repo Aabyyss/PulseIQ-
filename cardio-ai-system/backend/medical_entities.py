@@ -149,12 +149,21 @@ def extract_durations(text: str) -> list[str]:
 
 
 def extract_risk_factors(text: str) -> list[str]:
-    """Risk factors present in the text, skipping negated mentions."""
+    """Risk factors present in the text, skipping negated mentions.
+
+    A factor counts as present when *any* mention of it is not negated, because
+    reading only the first mention loses the fact as soon as the negated one
+    comes first: "no diabetes in the family history. He has diabetes since
+    2015" reported no diabetes, and the review then asked about the very
+    condition it had been told about. The negation window is unchanged, so a
+    factor that is only ever denied is still absent.
+    """
     found: list[str] = []
     for name, pattern in _RISK_FACTORS:
-        match = pattern.search(text)
-        if match and not _negated(text, match.start()):
-            found.append(name)
+        for match in pattern.finditer(text):
+            if not _negated(text, match.start()):
+                found.append(name)
+                break
     return found
 
 

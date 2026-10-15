@@ -46,6 +46,22 @@ def test_negated_risk_factors_skipped():
     assert "hypertension" not in factors
 
 
+def test_a_denial_does_not_hide_a_later_confirmation():
+    # Denial first, confirmation second: the encounter states the factor.
+    factors = extract_risk_factors("No diabetes in the family history. He has diabetes since 2015.")
+    assert "diabetes" in factors
+    smoking = extract_risk_factors("Denies smoking. Smokes ten a day since 2019.")
+    assert "smoking" in smoking
+    # Order must not matter either.
+    assert "diabetes" in extract_risk_factors("He is diabetic. No chest pain.")
+    assert "diabetes" in extract_risk_factors("No chest pain, but he is diabetic.")
+
+
+def test_a_factor_only_ever_denied_stays_absent():
+    factors = extract_risk_factors("No diabetes. Denies hypertension. Never smoked, no family history.")
+    assert factors == []
+
+
 def test_entities_all_classes():
     entities = extract_entities(
         "60M, chest pain for 2 days, on metformin 500 mg, diabetic, "
