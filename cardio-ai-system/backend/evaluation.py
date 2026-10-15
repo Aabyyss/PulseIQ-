@@ -70,30 +70,45 @@ def _edit_distance(a: list[str], b: list[str]) -> int:
     return previous[-1]
 
 
+def _token_wer(reference: list[str], hypothesis: list[str]) -> float:
+    """(S+D+I) / N over tokenised words.
+
+    An empty reference is the one case the division cannot answer: nothing was
+    said and nothing was heard is a perfect score, but nothing was said and
+    something was heard is an insertion, not a silence. Both callers use this, so
+    a per-utterance and a corpus number cannot disagree about the same utterance.
+    """
+    if not reference:
+        return 0.0 if not hypothesis else 1.0
+    return _edit_distance(reference, hypothesis) / len(reference)
+
+
 def word_error_rate(reference: str, hypothesis: str) -> float:
     """WER for one pair: (S+D+I) / N over words, case- and punctuation-
     insensitive (standard ASR convention)."""
-    ref = _tokenise(reference)
-    hyp = _tokenise(hypothesis)
-    if not ref:
-        return 0.0 if not hyp else 1.0
-    return _edit_distance(ref, hyp) / len(ref)
+    return _token_wer(_tokenise(reference), _tokenise(hypothesis))
 
 
 def corpus_wer(pairs: Iterable[tuple[str, str]]) -> dict[str, Any]:
     """Aggregate WER over (reference, hypothesis) pairs — corpus WER is
     total errors / total reference words, not the mean of per-utterance
-    WERs (the standard convention)."""
+    WERs (the standard convention).
+
+    The per-utterance numbers reported beside it come from the same rule as
+    :func:`word_error_rate`, so a corpus that contains an empty reference cannot
+    report a perfect utterance in one column and an imperfect one in the other.
+    """
     total_errors = 0
     total_words = 0
     per_utterance: list[float] = []
     n = 0
     for reference, hypothesis in pairs:
         ref = _tokenise(reference)
-        errors = _edit_distance(ref, _tokenise(hypothesis))
+        hyp = _tokenise(hypothesis)
+        errors = _edit_distance(ref, hyp)
         total_errors += errors
         total_words += len(ref)
-        per_utterance.append(errors / len(ref) if ref else 0.0)
+        per_utterance.append(_token_wer(ref, hyp))
         n += 1
     return {
         "utterances": n,

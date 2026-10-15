@@ -38,6 +38,19 @@ def test_wer_empty_reference():
     assert word_error_rate("", "extra words") == 1.0
 
 
+def test_corpus_and_utterance_wer_agree_on_an_empty_reference():
+    # Nothing was said, something was heard: an insertion, not a silence. The two
+    # functions used to disagree here — the corpus column called it a perfect
+    # utterance while word_error_rate called it 1.0.
+    result = corpus_wer([("", "hallucinated words")])
+    assert result["mean_utterance_wer"] == 1.0
+    assert word_error_rate("", "hallucinated words") == 1.0
+    # Nothing said and nothing heard is perfect in both.
+    quiet = corpus_wer([("", "")])
+    assert quiet["mean_utterance_wer"] == 0.0
+    assert word_error_rate("", "") == 0.0
+
+
 def test_corpus_wer_aggregates_errors_not_means():
     result = corpus_wer([
         ("one two three four", "one two three four"),   # 0/4
