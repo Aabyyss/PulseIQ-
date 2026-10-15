@@ -17,7 +17,7 @@ PORT_F := 5173
 
 .DEFAULT_GOAL := help
 .PHONY: help setup install-backend install-frontend train run-backend run-frontend \
-        test test-backend typecheck build ui-audit check docker-up docker-down clean
+        test test-backend test-frontend typecheck build ui-audit check docker-up docker-down clean
 
 help: ## Show available targets
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*?## "}{printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}'
@@ -46,7 +46,10 @@ run-frontend: ## Start Vite dev server on :5173
 test-backend: ## Backend pipeline tests (pytest)
 	$(PY) -m pytest backend -q
 
-test: test-backend typecheck ## Backend tests + frontend typecheck
+test-frontend: ## Frontend unit tests (vitest)
+	cd $(FE) && npm run test
+
+test: test-backend test-frontend typecheck ## Backend tests + frontend tests + typecheck
 
 typecheck: ## TypeScript check (tsc --noEmit)
 	cd $(FE) && npm run typecheck
@@ -57,7 +60,10 @@ build: ## Production frontend build (tsc -b && vite build)
 ui-audit: ## WCAG contrast/layout sweep across routes and viewports
 	cd $(FE) && npm run ui-audit
 
-check: test build ## Full local gate: tests + typecheck + build
+check: test build lint ## Full local gate: tests + typecheck + lint + build
+
+lint: ## ESLint over the frontend
+	cd $(FE) && npm run lint
 
 docker-up: ## Optional parity env: backend in Linux containers (bypasses WDAC blocks)
 	docker compose up --build

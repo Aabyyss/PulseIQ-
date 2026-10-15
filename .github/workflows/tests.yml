@@ -66,7 +66,7 @@ jobs:
           exit $failed
 
   frontend:
-    name: Frontend typecheck & build
+    name: Frontend typecheck, tests & build
     runs-on: ubuntu-24.04
     defaults:
       run:
@@ -85,6 +85,11 @@ jobs:
 
       - name: Typecheck
         run: npx tsc -b
+
+      # Logic no other check reaches: extraction patterns, session/retry
+      # behaviour and PDF layout (vitest, jsdom).
+      - name: Unit tests
+        run: npm run test
 
       - name: Production build
         run: npm run build
