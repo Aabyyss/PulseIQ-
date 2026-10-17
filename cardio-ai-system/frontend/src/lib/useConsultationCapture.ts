@@ -1,5 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { RiskLevel } from "@/components/app/risk-pill";
+import {
+  describeMicError,
+  meterHint,
+  openMicStream,
+  readMicFrame
+} from "@/lib/audioInput";
 import { getToken } from "@/lib/authSession";
 import {
   deriveLocalClinicalGuidance,
@@ -201,6 +207,8 @@ export function useConsultationCapture(getVisitContext?: () => LiveVisitContext)
   const [isListening, setIsListening] = useState(false);
   const [micState, setMicState] = useState<"idle" | "granted" | "denied">("idle");
   const [micLevel, setMicLevel] = useState(0);
+  const [micPeak, setMicPeak] = useState(0);
+  const [micHint, setMicHint] = useState("");
   const [speechActive, setSpeechActive] = useState(false);
   const [connected, setConnected] = useState(false);
   const [awaitingCopilot, setAwaitingCopilot] = useState(false);
@@ -555,32 +563,26 @@ export function useConsultationCapture(getVisitContext?: () => LiveVisitContext)
   }, []);
 
   // ------------------------------------------------------------------
-  // Speech capture — permission preflight + interim results
+  // Speech capture — permission, metering + interim results
   // ------------------------------------------------------------------
-  const preflightMic = useCallback(async (): Promise<boolean> => {
-    if (!navigator.mediaDevices?.getUserMedia) return true; // let the recognizer try
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      stream.getTracks().forEach((track) => track.stop());
-      setMicState("granted");
-      return true;
-    } catch {
-      setMicState("denied");
-      setError(
-        "Microphone blocked. Click the lock (or site settings) icon in the address bar, allow Microphone, then start listening again."
-      );
-      return false;
-    }
-  }, []);
-
-  // Mic level meter: an analyser on a second tap of the mic feeds a RMS
-  // value the UI renders as a bar, so "is it hearing me?" is visible at
-  // a glance. Runs only while listening; torn down on stop.
+  /*
+   * The microphone is opened once. This one stream serves the permission
+   * prompt, the level meter and the "is the input working?" check; it used to
+   * be two — a preflight stream that was closed immediately, then a second for
+   * the analyser — and the browser is free to pick a different device for each
+   * request, so the bar could be metering a microphone the recogniser was not
+   * listening to. It also asks for the processed feed (echo cancellation,
+   * noise suppression, automatic gain), which is what keeps a clinic room's
+   * fan and keyboard out of the transcript.
+   */
   const audioCtxRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
   const meterStreamRef = useRef<MediaStream | null>(null);
   const meterRafRef = useRef<number | null>(null);
   const smoothLevelRef = useRef(0);
+  const hintRef = useRef("");
+  /** When a speech-level frame was last seen, for the "is it hearing me?" hint. */
+  const lastSpeechAtRef = useRef(0);
 
   const stopMeter = useCallback(() => {
     if (meterRafRef.current !== null) {
@@ -595,15 +597,24 @@ export function useConsultationCapture(getVisitContext?: () => LiveVisitContext)
     }
     audioCtxRef.current = null;
     smoothLevelRef.current = 0;
+    hintRef.current = "";
     setMicLevel(0);
+    setMicPeak(0);
+    setMicHint("");
     setSpeechActive(false);
   }, []);
 
-  const startMeter = useCallback(async () => {
-    if (!navigator.mediaDevices?.getUserMedia || !window.AudioContext) return;
+  const startMeter = useCallback(async (): Promise<boolean> => {
+    // Without an analyser the recogniser still opens the mic itself, so a
+    // missing AudioContext is not a reason to refuse to listen.
+    if (!navigator.mediaDevices?.getUserMedia || !window.AudioContext) return true;
     try {
+      const stream = await openMicStream();
+      setMicState("granted");
       const ctx = new AudioContext();
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      // Chrome hands back a suspended context when the page has not been
+      // interacted with yet; without this the analyser reads a flat zero.
+      void ctx.resume();
       const source = ctx.createMediaStreamSource(stream);
       const analyser = ctx.createAnalyser();
       analyser.fftSize = 512;
@@ -612,30 +623,39 @@ export function useConsultationCapture(getVisitContext?: () => LiveVisitContext)
       meterStreamRef.current = stream;
       analyserRef.current = analyser;
 
-      const buffer = new Uint8Array(analyser.frequencyBinCount);
+      const buffer = new Uint8Array(analyser.fftSize);
+      lastSpeechAtRef.current = performance.now();
       const tick = () => {
         const node = analyserRef.current;
         if (!node) return;
         node.getByteTimeDomainData(buffer);
-        let sumSquares = 0;
-        for (let i = 0; i < buffer.length; i++) {
-          const centered = (buffer[i] - 128) / 128;
-          sumSquares += centered * centered;
-        }
-        const rms = Math.sqrt(sumSquares / buffer.length);
+        const frame = readMicFrame(buffer);
         // Attack fast (a word shows immediately), decay slowly (no flicker).
-        const scaled = Math.min(1, rms * 3.2);
         smoothLevelRef.current =
-          scaled > smoothLevelRef.current
-            ? smoothLevelRef.current + (scaled - smoothLevelRef.current) * 0.45
-            : smoothLevelRef.current + (scaled - smoothLevelRef.current) * 0.08;
+          frame.level > smoothLevelRef.current
+            ? smoothLevelRef.current + (frame.level - smoothLevelRef.current) * 0.45
+            : smoothLevelRef.current + (frame.level - smoothLevelRef.current) * 0.08;
         setMicLevel(smoothLevelRef.current);
-        setSpeechActive(smoothLevelRef.current > 0.12);
+        setMicPeak(frame.peak);
+        const speaking = frame.state === "good" || frame.state === "hot";
+        setSpeechActive(speaking);
+        const now = performance.now();
+        if (speaking) lastSpeechAtRef.current = now;
+        // Only re-render when the reading changes class, not on every frame.
+        const hint = meterHint(frame, now - lastSpeechAtRef.current);
+        if (hint !== hintRef.current) {
+          hintRef.current = hint;
+          setMicHint(hint);
+        }
         meterRafRef.current = requestAnimationFrame(tick);
       };
       meterRafRef.current = requestAnimationFrame(tick);
-    } catch {
-      // Meter is cosmetic; the recognizer still works without it.
+      return true;
+    } catch (error) {
+      const { message, denied } = describeMicError(error);
+      if (denied) setMicState("denied");
+      setError(message);
+      return false;
     }
   }, []);
 
@@ -651,10 +671,12 @@ export function useConsultationCapture(getVisitContext?: () => LiveVisitContext)
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SR) return;
 
-    const micOk = await preflightMic();
+    setError("");
+    // Open and meter the microphone first: if it cannot be opened there is no
+    // point starting a recogniser that will fail on its own error path.
+    const micOk = await startMeter();
     if (!micOk) return;
 
-    setError("");
     const recognition = new SR();
     recognition.continuous = true;
     recognition.interimResults = true; // show words as they are spoken
@@ -745,13 +767,13 @@ export function useConsultationCapture(getVisitContext?: () => LiveVisitContext)
       recognition.start();
     } catch {
       setError("Could not start the microphone. Close other apps using it and try again.");
+      stopMeter();
       return;
     }
     recognitionRef.current = recognition;
     keepListeningRef.current = true;
     setIsListening(true);
-    void startMeter();
-  }, [preflightMic, sendLine, clearTranscript, startMeter, speechSupported]);
+  }, [sendLine, clearTranscript, startMeter, stopMeter, speechSupported]);
 
   const stopListening = useCallback(() => {
     if (restartTimerRef.current) {
@@ -837,6 +859,8 @@ export function useConsultationCapture(getVisitContext?: () => LiveVisitContext)
     listeningHint,
     lastVoiceCommand,
     micLevel,
+    micPeak,
+    micHint,
     speechActive,
     lastHeard,
     draft,
