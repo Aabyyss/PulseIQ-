@@ -1206,9 +1206,10 @@ data-dense grid meet); and treating SVG text as a real finding (it would have to
 be suppressed per figure instead, with the same net effect and a permanent
 noise floor).
 
-Consequences: 2072 text elements are sampled across 3 viewports × 9 routes with
-a session, versus 1847 across 9 routes before (9 routes instead of 8, and the
-same routes at a new width); the first signed-in run found 12 AA failures in
+Consequences: 2072 text elements are sampled across 3 viewports × 9 routes on the
+first signed-in run — more than the 1847 the unsigned sweep managed over the same
+routes, and a number that only ever grows as the demo account's History fills (the
+count reached 2591 by the third run of the release); the first signed-in run found 12 AA failures in
 light mode — the selected tab at 2.8:1 and two session-list readings just under
 4.5:1 — all fixed in `light-theme.css` and `SecurityPage.tsx`; the run needs a
 backend behind the base URL to be useful, and states when it does not have one;
