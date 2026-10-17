@@ -19,13 +19,22 @@ gracefully elsewhere, but dictate-mode requires Chrome or Edge.
 
 | Range | Layout |
 |---|---|
-| ≥ 1280 px | Full desktop grid |
-| 900–1279 px | Desktop, condensed panels |
-| < 900 px | Mobile: bottom tab bar, single column, stacked result cards |
+| ≥ 1280 px | Full desktop grid; the dock spreads all nine destinations across the window |
+| 768–1279 px | Desktop, condensed panels; dock items stay labelled |
+| < 768 px | Single column, stacked result cards; the dock scrolls and centres the active item |
 
-Reference viewports used by `scripts/ui-audit.cjs`: desktop 1440×900,
-tablet 768×1024, mobile 390×844. The audit enforces WCAG AA contrast, no
-horizontal overflow, no clipped text, and 40 px minimum tap targets.
+The shell is the same at every width — a header and a bottom dock (ADR-025) —
+so nothing is behind a drawer or a hamburger. Nine items fit a labelled row
+from 768 px up; below that roughly five are visible at a time and a swipe
+reveals the rest.
+
+Reference viewports used by `scripts/ui-audit.cjs`: 375×667, 768×1024,
+1024×768, 1280×720, 1366×768, 1440×900, 1536×864, 1920×1080 and 2560×1440
+(layout), with the contrast pass at 390×844, 1366×768 and 1440×900 — signed in
+with a throwaway account when a backend is reachable (ADR-027). The audit
+enforces WCAG AA contrast, no horizontal overflow, no clipped text, and no tap
+target under 24 px (the controls are designed at 32–44 px; 24 px is the floor
+the check fails on).
 
 ## Hardware constraints
 
