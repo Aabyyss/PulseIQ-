@@ -165,7 +165,7 @@ cardio-ai-system/
 | Backend script checks | CI · every push | The older password-free runners, including the end-to-end pipeline walk (symptom text → mapped features → prediction) — nonzero exit fails the job |
 | Frontend unit tests | CI · every push | `npm run test` (vitest + jsdom): extraction patterns, session and retry behaviour, page metadata, PDF pagination |
 | Frontend typecheck & build | CI · every push | `tsc -b` plus a production Vite build |
-| UI contrast & layout audit | CI · every push | WCAG AA contrast of every text node at 1440/390 px, plus horizontal-overflow, clipped-text and tap-target sweeps of 8 routes × 4 viewports — any violation fails the run |
+| UI contrast & layout audit | CI · every push | WCAG AA contrast of every text node at 390/1366/1440 px, plus horizontal-overflow, clipped-text and tap-target sweeps of 9 routes × 9 widths (375–2560 px, the laptop panels included) — signed in with a throwaway account when a backend is reachable, and any violation fails the run |
 | Lint | local | `npm run lint` — zero errors, zero warnings without a `--max-warnings` guard |
 | E2E journey | local | `npm run e2e` — Playwright walks sign-in → dictation → save → thank-you → history against real servers and fails on any console error or failed API call |
 
