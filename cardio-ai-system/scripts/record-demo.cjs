@@ -8,8 +8,10 @@
  *            thank-you page
  *   take 2 — fresh session: History with the saved visit, a medication review
  *            built from a spoken narrative (allergy block, statin for the
- *            derived lipid, risk scores with the recorded group), then the
- *            guidance / agents / security tour and a dark-mode pass
+ *            derived lipid, risk scores with the recorded group), the
+ *            guidance / agents / security tour, then a walk along the bottom
+ *            dock that lands back on the overview. Light mode throughout:
+ *            the walkthrough is the light theme, not a dark-mode extra.
  *
  * The save is recorded through to the thank-you page; with the built-in
  * rule engine that is quick, with an on-device LLM it can take ~30s of
@@ -258,12 +260,15 @@ async function login(page, noticeDwell) {
   await p2.waitForTimeout(3500);
   console.log(stamp(Date.now() - t0), "security shown");
 
-  // Dark-mode pass: toggle from the header control, then re-show the home.
-  await p2.getByRole("switch", { name: "Switch to dark mode" }).click();
-  await p2.waitForTimeout(2500);
-  await p2.goto(`${BASE}/`, { waitUntil: "domcontentloaded" });
-  await p2.waitForTimeout(4500);
-  console.log(stamp(Date.now() - t0), "dark-mode overview shown");
+  // The dock, on camera: five destinations reached the way a clinician
+  // reaches them, ending on the overview that leads with "Start a
+  // consultation". Stays in light mode — this is the light-theme walkthrough.
+  for (const name of ["Patients", "My notes", "Guidance", "Consultation", "Overview"]) {
+    await p2.getByRole("link", { name, exact: true }).click();
+    await p2.waitForTimeout(1700);
+  }
+  await p2.waitForTimeout(4000); // dwell on the overview and its primary action
+  console.log(stamp(Date.now() - t0), "dock walk finished on the light-mode overview");
 
   await ctx2.close();
   await p2.video().saveAs(path.join(OUT, "raw-take2.webm"));
