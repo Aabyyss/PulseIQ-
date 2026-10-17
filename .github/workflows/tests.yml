@@ -111,11 +111,25 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
+      # The audit signs in, and the app it audits is behind an API — so this
+      # job installs and starts the backend instead of sweeping the login page.
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: cardio-ai-system/requirements.txt
+
       - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
           cache-dependency-path: cardio-ai-system/frontend/package-lock.json
+
+      - name: Install backend dependencies
+        working-directory: cardio-ai-system
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
 
       - name: Install frontend dependencies
         working-directory: cardio-ai-system/frontend
