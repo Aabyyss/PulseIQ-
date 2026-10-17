@@ -1068,3 +1068,93 @@ and any future full-bleed footer has to budget for it; and the active item is
 matched on path prefix, so a future route nested under an existing prefix
 (`/patients/import`) will highlight its parent rather than itself unless it is
 added to the list.
+
+## ADR-026 · One microphone stream, taken processed, and metered in dBFS
+**Status:** Accepted (2026-10-18)
+
+The capture path asked for the microphone twice. `preflightMic()` opened
+`getUserMedia({ audio: true })` purely to see whether permission would be
+granted, then closed the tracks; `startMeter()` opened a second stream for the
+analyser. Two problems followed from that, and only one of them was a leak.
+The browser chooses a device per request, so the stream the meter measured and
+the stream the recogniser captured were not guaranteed to be the same one — a
+clinician whose headset is not the system default could watch a bar move while
+the transcript stayed empty, and the UI would insist it was hearing them. And
+`{ audio: true }` asks for the raw device feed: no echo cancellation (the
+recogniser hears the app's own audio), no noise suppression (a desk fan and a
+keyboard are part of the input), no automatic gain (someone speaking from the
+far side of a bed arrives below the recogniser's floor). Finally the meter was
+`rms * 3.2` clamped to 1 — a scale with no units, which could not distinguish
+"the room is quiet" from "the microphone is muted" from "you are shouting",
+and reported all three as a short bar.
+
+Decision: one stream, requested processed, measured in dBFS, in
+``frontend/src/lib/audioInput.ts`` and ``frontend/src/lib/useConsultationCapture.ts``.
+
+- **One `getUserMedia` call per listening session.** It answers the permission
+  question, feeds the analyser and proves the device works, in that order, and
+  its tracks are stopped when listening stops. The recogniser still opens its
+  own capture — the Web Speech API accepts no stream — but there is no longer a
+  second app-visible request to disagree with it.
+- **Ask for the processed feed.** `echoCancellation`, `noiseSuppression`,
+  `autoGainControl`, `channelCount: 1`. A device that cannot honour the set
+  raises `OverconstrainedError` (a virtual cable, a capture card), and that is
+  retried unconstrained rather than failing the consultation.
+- **The meter reads a frame, not an average.** `readMicFrame()` returns RMS,
+  peak, dBFS and a classification of one analyser frame; the UI draws the
+  smoothed level as a fill and the instantaneous peak as a marker, red near
+  full scale, so a clipped plosive is visible even when the average stays low.
+  The smoothed level still attacks fast and decays slowly — a word has to show
+  immediately, and a bar that flickers at the frame rate is unreadable.
+- **The scale is perceptual and the thresholds are named.** The floor is −55
+  dBFS, speech starts at −38, clipping at −6, and the mapping to 0–1 is pushed
+  through a square root so quiet speech moves the bar instead of pinning it to
+  zero — a meter that only reacts to shouting tells the clinician nothing.
+- **A quiet room is not an error.** The hint ("no speech reaching the
+  microphone yet") appears only after `QUIET_HINT_MS` (8s) with no
+  speech-level frame. Reported on the first low frame it would be on screen for
+  the whole consultation and mean nothing, because the pauses between sentences
+  are the low frames. Clipping is reported immediately — that frame is being
+  corrupted now.
+- **Each failure names its fix.** `describeMicError` separates permission
+  (address-bar instruction), no device, device busy in another app, and the
+  rest, because the three have three different remedies and "microphone error"
+  serves none of them.
+
+Rejected alternatives: keeping the preflight stream (the reason for the split
+was to avoid starting a recogniser that fails on permission, which the single
+stream answers just as well by returning before the recogniser is constructed);
+a voice-activity detector driving auto-stop (silence detection that ends a
+session on a thinking pause is worse than a session left running); recording
+with `MediaRecorder` and transcribing after the visit (loses the per-line
+concept extraction the consultation screen is built around, and needs a
+transcription path the Web Speech API was already providing); a `deviceId`
+picker (a device-selection UI for a problem most machines do not have; the
+system default is right far more often than a list is); printing the dBFS
+number in the UI (a number needs a reference scale to mean anything to a
+clinician, and the hint already says what to do); a fixed gain multiplier to
+"make it louder" (it amplifies the room as much as the voice, and the device's
+automatic gain control does it better); and showing the hint on the first quiet
+frame (see above).
+
+Consequences: `frontend/src/lib/audioInput.ts` holds the constraints, the level
+arithmetic, the frame classifier, the hint rules and the error mapping, with 17
+vitest cases in `audioInput.test.ts` covering the pure half; the analyser now
+reads `fftSize` samples rather than `frequencyBinCount`; the consultation meter
+has a second, peak-driven element and an `aria-valuetext` that includes it; the
+hook exposes `micPeak` and `micHint`; and a denied permission now stops the
+session before a recogniser is constructed, instead of after.
+
+Known limits: the Web Speech API opens its own microphone capture, so the
+constraints and the meter describe *a* working input device and not provably
+the one the recogniser chose — the meter can no longer point at a different
+device than the app requested, but it cannot observe the recogniser's;
+`echoCancellation` and friends are requests, and a device is free to ignore
+them; the dBFS thresholds are conventional rather than calibrated per device,
+so an unusually hot or quiet microphone moves where "quiet" begins; there is no
+input-device picker, so a machine whose default input is the wrong microphone
+still needs the OS setting to be changed; the quiet hint is wall-clock based,
+so a session started and left idle for eight seconds before the first sentence
+shows it while everything is in fact fine; and nothing tests the browser half
+of this, because jsdom has neither `AudioContext` nor `getUserMedia` — the
+constraints and thresholds are covered by unit tests, the wiring only by hand.
