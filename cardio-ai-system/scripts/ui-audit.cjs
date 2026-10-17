@@ -23,6 +23,11 @@
  *   node scripts/ui-audit.cjs                        # build + vite preview
  *   node scripts/ui-audit.cjs --base-url <url>       # audit a running app
  *
+ * The preview server is spawned as `node vite.js preview`, not through `npx`,
+ * so the recorded PID is the process that holds the port: killing the npx
+ * wrapper left the real server listening, and the next run's `--strictPort`
+ * then failed to start — a leak that only showed up on the second run.
+ *
  * Env: PULSEIQ_AUDIT_EMAIL / PULSEIQ_AUDIT_PASSWORD override the demo account
  * (registered on the fly when it does not exist yet). Without a reachable
  * backend the sweep says so and audits the public pages only.
@@ -320,10 +325,13 @@ function waitFor(url, timeoutMs) {
     console.log("Building frontend (tsc -b && vite build)…");
     execSync("npm run build", { cwd: FRONTEND, stdio: "inherit" });
     built = true;
-    server = spawn("npx", ["vite", "preview", "--host", "127.0.0.1", "--port", "4173", "--strictPort"], {
+    // `node vite.js` directly: with `npx … { shell: true }` the PID kept here
+    // belongs to the wrapper, so the cleanup below killed the wrapper and left
+    // the server holding 4173.
+    const viteBin = path.join(FRONTEND, "node_modules", "vite", "bin", "vite.js");
+    server = spawn(process.execPath, [viteBin, "preview", "--host", "127.0.0.1", "--port", "4173", "--strictPort"], {
       cwd: FRONTEND,
       stdio: "ignore",
-      shell: process.platform === "win32",
     });
     await waitFor("http://127.0.0.1:4173/", 30000);
     console.log("vite preview ready on http://127.0.0.1:4173");
