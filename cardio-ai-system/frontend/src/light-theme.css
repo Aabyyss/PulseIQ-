@@ -84,6 +84,9 @@ html:not(.dark) .rule { background-color: #e7e1f2; }
 html:not(.dark) select option { background-color: #f5f2fb; color: #2a2440; }
 
 html:not(.dark) .text-accent { color: #7c3aed; }
+/* Missing before this rule existed: `text-accent-strong` kept the dark palette's
+   mint (#5FE3CE) on white, so anything using it in light mode was unreadable. */
+html:not(.dark) .text-accent-strong { color: #6d28d9; }
 html:not(.dark) .text-accent\/70 { color: rgba(124, 58, 237, 0.75); }
 html:not(.dark) .text-accent\/50 { color: rgba(124, 58, 237, 0.6); }
 html:not(.dark) .bg-accent { background-color: #7c3aed; }
@@ -95,6 +98,19 @@ html:not(.dark) .ring-accent\/70 { --tw-ring-color: rgba(124, 58, 237, 0.45); }
 html:not(.dark) .border-accent\/45 { border-color: rgba(124, 58, 237, 0.45); }
 html:not(.dark) .border-accent\/40 { border-color: rgba(124, 58, 237, 0.4); }
 html:not(.dark) .border-accent\/30 { border-color: rgba(124, 58, 237, 0.3); }
+
+/*
+ * VARIANT UTILITIES — the single-class overrides above cannot reach these.
+ * `data-[state=active]:bg-elev` is a different class token from `.bg-elev`, so
+ * the selected tab kept the dark surface; and because `html:not(.dark)
+ * .text-muted` (specificity 0,2,1) outranks the variant's own `text-fg`
+ * (0,2,0), the same tab also kept muted violet text — #645c85 on #181b21,
+ * 2.8:1, caught by the signed-in contrast sweep.
+ */
+html:not(.dark) .data-\[state\=active\]\:bg-elev[data-state="active"] { background-color: #f5f2fb; }
+html:not(.dark) .data-\[state\=active\]\:text-fg[data-state="active"] { color: #2a2440; }
+html:not(.dark) .hover\:bg-elev:hover { background-color: #f5f2fb; }
+html:not(.dark) .hover\:bg-elev\/60:hover { background-color: rgba(245, 242, 251, 0.6); }
 
 html:not(.dark) .text-danger { color: #dc2626; }
 html:not(.dark) .text-danger-strong { color: #b91c1c; }
