@@ -221,9 +221,11 @@ export function SecurityPage() {
                       )}
                     >
                       <span className="num flex-1 text-xs text-muted">…{session.id}</span>
-                      <span className="text-2xs text-faint">since {formatStamp(session.created_at)}</span>
+                      {/* `text-faint` on the accent-tinted row measured 4.48:1 —
+                          under AA once the tint is composited. `muted` holds 5.6:1. */}
+                      <span className="text-2xs text-muted">since {formatStamp(session.created_at)}</span>
                       {session.current ? (
-                        <span className="rounded border border-accent/40 bg-accent/10 px-1.5 py-px text-2xs font-medium text-accent">
+                        <span className="rounded border border-accent/40 bg-accent/10 px-1.5 py-px text-2xs font-medium text-accent-strong">
                           This device
                         </span>
                       ) : (
