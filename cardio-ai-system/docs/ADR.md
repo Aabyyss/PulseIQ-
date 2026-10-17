@@ -1158,3 +1158,70 @@ so a session started and left idle for eight seconds before the first sentence
 shows it while everything is in fact fine; and nothing tests the browser half
 of this, because jsdom has neither `AudioContext` nor `getUserMedia` — the
 constraints and thresholds are covered by unit tests, the wiring only by hand.
+
+## ADR-027 · The UI audit signs in, and covers the screens a laptop really has
+**Status:** Accepted (2026-10-18)
+
+The audit reported "✓ Contrast: no WCAG AA violations" for months while
+checking nothing. Every route in `ROUTES` is behind `RequireAuth`, the sweep
+never signed in, and an unauthenticated visit to `/consultation` renders the
+sign-in page — so eight routes were the same form, measured eight times. The
+layout pass had the same hole, which is why it never saw the anatomy figures,
+the consultation grid or the medication cards. Two further blind spots:
+`vite preview` (the default way the sweep starts the app) had no `/api` proxy,
+so even a sweep that tried to sign in could not have reached the backend; and
+the viewport ladder stopped at 1440×900, so nothing checked the two panels most
+laptops actually ship (1366×768 and 1536×864), where the shell has the least
+horizontal room to give.
+
+Decision: the sweep authenticates, and the viewport ladder is the real one.
+
+- **Sign in first, in every pass.** `ensureAuditAccount()` logs in as
+  `demo@cardio.local` (or registers it), `signIn()` fills the form and waits for
+  the URL to leave `/login`, and both the contrast and layout pages do it before
+  walking the routes. Overridable with `PULSEIQ_AUDIT_EMAIL` /
+  `PULSEIQ_AUDIT_PASSWORD`.
+- **A missing backend is reported, not hidden.** If the account cannot be
+  reached the run prints "auditing public pages only" and says `(signed out)` in
+  the summary. A sweep that checks the sign-in form is still a useful check —
+  what was wrong was that nothing said so.
+- **The ladder is 9 widths: 375, 768, 1024, 1280, 1366, 1440, 1536, 1920, 2560**
+  for layout, and 390 / 1366 / 1440 for the (slower) contrast pass. 1366×768 is
+  the most common laptop panel in circulation and is now in both.
+- **The clipped-text rule means what it says.** SVG `<text>` is skipped: it is
+  laid out in the drawing's own coordinate system, where `scrollWidth` and
+  `clientWidth` do not describe whether a label overflows, so the body map
+  reported every label at every width. Elements whose computed `text-overflow`
+  is `ellipsis` are skipped too — an ellipsis is the layout telling the reader
+  the text continues, and the check exists for text cut off with no indication.
+
+Rejected alternatives: enabling a preview proxy in the audit script instead of
+the vite config (the dev server already proxied, so the difference was a config
+bug, not an audit setting); generating a token by calling `/api/auth/login`
+directly and injecting it into `localStorage` (faster, but it stops exercising
+the sign-in form the user actually uses, and the form is a route the sweep
+covers); keeping the 1440-only ladder and trusting CSS breakpoints (the failures
+that matter are width-dependent, and 1366 is where a nine-item dock and a
+data-dense grid meet); and treating SVG text as a real finding (it would have to
+be suppressed per figure instead, with the same net effect and a permanent
+noise floor).
+
+Consequences: 2072 text elements are sampled across 3 viewports × 9 routes with
+a session, versus 1847 across 9 routes before (9 routes instead of 8, and the
+same routes at a new width); the first signed-in run found 12 AA failures in
+light mode — the selected tab at 2.8:1 and two session-list readings just under
+4.5:1 — all fixed in `light-theme.css` and `SecurityPage.tsx`; the run needs a
+backend behind the base URL to be useful, and states when it does not have one;
+and `preview.proxy` in `vite.config.ts` now mirrors the dev server so the built
+bundle behaves like the audited app.
+
+Known limits: the audit still runs unauthenticated for `/login`, `/privacy` and
+`/terms`, which have their own layouts; the demo account accumulates whatever
+the sweep and the recording leave behind, so a populated History makes the
+sampled element count drift between runs; the contrast thresholds are static
+(4.5:1 / 3:1) with no per-component exceptions, so a future design that
+intentionally uses low-contrast text has to argue with the check rather than
+configure past it; the layout pass measures a scroll position at the top of each
+route, so anything that renders only below the fold is only checked for
+overflow, not for contrast; and 2560px is audited in CSS pixels, not on a real
+4K panel with OS scaling.
