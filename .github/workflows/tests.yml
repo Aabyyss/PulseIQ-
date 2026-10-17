@@ -135,13 +135,40 @@ jobs:
         working-directory: cardio-ai-system/frontend
         run: npm ci
 
+      # Signed out, every protected route redirects to /login, so the sweep
+      # audits one form nine times over: green, and blind to the workspace.
+      # vite preview forwards /api to :8000 (vite.config.ts), so the API this
+      # job starts is the one the built app talks to. Wait on /health rather
+      # than on the port: uvicorn binds before the pipeline is warm.
+      - name: Start backend
+        working-directory: cardio-ai-system
+        run: |
+          python -m uvicorn backend.api_server:app --host 127.0.0.1 --port 8000 \
+            > backend-audit.log 2>&1 &
+          for attempt in $(seq 1 60); do
+            if curl --fail --silent --max-time 2 http://127.0.0.1:8000/health > /dev/null; then
+              echo "backend answered /health after ${attempt}s"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "::error::backend did not answer /health within 60s"
+          tail -50 backend-audit.log
+          exit 1
+
       # Builds the production bundle, serves it with vite preview, then sweeps
       # every route at multiple viewports: WCAG AA contrast of every text node
       # against its real rendered background, horizontal overflow, clipped
-      # text, and undersized tap targets. Exits nonzero on any violation.
+      # text, and undersized tap targets. It runs from the project root so the
+      # preview it starts serves the same bundle, and --require-sign-in turns an
+      # unreachable backend or a dropped session into a failure instead of a
+      # public-pages pass.
       - name: Run UI audit
-        working-directory: cardio-ai-system/frontend
-        run: node ../scripts/ui-audit.cjs
+        working-directory: cardio-ai-system
+        run: |
+          curl --fail --silent http://127.0.0.1:8000/health > /dev/null \
+            || { echo "::error::backend stopped before the audit"; tail -50 backend-audit.log; exit 1; }
+          node scripts/ui-audit.cjs --require-sign-in
 
       - name: Upload audit report
         if: always()
