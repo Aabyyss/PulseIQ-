@@ -170,10 +170,15 @@ jobs:
             || { echo "::error::backend stopped before the audit"; tail -50 backend-audit.log; exit 1; }
           node scripts/ui-audit.cjs --require-sign-in
 
+      # The report records the sign-in state and every page's landing URL, so a
+      # failure says which route it was. The server log comes along because a
+      # backend that refused to start is the other half of that answer.
       - name: Upload audit report
         if: always()
         uses: actions/upload-artifact@v7
         with:
           name: ui-audit-report
-          path: cardio-ai-system/scripts/ui-audit-report.json
+          path: |
+            cardio-ai-system/scripts/ui-audit-report.json
+            cardio-ai-system/backend-audit.log
           if-no-files-found: ignore
