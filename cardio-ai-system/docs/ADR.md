@@ -996,3 +996,75 @@ population, and everyone outside them is scored on the fallback the score report
 and this is the one field in the workspace that is asked about the person rather
 than the illness — it exists because the instrument is defined per group, and it
 is not used to stratify anything else.
+
+## ADR-025 · One bottom dock as the app's only navigation
+**Status:** Accepted (2026-10-18)
+
+The workspace had two navigations for the same nine destinations: a 248px
+sidebar at `lg` and up, and a bottom tab bar below it. They were written
+separately, they drifted (the sidebar gained the leading primary item and a
+three-group split the tab bar never had), and between them they disagreed about
+what the app *is* — a desktop tool with a phone fallback. The consultation
+screen is used at a desk and at a bedside, and the product is a single React
+app either way. Meanwhile the sidebar's own costs were invisible: 248px of
+horizontal room taken from every data-dense screen for a menu a clinician
+touches twice a visit, and the reachable content width stuck at 1240px on a
+1440px laptop.
+
+Decision: one dock at the bottom of the viewport at every width, in
+``frontend/src/components/app/app-shell.tsx``, carrying all nine destinations.
+It is the app's only navigation.
+
+- **All nine, always visible.** The dock renders the whole `NAV` list — no
+  "more" sheet, no overflow menu, nothing behind a tap. Nine items fit a
+  768px-wide row with a label each; below that the strip scrolls horizontally
+  and the active item is centred with `scrollIntoView({ block: "nearest" })`, so
+  the destination you are on is on screen at any width and a swipe reveals the
+  rest.
+- **Order follows the visit, not the menu.** Overview leads (it is the page
+  that says "start a consultation"), then Consultation, then Medication review,
+  then the records — History, Notes, Patients — and the system pages last. The
+  three sidebar groups are gone: with a single row, a heading that costs a
+  whole band of height buys nothing.
+- **Labels shorten, names do not.** Each item carries a short printed label
+  ("Consult", "Meds", "Guide") and `aria-label` with the full destination, so a
+  screen reader and the E2E/recording scripts still see "Medication review"
+  while the row stays legible at 390px.
+- **The top bar absorbs the sidebar's second job.** Identity, sign-out, the
+  guidance link and the source link were the sidebar's footer; they are now one
+  account menu in the header, available at every width, and the engine-status
+  pill sits beside it. The fixed dock keeps `pb-[env(safe-area-inset-bottom)]`
+  and the site footer carries extra bottom padding so its links never end up
+  under the dock (measured clearance at the foot of a 1366×768 window: 33px).
+- **Content uses the width it just won.** `main` grows to 1320px at `xl` and
+  1440px at `2xl` instead of stopping at 1240px with 248px of permanent menu
+  beside it.
+
+Rejected alternatives: keeping the sidebar at `lg` and the tab bar below it
+(two structures, two behaviours, one of them always wrong for the person using
+it); five tabs plus a "More" sheet (the destinations a clinician reaches for are
+not the same five for every clinician, and hiding four of nine makes the app
+look smaller than it is); icons-only tabs (nine unlabelled glyphs — a stethoscope
+and a pill are guessable, "Guidance" and "Agents" are not); a floating centred
+pill dock that does not span the width (looks like a widget, and at nine items
+it either overflows its own container or shrinks below a 44px target); a
+hamburger drawer (the same menu, now behind a tap, on screens with room to show
+it); and reordering the list to put the consultation first (the overview is
+where a session starts, and it was given the action it lacked instead).
+
+Consequences: the shell renders one navigation component instead of two; the
+sidebar, its group headings and its footer are deleted; `AppShell` no longer
+switches layout at `lg`; the dock prints labels at every width, so the items are
+~136px wide on a desktop and 68px in the scrolling strip on a phone; the
+account menu is a new interactive surface in the header with click-outside and
+Escape handling; and the print stylesheet already hides `nav`, so a printed
+report has no dock in it.
+
+Known limits: on a phone the dock shows roughly five and a half of its nine
+items and the rest are reached by swiping, which is a smaller glance than nine
+visible tabs; the short labels are abbreviations a first-time user has to
+connect to the page titles; the dock is fixed, so every page scrolls behind it
+and any future full-bleed footer has to budget for it; and the active item is
+matched on path prefix, so a future route nested under an existing prefix
+(`/patients/import`) will highlight its parent rather than itself unless it is
+added to the list.
