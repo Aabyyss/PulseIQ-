@@ -3,6 +3,20 @@ import path from "node:path";
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 
+/** Dev server and preview both forward to the FastAPI backend on :8000. */
+const API_PROXY = {
+  "/api": {
+    target: "http://localhost:8000",
+    changeOrigin: true,
+    rewrite: (incomingPath: string) => incomingPath.replace(/^\/api/, "")
+  },
+  "/ws": {
+    target: "ws://localhost:8000",
+    ws: true,
+    changeOrigin: true
+  }
+};
+
 export default defineConfig({
   plugins: [react()],
   resolve: {
@@ -25,17 +39,13 @@ export default defineConfig({
     restoreMocks: true
   },
   server: {
-    proxy: {
-      "/api": {
-        target: "http://localhost:8000",
-        changeOrigin: true,
-        rewrite: (incomingPath) => incomingPath.replace(/^\/api/, "")
-      },
-      "/ws": {
-        target: "ws://localhost:8000",
-        ws: true,
-        changeOrigin: true
-      }
-    }
+    proxy: API_PROXY
+  },
+  // `vite preview` serves the built bundle, which the UI audit drives. Without
+  // the proxy here, `/api` 404s against the preview server and every audited
+  // route renders the sign-in page — so the sweep passed while checking the
+  // one screen no signed-in clinician sees.
+  preview: {
+    proxy: API_PROXY
   }
 });
