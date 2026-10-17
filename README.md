@@ -152,7 +152,7 @@ cardio-ai-system/
 ├── frontend/    React application (vitest for the non-React logic)
 ├── models/      trained model and metadata
 ├── data/        dataset
-├── docs/        design notes (ADR, API spec, data flow, security) · screenshots · walkthrough video
+├── docs/        design notes (ADR, API spec, data flow, security, CI) · screenshots · walkthrough video
 ├── scripts/     demo recording + video encode, screenshot capture, E2E journey, UI audit
 └── setup.ps1 · run-*.ps1 · Start-PulseIQ.cmd
 ```
@@ -183,6 +183,12 @@ cd frontend && npm ci && npm run typecheck && npm run test && npm run lint && np
 
 `npm run e2e` and `npm run ui-audit` (both need the servers up) cover the full journey and the
 UI gates; `make check` chains the tests, typecheck, lint and build.
+
+CI runs the same three jobs on `ubuntu-24.04` ([docs/CI.md](cardio-ai-system/docs/CI.md)). The
+`ui-audit` job is the one worth knowing about: it installs the runtime requirements, starts the
+API on the port the built app forwards `/api` to, waits for `/health`, and then sweeps the app
+**signed in**, failing if any route renders the sign-in page instead of itself. It uploads the
+report and the server log either way, so a red audit can be diagnosed from its artifacts.
 
 ## ⚠️ Scope
 
