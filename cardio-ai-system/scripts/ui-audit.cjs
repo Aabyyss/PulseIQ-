@@ -489,11 +489,15 @@ function waitFor(url, timeoutMs) {
     // A redirect seen while signed in means the session died mid-sweep; a
     // redirect seen while signed out is the documented public-pages fallback.
     if (redirects.length) {
-      console.log(`\n! Landing: ${redirects.length} page loads did not reach the route asked for`);
+      console.log(`\n${signedIn ? "✗" : "!"} Landing: ${redirects.length} page loads did not reach the route asked for`);
       for (const r of redirects.slice(0, 5)) {
         console.log(`  [${r.viewport} ${r.route}] ${r.expected} → ${r.landed}`);
       }
       if (redirects.length > 5) console.log(`  … and ${redirects.length - 5} more (see ${REPORT})`);
+      // Signed in, a redirect means the session died under the sweep; in CI the
+      // flag means the sweep was never signed in to begin with. Either way a
+      // pass here would be a claim about pages nobody looked at.
+      if (signedIn || requireSignIn) failed = true;
     } else if (signedIn) {
       console.log("✓ Landing: every route rendered itself");
     }
