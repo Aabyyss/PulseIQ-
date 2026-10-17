@@ -22,6 +22,12 @@
  * Usage:
  *   node scripts/ui-audit.cjs                        # build + vite preview
  *   node scripts/ui-audit.cjs --base-url <url>       # audit a running app
+ *   node scripts/ui-audit.cjs --require-sign-in      # fail instead of degrading
+ *
+ * --require-sign-in is what CI uses. Without it, an unreachable backend makes
+ * the sweep fall back to the public pages and still exit 0 — honest, but a
+ * green build that never looked at the workspace. With it, a backend that is
+ * missing, unreachable, or drops the session mid-sweep fails the job.
  *
  * The preview server is spawned as `node vite.js preview`, not through `npx`,
  * so the recorded PID is the process that holds the port: killing the npx
@@ -257,7 +263,12 @@ function layoutAuditScript() {
 function parseArgs() {
   const args = process.argv.slice(2);
   const i = args.indexOf("--base-url");
-  return i >= 0 ? { baseUrl: args[i + 1] } : { baseUrl: null };
+  return {
+    baseUrl: i >= 0 ? args[i + 1] : null,
+    // CI turns the signed-out fallback into a failure: the fallback is only
+    // useful on a laptop where no backend is running.
+    requireSignIn: args.includes("--require-sign-in") || process.env.PULSEIQ_AUDIT_REQUIRE_SIGN_IN === "1",
+  };
 }
 
 /**
@@ -317,7 +328,7 @@ function waitFor(url, timeoutMs) {
 }
 
 (async () => {
-  const { baseUrl } = parseArgs();
+  const { baseUrl, requireSignIn } = parseArgs();
   let server = null;
   let built = false;
 
@@ -337,12 +348,21 @@ function waitFor(url, timeoutMs) {
     console.log("vite preview ready on http://127.0.0.1:4173");
   }
   const base = baseUrl || "http://127.0.0.1:4173";
-  const signedIn = await ensureAuditAccount(base);
-  if (!signedIn) {
-    console.log("! No backend behind this URL — auditing public pages only.");
-  }
 
   try {
+    const signedIn = await ensureAuditAccount(base);
+    if (!signedIn) {
+      if (requireSignIn) {
+        // Thrown, not process.exit'd, so the `finally` below still stops the
+        // preview server this run started.
+        throw new Error(
+          `Sign-in required but no backend answered at ${base}/api/auth/login. ` +
+            "Start the API (port 8000) or drop --require-sign-in to audit the public pages."
+        );
+      }
+      console.log("! No backend behind this URL — auditing public pages only.");
+    }
+
     const browser = await chromium.launch({
       executablePath: findChrome(),
       headless: true,
@@ -352,10 +372,19 @@ function waitFor(url, timeoutMs) {
     const violations = [];
     let sampledTotal = 0;
 
+    const assertSession = (page, viewport, pass) => {
+      if (!requireSignIn) return;
+      const landed = new URL(page.url()).pathname;
+      if (landed.startsWith("/login")) {
+        throw new Error(`${pass} pass at ${viewport}px: session lost (landed on ${landed}).`);
+      }
+    };
+
     for (const vp of CONTRAST_VIEWPORTS) {
       const page = await browser.newPage({ viewport: { width: vp.width, height: vp.height } });
       await page.emulateMedia({ reducedMotion: "reduce" });
       await signIn(page, base, signedIn);
+      assertSession(page, vp.name, "contrast");
       for (const route of ROUTES) {
         await page.goto(base + route.path, { waitUntil: "networkidle", timeout: 30000 }).catch(() => {});
         // Freeze animations/transitions so entrance states are audited at final values
@@ -376,6 +405,7 @@ function waitFor(url, timeoutMs) {
     for (const vp of LAYOUT_VIEWPORTS) {
       const page = await browser.newPage({ viewport: { width: vp.width, height: vp.height } });
       await signIn(page, base, signedIn);
+      assertSession(page, vp.name, "layout");
       for (const route of ROUTES) {
         await page.goto(base + route.path, { waitUntil: "networkidle", timeout: 30000 }).catch(() => {});
         const issues = await page.evaluate(`(${layoutAuditScript})()`);
@@ -388,7 +418,17 @@ function waitFor(url, timeoutMs) {
 
     fs.writeFileSync(
       REPORT,
-      JSON.stringify({ generatedAt: new Date().toISOString(), base, sampledTotal, violations, layoutIssues }, null, 2)
+      JSON.stringify(
+        {
+          generatedAt: new Date().toISOString(),
+          base,
+          sampledTotal,
+          violations,
+          layoutIssues,
+        },
+        null,
+        2
+      )
     );
 
     console.log(
@@ -421,6 +461,7 @@ function waitFor(url, timeoutMs) {
     } else {
       console.log("✓ Layout: no overflow, clipping, or undersized targets");
     }
+
 
     process.exit(failed ? 1 : 0);
   } finally {
