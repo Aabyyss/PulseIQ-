@@ -34,7 +34,12 @@ Reference viewports used by `scripts/ui-audit.cjs`: 375×667, 768×1024,
 with a throwaway account when a backend is reachable (ADR-027). The audit
 enforces WCAG AA contrast, no horizontal overflow, no clipped text, and no tap
 target under 24 px (the controls are designed at 32–44 px; 24 px is the floor
-the check fails on).
+the check fails on). It also records where each page landed and fails when a
+route renders the sign-in page instead of itself, so a sweep can no longer pass
+by measuring `/login` nine times under nine names. CI runs it with
+`--require-sign-in`, which additionally fails when no backend answers at all
+(ADR-028); locally, without that flag, an unreachable backend still means the
+public pages are audited and the summary says `(signed out)`.
 
 ## Hardware constraints
 
@@ -83,6 +88,14 @@ Low p=0.033 for unrelated complaint; `/health` → `ai_provider: "ollama"
 
 ## CI environment (reference)
 
-Ubuntu runners: Python 3.12 + Node 20; full suite (backend tests,
-typecheck, build, UI audit) is expected green there — the DLL policy above
-is Windows-specific and does not affect CI.
+Ubuntu runners, pinned to `ubuntu-24.04`: Python 3.12 + Node 22; the full suite
+(backend tests, typecheck, unit tests, build, UI audit) is expected green there —
+the DLL policy above is Windows-specific and does not affect CI.
+
+Three jobs, and the third one is not just a browser check: `backend` runs the
+pytest suite and the script checks, `frontend` typechecks, unit-tests and
+builds, and `ui-audit` installs the runtime requirements, starts the API on
+`:8000` (the port `vite preview` forwards `/api` to), waits for `/health`, and
+only then runs the sweep signed in (ADR-028). It is bounded at 25 minutes and
+uploads `ui-audit-report.json` plus the server log on failure as well as
+success. Reproduction steps for all three are in [CI.md](CI.md).
