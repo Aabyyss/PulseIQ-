@@ -1226,3 +1226,72 @@ configure past it; the layout pass measures a scroll position at the top of each
 route, so anything that renders only below the fold is only checked for
 overflow, not for contrast; and 2560px is audited in CSS pixels, not on a real
 4K panel with OS scaling.
+
+## ADR-028 · CI runs the audit against a real backend, and fails when a page redirects
+**Status:** Accepted (2026-10-18)
+
+ADR-027 made the sweep sign in. The job that runs it did not. `ui-audit` in
+`.github/workflows/tests.yml` installed Node and nothing else: no Python, no API
+on the port `preview.proxy` forwards to. `ensureAuditAccount()` therefore could
+not reach `/api/auth/login`, the run printed "auditing public pages only", and
+the job exited 0. The gate added to close the signed-out blind spot had the same
+blind spot — green because the backend was missing, not because the workspace
+was clean.
+
+Decision: the audit job provisions the app it audits, and the sweep fails when a
+page does not render itself.
+
+- **The job installs and starts the API.** `setup-python@v6` + `pip install -r
+  requirements.txt`, then `uvicorn` on `127.0.0.1:8000` — the target
+  `preview.proxy` already forwards `/api` to — with its output in
+  `backend-audit.log`.
+- **Readiness is `/health`, not an open port.** `uvicorn` binds before the
+  pipeline is warm, so the step polls `/health` for up to 60s and fails with the
+  server log (`tail -50`) when it never answers. The audit step re-checks
+  `/health` before building, because a backend that died between the steps is a
+  different failure from a layout one.
+- **`--require-sign-in` is what CI passes.** Without the flag an unreachable
+  backend is a documented fallback for laptops; with it, that state is non-zero.
+  A session dropped mid-sweep fails too — the sweep checks the URL it is on
+  after signing in, at every viewport, in both passes.
+- **Every page load is compared with the route requested.** The mismatch is
+  recorded per viewport and pass, printed as `✗ Landing: … → /login`, and sets
+  the failure flag. Recording alone was not enough: the run could still report
+  "✓ Contrast: no WCAG AA violations" for nine pages it never rendered.
+- **The artifact explains the failure.** `ui-audit-report.json` gained
+  `signedIn`, `requireSignIn`, and `redirects`; the backend log is uploaded
+  beside it under the same artifact name.
+- **The job is bounded** at `timeout-minutes: 25`. It now installs a Python
+  stack, builds the bundle, starts a server and walks 108 page loads; a wedged
+  sweep should not burn the six-hour default.
+
+Rejected alternatives: leaving CI on the signed-out fallback (that is the
+failure this ADR exists to remove, and the fallback prints a notice nobody
+reads in a green build); having `ui-audit.cjs` start the backend itself (it
+hides the dependency from the job graph, and puts server lifecycle management
+inside a browser sweep that already owns a preview server); minting a token by
+POSTing to `/api/auth/login` and seeding `localStorage` (skips the sign-in form
+the sweep covers, and adds a second place that knows the audit credentials);
+stubbing `/api` (most audited screens are data-driven, so a stub would audit a
+fiction and the contrast findings would describe markup no user sees); sharing
+build or dependency caches across jobs (no filesystem between them, and a cache
+that stale-hides a dependency bug is worse than the minutes it saves).
+
+Consequences: the job now pays for the runtime requirements (pandas, scikit-learn
+and shap) on every push; CI starts from an empty database, so the sweep registers
+`demo@cardio.local` through the public `/auth/register` endpoint on each run —
+which also means the green path exercises registration, not just login; a red
+audit can be diagnosed from the artifacts alone, since the report and the server
+log travel together; the local default path is unchanged, so a developer without
+a backend still gets the public-pages sweep and is told so; and the count of
+audited routes is now the count of *rendered* routes, so the summary's element
+total stopped being inflated by eight copies of the sign-in page.
+
+Known limits: CI audits layout and contrast, not clinical output — the backend
+runs provider-agnostic, and anything that would call Ollama falls back to the
+rule-based path (what the pages *render* from that is real, what they *infer* is
+not being checked); the 25-minute ceiling is a bound chosen before the first
+green CI run and should be revisited against a real duration; the sweep still
+needs a Chromium binary, which the runner provides and a developer must point
+`EDGE_PATH` at; and none of this touches the microphone, which no CI job
+exercises (ADR-026).
