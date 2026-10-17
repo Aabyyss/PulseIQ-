@@ -9,13 +9,23 @@
  *    body text, 3:1 for large text (24px+, or 19px+ bold). CSS animations
  *    are disabled first so entrance transitions are audited at final state.
  *
- * 2. Layout: per route at 375 / 768 / 1280 / 1440 px — horizontal page
- *    overflow, clipped text (scrollWidth > clientWidth), and tap targets
- *    under 24px.
+ * 2. Layout: per route at phone, tablet, laptop and desktop widths (375 through
+ *    2560 px) — horizontal page overflow, clipped text (scrollWidth >
+ *    clientWidth), and tap targets under 24px. The desktop sizes are the ones
+ *    a real machine reports (1366x768 and 1536x864 are the most common laptop
+ *    panels), because a layout that only holds at 1440 is not responsive.
+ *
+ * Both passes sign in first. They used to run signed out, which meant every
+ * protected route quietly redirected to /login and the sweep audited the same
+ * form eight times — green, and blind to the workspace.
  *
  * Usage:
  *   node scripts/ui-audit.cjs                        # build + vite preview
  *   node scripts/ui-audit.cjs --base-url <url>       # audit a running app
+ *
+ * Env: PULSEIQ_AUDIT_EMAIL / PULSEIQ_AUDIT_PASSWORD override the demo account
+ * (registered on the fly when it does not exist yet). Without a reachable
+ * backend the sweep says so and audits the public pages only.
  *
  * Exits 1 with a summary table when any violation is found.
  */
@@ -45,6 +55,7 @@ const CHROME_CANDIDATES = [
 const ROUTES = [
   { path: "/", name: "home" },
   { path: "/consultation", name: "consultation" },
+  { path: "/medications", name: "medications" },
   { path: "/history", name: "history" },
   { path: "/notes", name: "notes" },
   { path: "/patients", name: "patients" },
@@ -55,15 +66,24 @@ const ROUTES = [
 
 const CONTRAST_VIEWPORTS = [
   { width: 1440, height: 900, name: "1440" },
+  { width: 1366, height: 768, name: "1366" },
   { width: 390, height: 844, name: "390" },
 ];
 
 const LAYOUT_VIEWPORTS = [
   { width: 375, height: 667, name: "375" },
   { width: 768, height: 1024, name: "768" },
-  { width: 1280, height: 800, name: "1280" },
+  { width: 1024, height: 768, name: "1024" },
+  { width: 1280, height: 720, name: "1280" },
+  { width: 1366, height: 768, name: "1366" },
   { width: 1440, height: 900, name: "1440" },
+  { width: 1536, height: 864, name: "1536" },
+  { width: 1920, height: 1080, name: "1920" },
+  { width: 2560, height: 1440, name: "2560" },
 ];
+
+const AUDIT_EMAIL = process.env.PULSEIQ_AUDIT_EMAIL || "demo@cardio.local";
+const AUDIT_PASSWORD = process.env.PULSEIQ_AUDIT_PASSWORD || "DemoPass123";
 
 function findChrome() {
   for (const p of CHROME_CANDIDATES) if (fs.existsSync(p)) return p;
@@ -203,6 +223,13 @@ function layoutAuditScript() {
     if (cs.display === "none" || cs.visibility === "hidden") continue;
     const rect = el.getBoundingClientRect();
     if (rect.width === 0 || rect.height === 0) continue;
+    // SVG text is laid out by its own coordinate system; scrollWidth/clientWidth
+    // do not describe whether a label overflows its drawing, so the anatomy
+    // figures reported every label as clipped at every width.
+    if (el.namespaceURI === "http://www.w3.org/2000/svg" || el.closest("svg")) continue;
+    // An ellipsis is the layout telling the reader the text continues; the
+    // check is for text cut off with no indication at all.
+    if (cs.textOverflow === "ellipsis") continue;
     const hasDirectText = [...el.childNodes].some(
       (n) => n.nodeType === 3 && n.textContent.trim().length > 0
     );
@@ -226,6 +253,47 @@ function parseArgs() {
   const args = process.argv.slice(2);
   const i = args.indexOf("--base-url");
   return i >= 0 ? { baseUrl: args[i + 1] } : { baseUrl: null };
+}
+
+/**
+ * Make sure the audit account exists, so the sweep can see the workspace.
+ * Returns false when no backend answers — the caller then audits the public
+ * pages and says so, rather than reporting the sign-in form as a clean app.
+ */
+async function ensureAuditAccount(base) {
+  const post = (route, body) =>
+    fetch(`${base}/api${route}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+  try {
+    const login = await post("/auth/login", { email: AUDIT_EMAIL, password: AUDIT_PASSWORD });
+    if (login.ok) return true;
+    const register = await post("/auth/register", {
+      email: AUDIT_EMAIL,
+      password: AUDIT_PASSWORD,
+      name: "Audit User",
+    });
+    return register.ok;
+  } catch {
+    return false;
+  }
+}
+
+/** Sign the page in once; the session then persists for every route in it. */
+async function signIn(page, base, signedIn) {
+  if (!signedIn) return false;
+  await page.goto(`${base}/login`, { waitUntil: "domcontentloaded", timeout: 30000 }).catch(() => {});
+  const notice = page.getByRole("button", { name: "Got it" });
+  if (await notice.isVisible().catch(() => false)) await notice.click();
+  await page.locator('input[type="email"]').fill(AUDIT_EMAIL).catch(() => {});
+  await page.locator('input[type="password"]').fill(AUDIT_PASSWORD).catch(() => {});
+  await page.getByRole("button", { name: "Sign in", exact: true }).click().catch(() => {});
+  await page
+    .waitForURL((url) => !new URL(url).pathname.startsWith("/login"), { timeout: 15000 })
+    .catch(() => {});
+  return !new URL(page.url()).pathname.startsWith("/login");
 }
 
 function waitFor(url, timeoutMs) {
@@ -261,6 +329,10 @@ function waitFor(url, timeoutMs) {
     console.log("vite preview ready on http://127.0.0.1:4173");
   }
   const base = baseUrl || "http://127.0.0.1:4173";
+  const signedIn = await ensureAuditAccount(base);
+  if (!signedIn) {
+    console.log("! No backend behind this URL — auditing public pages only.");
+  }
 
   try {
     const browser = await chromium.launch({
@@ -275,6 +347,7 @@ function waitFor(url, timeoutMs) {
     for (const vp of CONTRAST_VIEWPORTS) {
       const page = await browser.newPage({ viewport: { width: vp.width, height: vp.height } });
       await page.emulateMedia({ reducedMotion: "reduce" });
+      await signIn(page, base, signedIn);
       for (const route of ROUTES) {
         await page.goto(base + route.path, { waitUntil: "networkidle", timeout: 30000 }).catch(() => {});
         // Freeze animations/transitions so entrance states are audited at final values
@@ -294,6 +367,7 @@ function waitFor(url, timeoutMs) {
     const layoutIssues = [];
     for (const vp of LAYOUT_VIEWPORTS) {
       const page = await browser.newPage({ viewport: { width: vp.width, height: vp.height } });
+      await signIn(page, base, signedIn);
       for (const route of ROUTES) {
         await page.goto(base + route.path, { waitUntil: "networkidle", timeout: 30000 }).catch(() => {});
         const issues = await page.evaluate(`(${layoutAuditScript})()`);
@@ -309,8 +383,14 @@ function waitFor(url, timeoutMs) {
       JSON.stringify({ generatedAt: new Date().toISOString(), base, sampledTotal, violations, layoutIssues }, null, 2)
     );
 
-    console.log(`\nContrast: ${sampledTotal} text elements sampled across ${CONTRAST_VIEWPORTS.length} viewports × ${ROUTES.length} routes`);
-    console.log(`Layout:   ${LAYOUT_VIEWPORTS.length} viewports × ${ROUTES.length} routes checked\n`);
+    console.log(
+      `\nContrast: ${sampledTotal} text elements sampled across ${CONTRAST_VIEWPORTS.length} viewports × ${ROUTES.length} routes`
+    );
+    console.log(
+      `Layout:   ${LAYOUT_VIEWPORTS.length} viewports × ${ROUTES.length} routes checked` +
+        (signedIn ? " (signed in)" : " (signed out)") +
+        "\n"
+    );
 
     let failed = false;
     if (violations.length) {
