@@ -154,6 +154,8 @@ export function ConsultationPage() {
     interimText,
     listeningHint,
     micLevel,
+    micPeak,
+    micHint,
     speechActive,
     lastHeard,
     draft,
@@ -577,13 +579,18 @@ export function ConsultationPage() {
               <Radio className="h-3 w-3 animate-pulse-soft" strokeWidth={2} />
               {speechActive ? "Hearing you — keep going" : "Capturing audio — speak naturally"}
             </p>
+            {/* Two readings on one track: the fill is the smoothed level the
+                recogniser is working with, the hairline after it is the peak
+                of the current frame, so a clipped plosive is visible even
+                when the average stays low. */}
             <div
-              className="h-1.5 w-full overflow-hidden rounded-full border border-line bg-inset"
+              className="relative h-1.5 w-full overflow-hidden rounded-full border border-line bg-inset"
               role="meter"
               aria-label="Microphone level"
               aria-valuemin={0}
               aria-valuemax={100}
               aria-valuenow={Math.round(micLevel * 100)}
+              aria-valuetext={`${Math.round(micLevel * 100)} percent, peak ${Math.round(micPeak * 100)} percent`}
             >
               <div
                 className={cn(
@@ -592,7 +599,18 @@ export function ConsultationPage() {
                 )}
                 style={{ width: `${Math.max(2, Math.round(micLevel * 100))}%` }}
               />
+              <span
+                aria-hidden="true"
+                className={cn(
+                  "absolute inset-y-0 w-px transition-[left] duration-75",
+                  micPeak >= 0.92 ? "bg-danger" : "bg-fg/40"
+                )}
+                style={{ left: `${Math.round(micPeak * 100)}%` }}
+              />
             </div>
+            {micHint ? (
+              <p className="text-2xs leading-relaxed text-warn-strong">{micHint}</p>
+            ) : null}
           </>
         ) : null}
 
