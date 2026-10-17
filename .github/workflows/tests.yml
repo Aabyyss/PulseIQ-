@@ -108,6 +108,10 @@ jobs:
   ui-audit:
     name: UI contrast & layout audit
     runs-on: ubuntu-24.04
+    # This job now installs the backend, builds the bundle, starts a server and
+    # walks 108 page loads. Bounded so a wedged sweep or a server that never
+    # binds burns 25 minutes instead of the six-hour default.
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v5
 
