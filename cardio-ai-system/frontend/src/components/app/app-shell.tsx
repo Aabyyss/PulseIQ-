@@ -1,9 +1,11 @@
+import { useEffect, useRef, useState } from "react";
 import {
   Activity,
   BookOpen,
   Bot,
   History,
   LayoutGrid,
+  LogOut,
   NotebookPen,
   Pill,
   ShieldCheck,
@@ -12,7 +14,6 @@ import {
   type LucideIcon
 } from "lucide-react";
 import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
-import { EcgTrace } from "@/components/app/ecg-trace";
 import { LogoMark, Wordmark } from "@/components/app/logo";
 import { ThemeToggle } from "@/components/app/theme-toggle";
 import { useAuth } from "@/lib/authContext";
@@ -24,54 +25,67 @@ import { cn } from "@/lib/utils";
 interface NavItem {
   to: string;
   label: string;
+  /** Tighter label for the dock, where nine destinations share one row. */
   short: string;
   icon: LucideIcon;
-  group: string;
   end?: boolean;
   /**
-   * The workspace's main action, drawn larger and bolder than the rest so the
-   * sidebar leads with what a clinician opens the app to do, rather than with
-   * the overview page they are already looking at.
+   * The workspace's main action. Drawn a shade bolder than its neighbours so
+   * the dock still reads as "open this to work" rather than as a flat menu —
+   * but it sits second, because the overview is where a session starts.
    */
   primary?: boolean;
 }
 
+/**
+ * One destination list for every screen size. The dock is the app's only
+ * navigation: the overview leads (it is the page that says "start a
+ * consultation"), and the rest follow in the order a visit moves through
+ * them — consult, then review medications, then the records behind them.
+ */
 const NAV: NavItem[] = [
-  { to: "/consultation", label: "Consultation", short: "Consult", icon: Stethoscope, group: "Workspace", primary: true },
-  { to: "/", label: "Overview", short: "Overview", icon: LayoutGrid, group: "Workspace", end: true },
-  { to: "/medications", label: "Medication review", short: "Meds", icon: Pill, group: "Workspace" },
-  { to: "/history", label: "History & visits", short: "History", icon: History, group: "Records" },
-  { to: "/notes", label: "My notes", short: "Notes", icon: NotebookPen, group: "Records" },
-  { to: "/patients", label: "Patients", short: "Patients", icon: Users, group: "Records" },
-  { to: "/guidance", label: "Guidance", short: "Guide", icon: BookOpen, group: "System" },
-  { to: "/security", label: "Security", short: "Security", icon: ShieldCheck, group: "System" },
-  { to: "/agents", label: "Agent registry", short: "Agents", icon: Bot, group: "System" }
+  { to: "/", label: "Overview", short: "Home", icon: LayoutGrid, end: true },
+  { to: "/consultation", label: "Consultation", short: "Consult", icon: Stethoscope, primary: true },
+  { to: "/medications", label: "Medication review", short: "Meds", icon: Pill },
+  { to: "/history", label: "History & visits", short: "History", icon: History },
+  { to: "/notes", label: "My notes", short: "Notes", icon: NotebookPen },
+  { to: "/patients", label: "Patients", short: "Patients", icon: Users },
+  { to: "/guidance", label: "Guidance", short: "Guide", icon: BookOpen },
+  { to: "/security", label: "Security", short: "Security", icon: ShieldCheck },
+  { to: "/agents", label: "Agent registry", short: "Agents", icon: Bot }
 ];
 
-function groupBy(items: NavItem[], key: keyof NavItem) {
-  return items.reduce<Record<string, NavItem[]>>((acc, item) => {
-    const bucket = String(item[key]);
-    acc[bucket] = acc[bucket] ? [...acc[bucket], item] : [item];
-    return acc;
-  }, {});
+/** Longest prefix wins, so `/history` doesn't swallow a deeper route. */
+function activeItem(pathname: string): NavItem {
+  return (
+    NAV.filter((item) => (item.end ? pathname === item.to : pathname.startsWith(item.to))).sort(
+      (a, b) => b.to.length - a.to.length
+    )[0] ??
+    // Unknown path: the breadcrumb names the overview page, not whichever item
+    // happens to sit first.
+    NAV.find((item) => item.end) ??
+    NAV[0]
+  );
 }
 
-const NAV_GROUPS = groupBy(NAV, "group");
-
-function EngineStatus() {
+function EngineStatus({ compact = false }: { compact?: boolean }) {
   const { status, provider } = useEngineStatus();
 
   const copy =
     status === "checking" ? "Connecting" : status === "online" ? "Engine ready" : "Engine offline";
-  const dot =
-    status === "online" ? "bg-ok" : status === "offline" ? "bg-danger" : "bg-warn";
-  const animate = status === "online" ? "animate-pulse-soft" : "";
+  const dot = status === "online" ? "bg-ok" : status === "offline" ? "bg-danger" : "bg-warn";
 
   return (
-    <div className="flex items-center gap-2 rounded-lg border border-line bg-inset px-2.5 py-1.5">
-      <span className={cn("h-1.5 w-1.5 rounded-full", dot, animate)} />
+    <div
+      className={cn(
+        "flex items-center gap-2 rounded-lg border border-line bg-inset px-2.5 py-1.5",
+        compact && "border-transparent bg-transparent px-0 py-0"
+      )}
+      title={providerLabel(provider)}
+    >
+      <span className={cn("h-1.5 w-1.5 rounded-full", dot, status === "online" && "animate-pulse-soft")} />
       <span className="text-2xs font-medium text-muted">{copy}</span>
-      {status === "online" ? (
+      {status === "online" && !compact ? (
         <span className="ml-auto truncate rounded border border-line bg-elev px-1.5 py-px text-[10px] font-medium text-faint">
           {providerLabel(provider)}
         </span>
@@ -80,119 +94,92 @@ function EngineStatus() {
   );
 }
 
-function SidebarNav() {
-  return (
-    <nav className="flex-1 overflow-y-auto px-3 py-4">
-      {Object.entries(NAV_GROUPS).map(([group, items]) => (
-        <div key={group} className="mb-5 last:mb-0">
-          <p className="label px-2.5 pb-2">{group}</p>
-          <ul className="space-y-0.5">
-            {items.map((item) => (
-              <li key={item.to}>
-                <NavLink
-                  to={item.to}
-                  end={item.end}
-                  className={({ isActive }) =>
-                    cn(
-                      "group relative flex items-center gap-2.5 rounded-lg pl-3.5 pr-2.5 transition-colors duration-150",
-                      item.primary ? "py-2.5 text-[15px] font-semibold" : "py-2 text-sm",
-                      isActive
-                        ? cn(
-                            "bg-elev text-fg shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]",
-                            !item.primary && "font-medium"
-                          )
-                        : item.primary
-                          ? "text-fg hover:bg-elev/60"
-                          : "text-muted hover:bg-elev/50 hover:text-fg"
-                    )
-                  }
-                >
-                  {({ isActive }) => (
-                    <>
-                      <span
-                        className={cn(
-                          "absolute left-0 top-1/2 w-[2px] -translate-y-1/2 rounded-r-full bg-accent transition-opacity duration-200",
-                          item.primary ? "h-4" : "h-3.5",
-                          isActive ? "opacity-100" : "opacity-0"
-                        )}
-                      />
-                      <item.icon
-                        className={cn(
-                          "shrink-0 transition-colors",
-                          item.primary ? "h-[18px] w-[18px]" : "h-4 w-4",
-                          isActive
-                            ? "text-accent"
-                            : item.primary
-                              ? "text-accent/80 group-hover:text-accent"
-                              : "text-faint group-hover:text-muted"
-                        )}
-                        strokeWidth={item.primary ? 2 : 1.75}
-                      />
-                      <span className="truncate">{item.label}</span>
-                    </>
-                  )}
-                </NavLink>
-              </li>
-            ))}
-          </ul>
-        </div>
-      ))}
-    </nav>
-  );
-}
-
-function SidebarFooter() {
+/**
+ * Account controls that used to live in the sidebar footer. The workspace has
+ * no sidebar now, so identity, sign-out and the source link collapse into one
+ * menu button in the top bar — present at every width.
+ */
+function AccountMenu() {
   const { user, signOut } = useAuth();
   const navigate = useNavigate();
-  const { status, provider } = useEngineStatus();
+  const [open, setOpen] = useState(false);
+  const wrapRef = useRef<HTMLDivElement | null>(null);
 
-  const copy =
-    status === "checking" ? "Connecting" : status === "online" ? "Engine ready" : "Engine offline";
-  const dot = status === "online" ? "bg-ok" : status === "offline" ? "bg-danger" : "bg-warn";
+  useEffect(() => {
+    if (!open) return;
+    function onPointerDown(event: MouseEvent) {
+      if (!wrapRef.current?.contains(event.target as Node)) setOpen(false);
+    }
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") setOpen(false);
+    }
+    document.addEventListener("mousedown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [open]);
+
+  // Signed out (login/legal pages): nothing to show.
+  if (!user) return null;
 
   async function handleSignOut() {
+    setOpen(false);
     await signOut();
     navigate("/login", { replace: true });
   }
 
   return (
-    <div className="shrink-0 space-y-3 border-t border-line p-3">
-      <div className="flex items-center gap-2 rounded-lg border border-line bg-inset px-2.5 py-1.5">
-        <span className={cn("h-1.5 w-1.5 rounded-full", dot, status === "online" ? "animate-pulse-soft" : "")} />
-        <span className="text-2xs font-medium text-muted">{copy}</span>
-        {status === "online" ? (
-          <span className="ml-auto truncate rounded border border-line bg-elev px-1.5 py-px text-[10px] font-medium text-faint">
-            {providerLabel(provider)}
-          </span>
-        ) : null}
-      </div>
+    <div ref={wrapRef} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((value) => !value)}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-label="Account menu"
+        className="flex h-9 w-9 items-center justify-center rounded-full border border-line bg-elev/70 text-xs font-semibold text-accent transition-colors hover:bg-elev"
+      >
+        {initialsOf(user)}
+      </button>
 
-      <div className="relative overflow-hidden rounded-lg border border-line bg-inset px-3 pt-1">
-        <EcgTrace className="-mx-1 h-9 opacity-70" speed="7s" />
-        <Link
-          to="/guidance"
-          className="flex items-center gap-1.5 pb-2.5 pt-0.5 text-2xs text-faint transition-colors hover:text-muted"
+      {open ? (
+        <div
+          role="menu"
+          className="animate-slide-in absolute right-0 top-[calc(100%+8px)] z-50 w-64 overflow-hidden rounded-xl border border-line bg-panel p-1 shadow-pop"
         >
-          <BookOpen className="h-3 w-3" strokeWidth={1.75} />
-          How to use PulseIQ
-        </Link>
-      </div>
-
-      {user ? (
-        <div className="flex items-center gap-2.5 rounded-lg border border-line bg-elev/60 px-2.5 py-2">
-          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent/15 text-xs font-semibold text-accent">
-            {initialsOf(user)}
-          </span>
-          <div className="min-w-0 flex-1">
+          <div className="px-3 pb-2 pt-2.5">
             <p className="truncate text-xs font-medium text-fg">{user.name || user.email}</p>
             {user.name ? <p className="truncate text-2xs text-faint">{user.email}</p> : null}
           </div>
+          <div className="rule" />
+          <Link
+            to="/guidance"
+            role="menuitem"
+            onClick={() => setOpen(false)}
+            className="mt-1 flex items-center gap-2 rounded-lg px-3 py-2 text-xs text-muted transition-colors hover:bg-elev hover:text-fg"
+          >
+            <BookOpen className="h-3.5 w-3.5" strokeWidth={1.75} />
+            How to use PulseIQ
+          </Link>
+          <a
+            href={CONTACT_URL}
+            role="menuitem"
+            target="_blank"
+            rel="noreferrer"
+            className="flex items-center gap-2 rounded-lg px-3 py-2 text-xs text-muted transition-colors hover:bg-elev hover:text-fg"
+          >
+            <Activity className="h-3.5 w-3.5" strokeWidth={1.75} />
+            Source & contact
+          </a>
+          <div className="rule my-1" />
           <button
             type="button"
+            role="menuitem"
             onClick={handleSignOut}
-            title="Sign out"
-            className="shrink-0 rounded-md border border-line px-2 py-1 text-2xs font-medium text-muted transition-colors hover:border-danger/40 hover:text-danger"
+            className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-xs text-muted transition-colors hover:bg-danger/10 hover:text-danger"
           >
+            <LogOut className="h-3.5 w-3.5" strokeWidth={1.75} />
             Sign out
           </button>
         </div>
@@ -201,67 +188,82 @@ function SidebarFooter() {
   );
 }
 
-function Sidebar() {
-  return (
-    <aside className="sticky top-0 hidden h-screen w-[248px] shrink-0 flex-col border-r border-line bg-canvas/70 lg:flex">
-      <div className="flex h-14 shrink-0 items-center gap-2.5 border-b border-line px-4">
-        <LogoMark />
-        <Wordmark />
-      </div>
-
-      <SidebarNav />
-
-      <SidebarFooter />
-    </aside>
-  );
-}
-
 function Topbar({ title }: { title: string }) {
   return (
     <header className="sticky top-0 z-30 flex h-14 items-center gap-3 border-b border-line bg-canvas/85 px-4 backdrop-blur-md sm:px-6 lg:px-10">
-      <Link to="/" className="flex items-center gap-2.5 lg:hidden">
+      {/* The mark is aria-hidden and the wordmark is hidden on phones, so the
+          link needs its own name at every width. */}
+      <Link to="/" aria-label="PulseIQ overview" className="flex items-center gap-2.5">
         <LogoMark className="h-7 w-7" />
-        <span className="text-sm font-semibold tracking-[-0.01em]">PulseIQ</span>
+        <span className="hidden sm:block">
+          <Wordmark />
+        </span>
       </Link>
 
-      <div className="hidden min-w-0 items-center gap-2 lg:flex">
-        <span className="text-2xs font-medium uppercase tracking-[0.14em] text-faint">PulseIQ</span>
-        <span aria-hidden="true" className="text-faint/60">/</span>
-        <span className="truncate text-xs font-medium text-fg">{title}</span>
-      </div>
+      {/* The breadcrumb is a wide-screen nicety: on a phone the page's own
+          heading and the dock's active tab already name where you are, and
+          the fragment that fits there is "Consult…". */}
+      <span aria-hidden="true" className="hidden text-faint/60 sm:inline">
+        /
+      </span>
+      <span className="hidden truncate text-xs font-medium text-fg sm:block">{title}</span>
 
       <div className="ml-auto flex items-center gap-2">
         <div className="hidden sm:block">
           <EngineStatus />
         </div>
+        <div className="sm:hidden">
+          <EngineStatus compact />
+        </div>
         <ThemeToggle />
-        <a
-          href="https://github.com/Aabyyss/PulseIQ-"
-          target="_blank"
-          rel="noreferrer"
-          className="hidden h-9 items-center gap-1.5 rounded-lg border border-line bg-elev/70 px-3 text-xs font-medium text-muted transition-colors hover:bg-elev hover:text-fg sm:inline-flex"
-        >
-          <Activity className="h-3.5 w-3.5" strokeWidth={1.75} />
-          Source
-        </a>
+        <AccountMenu />
       </div>
     </header>
   );
 }
 
-function MobileNav() {
+/**
+ * The bottom dock: every destination in one app-style bar, always visible.
+ *
+ * Wide screens spread the nine items evenly with labels; narrow ones keep the
+ * same order in a horizontally scrollable strip and centre whichever item is
+ * active, so nothing is hidden and nothing needs a "more" menu.
+ */
+function AppDock() {
+  const { pathname } = useLocation();
+  const listRef = useRef<HTMLUListElement | null>(null);
+  const active = activeItem(pathname);
+
+  useEffect(() => {
+    const node = listRef.current?.querySelector<HTMLElement>('[data-active="true"]');
+    // `block: "nearest"` keeps this from scrolling the page itself.
+    node?.scrollIntoView({ block: "nearest", inline: "center" });
+  }, [pathname]);
+
   return (
-    <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-line bg-canvas/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-md lg:hidden">
-      <ul className="flex items-stretch">
+    <nav
+      aria-label="Workspace"
+      className="fixed inset-x-0 bottom-0 z-40 border-t border-line bg-canvas/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-md print:hidden"
+    >
+      <ul
+        ref={listRef}
+        className="no-scrollbar mx-auto flex w-full max-w-[1240px] snap-x snap-mandatory items-stretch overflow-x-auto px-1 sm:px-2"
+      >
         {NAV.map((item) => (
-          <li key={item.to} className="flex-1">
+          <li key={item.to} className="min-w-[68px] flex-1 snap-center sm:min-w-0">
             <NavLink
               to={item.to}
               end={item.end}
+              data-active={active.to === item.to}
+              // The dock prints short labels; the accessible name stays the
+              // full destination so screen readers and the E2E scripts agree.
+              aria-label={item.label}
+              aria-current={active.to === item.to ? "page" : undefined}
+              title={item.label}
               className={({ isActive }) =>
                 cn(
-                  "relative flex flex-col items-center gap-1 py-2.5 text-[10px] font-medium transition-colors",
-                  isActive ? "text-accent" : "text-faint"
+                  "group relative flex h-[62px] flex-col items-center justify-center gap-1 px-1 text-[10px] transition-colors duration-150",
+                  isActive ? "text-accent" : "text-faint hover:text-muted"
                 )
               }
             >
@@ -269,12 +271,29 @@ function MobileNav() {
                 <>
                   <span
                     className={cn(
-                      "absolute inset-x-4 top-0 h-[2px] rounded-b-full bg-accent transition-opacity",
+                      "absolute inset-x-3 top-0 h-[2px] rounded-b-full bg-accent transition-opacity duration-200",
                       isActive ? "opacity-100" : "opacity-0"
                     )}
                   />
-                  <item.icon className="h-[18px] w-[18px]" strokeWidth={1.75} />
-                  {item.short}
+                  <span
+                    className={cn(
+                      "flex h-7 w-7 items-center justify-center rounded-lg transition-colors duration-150",
+                      isActive ? "bg-accent/15" : "bg-transparent group-hover:bg-elev/70"
+                    )}
+                  >
+                    <item.icon
+                      className={cn(item.primary ? "h-[19px] w-[19px]" : "h-[17px] w-[17px]")}
+                      strokeWidth={item.primary ? 2 : 1.75}
+                    />
+                  </span>
+                  <span
+                    className={cn(
+                      "max-w-full truncate leading-none",
+                      item.primary && "font-semibold"
+                    )}
+                  >
+                    {item.short}
+                  </span>
                 </>
               )}
             </NavLink>
@@ -291,7 +310,7 @@ function MobileNav() {
  */
 function SiteFooter() {
   return (
-    <footer className="border-t border-line bg-canvas/60 px-4 py-5 sm:px-6 lg:px-10">
+    <footer className="border-t border-line bg-canvas/60 px-4 pb-20 pt-5 sm:px-6 lg:px-10 lg:pb-24">
       <div className="mx-auto flex w-full max-w-[1240px] flex-col items-start justify-between gap-3 sm:flex-row sm:items-center">
         <p className="text-2xs text-faint">
           {SITE_NAME} · runs entirely on this device · no cookies, no tracking
@@ -319,33 +338,26 @@ function SiteFooter() {
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const { pathname } = useLocation();
-
-  const active =
-    NAV.filter((item) => (item.end ? pathname === item.to : pathname.startsWith(item.to))).sort(
-      (a, b) => b.to.length - a.to.length
-    )[0] ??
-    // Unknown path: the breadcrumb names the overview page, not whichever item
-    // happens to sit first now that the main action leads the sidebar.
-    NAV.find((item) => item.end) ??
-    NAV[0];
+  const active = activeItem(pathname);
 
   return (
-    <div className="min-h-screen lg:flex">
+    <div className="flex min-h-dvh flex-col">
       <a href="#main" className="skip-link">
         Skip to content
       </a>
 
-      <Sidebar />
-
       <div className="flex min-w-0 flex-1 flex-col">
         <Topbar title={active.label} />
-        <main id="main" className="mx-auto w-full max-w-[1240px] flex-1 px-4 pb-28 pt-6 sm:px-6 lg:px-10 lg:pb-8 lg:pt-8">
+        <main
+          id="main"
+          className="mx-auto w-full max-w-[1240px] flex-1 px-4 pb-10 pt-6 sm:px-6 lg:px-10 lg:pt-8 xl:max-w-[1320px] 2xl:max-w-[1440px]"
+        >
           {children}
         </main>
         <SiteFooter />
       </div>
 
-      <MobileNav />
+      <AppDock />
     </div>
   );
 }
