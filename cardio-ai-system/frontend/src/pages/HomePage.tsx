@@ -84,13 +84,13 @@ export function HomePage() {
               <span className="h-1.5 w-1.5 rounded-full bg-accent" />
               Cardiac screening workspace
             </p>
-            <h1 className="mt-4 max-w-xl text-4xl font-semibold text-fg">
-              Read the signal behind a symptom description.
-            </h1>
+            {/* The overview opens with the action, not with a description of
+                the product: a clinician arriving here is starting a session. */}
+            <h1 className="mt-4 max-w-xl text-4xl font-semibold text-fg">Start a consultation.</h1>
             <p className="mt-4 max-w-xl text-base leading-relaxed text-muted">
-              PulseIQ takes a patient's own words, resolves them against a curated cardiac vocabulary,
-              and returns an explained risk estimate alongside the questions and tests a clinician
-              would reach for next.
+              Speak or type the patient's own words. PulseIQ resolves them against a curated cardiac
+              vocabulary and returns an explained risk estimate alongside the questions and tests a
+              clinician would reach for next.
             </p>
 
             <div className="mt-7 flex flex-wrap items-center gap-3">
@@ -151,7 +151,7 @@ export function HomePage() {
         <div className="mb-4 flex items-end justify-between gap-4">
           <div>
             <p className="label">Start here</p>
-            <h2 className="mt-1.5 text-lg font-semibold">Two ways into the workspace</h2>
+            <h2 className="mt-1.5 text-lg font-semibold">Three ways into the workspace</h2>
           </div>
           <Link
             to="/history"
