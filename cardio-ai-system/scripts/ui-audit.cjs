@@ -29,6 +29,10 @@
  * green build that never looked at the workspace. With it, a backend that is
  * missing, unreachable, or drops the session mid-sweep fails the job.
  *
+ * How the sweep is signed in is recorded, too: every page load is checked
+ * against the route that was asked for, so a redirect to /login can never be
+ * audited as if it were the page it replaced (ADR-028).
+ *
  * The preview server is spawned as `node vite.js preview`, not through `npx`,
  * so the recorded PID is the process that holds the port: killing the npx
  * wrapper left the real server listening, and the next run's `--strictPort`
@@ -260,6 +264,12 @@ function layoutAuditScript() {
 
 /* ---------- driver ---------- */
 
+/** The path a route should leave the browser on, ignoring one trailing slash. */
+function normalisePath(value) {
+  const trimmed = String(value).replace(/\/+$/, "");
+  return trimmed === "" ? "/" : trimmed;
+}
+
 function parseArgs() {
   const args = process.argv.slice(2);
   const i = args.indexOf("--base-url");
@@ -372,6 +382,15 @@ function waitFor(url, timeoutMs) {
     const violations = [];
     let sampledTotal = 0;
 
+    // Where each page actually landed. A redirect to /login is the failure this
+    // flag exists to catch: the sweep would otherwise measure the sign-in form
+    // under the name of the route it was asked for.
+    const redirects = [];
+    const recordLanding = (page, route, viewport, pass) => {
+      const landed = new URL(page.url()).pathname;
+      if (normalisePath(landed) === normalisePath(route.path)) return;
+      redirects.push({ viewport, route: route.name, pass, expected: route.path, landed });
+    };
     const assertSession = (page, viewport, pass) => {
       if (!requireSignIn) return;
       const landed = new URL(page.url()).pathname;
@@ -387,6 +406,7 @@ function waitFor(url, timeoutMs) {
       assertSession(page, vp.name, "contrast");
       for (const route of ROUTES) {
         await page.goto(base + route.path, { waitUntil: "networkidle", timeout: 30000 }).catch(() => {});
+        recordLanding(page, route, vp.name, "contrast");
         // Freeze animations/transitions so entrance states are audited at final values
         await page.addStyleTag({
           content: `*, *::before, *::after {
@@ -408,6 +428,7 @@ function waitFor(url, timeoutMs) {
       assertSession(page, vp.name, "layout");
       for (const route of ROUTES) {
         await page.goto(base + route.path, { waitUntil: "networkidle", timeout: 30000 }).catch(() => {});
+        recordLanding(page, route, vp.name, "layout");
         const issues = await page.evaluate(`(${layoutAuditScript})()`);
         for (const i of issues) layoutIssues.push({ viewport: vp.name, route: route.name, ...i });
       }
@@ -422,9 +443,12 @@ function waitFor(url, timeoutMs) {
         {
           generatedAt: new Date().toISOString(),
           base,
+          signedIn,
+          requireSignIn,
           sampledTotal,
           violations,
           layoutIssues,
+          redirects,
         },
         null,
         2
@@ -460,6 +484,18 @@ function waitFor(url, timeoutMs) {
       if (layoutIssues.length > 25) console.log(`  … and ${layoutIssues.length - 25} more (see ${REPORT})`);
     } else {
       console.log("✓ Layout: no overflow, clipping, or undersized targets");
+    }
+
+    // A redirect seen while signed in means the session died mid-sweep; a
+    // redirect seen while signed out is the documented public-pages fallback.
+    if (redirects.length) {
+      console.log(`\n! Landing: ${redirects.length} page loads did not reach the route asked for`);
+      for (const r of redirects.slice(0, 5)) {
+        console.log(`  [${r.viewport} ${r.route}] ${r.expected} → ${r.landed}`);
+      }
+      if (redirects.length > 5) console.log(`  … and ${redirects.length - 5} more (see ${REPORT})`);
+    } else if (signedIn) {
+      console.log("✓ Landing: every route rendered itself");
     }
 
 
