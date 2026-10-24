@@ -1016,6 +1016,48 @@ DRUGS: list[dict[str, Any]] = [
         "evidence": "ACOG practice bulletin — labetalol is a first-line agent for chronic and severe hypertension in pregnancy; the hypertension guideline covers its use outside pregnancy.",
         "source": ["acog-222", "hypertension-2017"],
     },
+    {
+        "key": "glp1_ra",
+        "name": "GLP-1 receptor agonist (semaglutide/dulaglutide)",
+        "drug_class": "glp1_ra",
+        "priority": 5,
+        "indications": ["diabetes", "obesity", "established_cad", "prior_mi"],
+        "avoid": [
+            ("pregnancy", "absolute", "GLP-1 receptor agonists are contraindicated in pregnancy and not for use while breastfeeding."),
+            ("pancreatitis", "relative", "Previous pancreatitis — weigh the recurrence risk before starting."),
+        ],
+        "caution": [
+            ("diabetes", "Review insulin and sulfonylurea doses when starting, to avoid hypoglycaemia."),
+            ("chronic_kidney_disease", "Gastrointestinal losses can dehydrate — review renal function during titration."),
+        ],
+        "lab_guards": [],
+        "allergens": ["semaglutide", "ozempic", "wegovy", "rybelsus", "dulaglutide", "trulicity", "liraglutide", "victoza", "glp-1", "glp1"],
+        "monitoring": ["Weight and HbA1c", "Gastrointestinal tolerance", "Pancreatitis symptoms", "Renal function during titration"],
+        "dose_note": "Semaglutide 0.25 mg weekly for 4 weeks, then 0.5 mg, titrated to 1–2 mg weekly (oral semaglutide 3–14 mg daily).",
+        "evidence": "Diabetes standards of care — a GLP-1 receptor agonist with proven cardiovascular benefit for type 2 diabetes with ASCVD or high cardiovascular risk, independent of HbA1c; the coronary-disease guideline makes the same recommendation.",
+        "source": ["ada-2025", "ccd-2023"],
+    },
+    {
+        "key": "bempedoic_acid",
+        "name": "Bempedoic acid",
+        "drug_class": "acl_inhibitor",
+        "priority": 6,
+        "indications": ["statin_intolerance", "ldl_very_high", "dyslipidemia_lab"],
+        "avoid": [
+            ("pregnancy", "relative", "Not recommended in pregnancy — plan lipid therapy before conception."),
+            ("liver_disease", "relative", "Active hepatic disease — check transaminases before starting."),
+        ],
+        "caution": [
+            ("gout", "Bempedoic acid raises urate — review gout control and monitor."),
+            ("transaminitis", "ALT >3× upper limit — investigate before starting."),
+        ],
+        "lab_guards": [("transaminitis", "relative", "ALT >3× upper limit — investigate before starting.")],
+        "allergens": ["bempedoic", "nexletol", "nexlizet"],
+        "monitoring": ["Lipid panel at 4–12 weeks", "Urate if gout", "ALT", "Tendon pain"],
+        "dose_note": "Bempedoic acid 180 mg once daily, with or without ezetimibe.",
+        "evidence": "FDA prescribing information — bempedoic acid lowers LDL-C in statin-intolerant patients and in heterozygous familial hypercholesterolaemia, added to other lipid-lowering therapy.",
+        "source": ["label"],
+    },
 ]
 
 _DRUG_BY_KEY = {d["key"]: d for d in DRUGS}
@@ -1044,6 +1086,8 @@ MED_ALIASES: dict[str, tuple[str, ...]] = {
     "dronedarone": ("dronedarone", "multaq"),
     "flecainide": ("flecainide", "tambocor", "flecaine"),
     "labetalol": ("labetalol", "trandate", "normodyne"),
+    "glp1_ra": ("semaglutide", "ozempic", "wegovy", "rybelsus", "dulaglutide", "trulicity", "liraglutide", "victoza", "glp-1", "glp1"),
+    "bempedoic_acid": ("bempedoic", "nexletol", "nexlizet"),
     "statin_high_intensity": ("atorvastatin", "rosuvastatin", "simvastatin", "pravastatin", "statin", "lipitor", "crestor", "zocor"),
     "beta_blocker": ("metoprolol", "bisoprolol", "carvedilol", "atenolol", "nebivolol", "propranolol", "lopressor", "betaloc", "concor"),
     "ace_inhibitor": ("ramipril", "lisinopril", "enalapril", "captopril", "perindopril", "trandolapril", "ace inhibitor", "acei"),
@@ -1131,6 +1175,8 @@ _ALLERGY_ALTERNATIVES: dict[str, str] = {
     "flecainide": "Rhythm control needs specialist input — a different antiarrhythmic or ablation; do not substitute another sodium-channel blocker.",
     "nd_ccb": "If diltiazem/verapamil cannot be used, a beta-blocker (outside HFrEF) or digoxin is the rate-control alternative.",
     "labetalol": "Nifedipine or methyldopa are the other pregnancy-safe antihypertensives; do not substitute a RAAS agent in pregnancy.",
+    "glp1_ra": "Another glucose-lowering agent with cardiovascular benefit may be considered — an SGLT2 inhibitor where it is indicated.",
+    "bempedoic_acid": "Ezetimibe or a PCSK9 inhibitor is the alternative non-statin route; review the reaction before substituting.",
 }
 
 
