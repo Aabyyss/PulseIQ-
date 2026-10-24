@@ -144,5 +144,6 @@ patient-derived content once real records exist — treat it as PHI (see
 - New agent → one file in `agents/`, register in the realtime service or
   orchestrator, and add an entry in `API_SPEC.md` consumers if exposed.
 - New drug, interaction or lab gate → the tables in
-  `agents/pharmacology_agent.py` (`DRUGS`, `INTERACTIONS`, `MED_ALIASES`);
+  `agents/pharmacology_agent.py` (`DRUGS`, `INTERACTIONS`, `MED_ALIASES`, `SOURCES`,
+  read as a table in `docs/MEDICATIONS.md`);
   the review endpoint itself does not change.

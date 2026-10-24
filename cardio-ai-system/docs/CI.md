@@ -8,7 +8,7 @@ move on purpose, not overnight.
 
 | Job | Proves |
 |---|---|
-| `backend` | The pytest suite (259 cases) and the script checks: clinical direction, the published score tables against their sources, de-identification, the local stores, the login limiter, the FHIR bundle, the live medication screen. |
+| `backend` | The pytest suite (273 cases) and the script checks: clinical direction, the published score tables against their sources, the 36-option medication catalogue and its 53 sourced rules, de-identification, the local stores, the login limiter, the FHIR bundle, the live medication screen. |
 | `frontend` | `tsc -b`, the vitest suite (55 cases: extraction patterns, session/retry behaviour, PDF layout, the microphone meter's thresholds) and the production build. |
 | `ui-audit` | The built app, **signed in**, swept in **both themes**: contrast at 3 viewports × 12 routes × 2 palettes, layout at 9 widths × 12 routes, and 12 open-state audits (account menu, both consult tabs, each at 1440 and 390 in both themes). WCAG AA against each element's real rendered background, no horizontal overflow, no clipped text, no tap target under 24 px — plus the dock, its current item and the account menu on every signed-in route. |
 | `e2e` | The journey a clinician takes — sign in, capture a transcript line, save the visit, download the PDF, land on thank-you, find it in history — against the **built bundle** served by `vite preview` and a live API (ADR-030). |

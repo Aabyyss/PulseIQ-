@@ -43,7 +43,7 @@ backend/realtime_service.py  per-line WS fusion             (copilot behaviour h
 backend/encounter_context.py shared medication context      (both review paths)
 backend/risk_score_context.py shared score inputs           (HEART/GRACE/VASc/ASCVD-PCE, both layers)
 backend/fhir_export.py       FHIR R4 bundle builder        (EHR-shaped export)
-agents/*.py                  19 rule-grounded modules       (one concern per file)
+agents/*.py                  20 rule-grounded modules       (one concern per file)
 models/                      heart_model.pkl + metadata     (never hand-edit)
 data/heart.csv               training data                  (training only)
 frontend/src/pages/          route screens
