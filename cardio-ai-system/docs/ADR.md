@@ -1405,3 +1405,69 @@ transcript line rather than speaking it, and the backend answers from the
 rule-based path); the PDF is asserted by the download event, not by parsing the
 file; and the job's wall-clock duration is a local measurement until the first CI
 run reports its own.
+
+## ADR-031 · Every drug option and interaction rule names a source, and indications are compound
+**Status:** Accepted (2026-10-24)
+
+The medication module had eighteen options and nineteen rules. Each drug named a
+guideline in prose; no rule named anything. A clinician reading "P2Y12 inhibitor
+plus anticoagulant markedly increases bleeding" had no way to check whether that
+was a guideline statement, a label statement or something the author believed.
+The catalogue was also too small for the app's own premise: a review that cannot
+offer a non-statin lipid agent, a pregnancy antihypertensive or an ARNI is not a
+second opinion on the plan, it is a partial one.
+
+Decision: the tables are sourced through a registry, and the catalogue grows
+past its original size without loosening what a rule means.
+
+- **`SOURCES` is a registry, not prose.** Every drug and every rule names at
+  least one id, and each id resolves to a title and a publisher URL. A rule
+  that rests on a guideline says so; one that rests on a CYP/P-gp or dose-limit
+  statement cites the prescribing information (`label`). An entry resting on two
+  sources names both, because "beta-blockade after ACS and in HFrEF" is two
+  statements.
+- **The invariant is a test, not a style note.** `test_every_drug_and_rule_names_
+  a_source_that_resolves` fails on a missing or dangling id; three siblings check
+  unique keys/names/pairs, that every rule target is a drug, class or alias (a
+  rule aimed at a key nothing produces can never fire), that every option can be
+  recognised as a current medication, and that every option states its
+  indications, allergens, monitoring, dose and evidence.
+- **Compound indications where the evidence needs two facts.** An option is
+  offered when *any* indication matches, so listing `diabetes` and `albuminuria`
+  separately offered finerenone to every diabetic, and `pregnancy` +
+  `hypertension` offered labetalol to every pregnant patient. The six cases that
+  need two facts together now get a compound name built where the facts meet:
+  `diabetic_kidney_disease`, `pregnancy_hypertension`,
+  `diabetes_with_ascvd`, `residual_hypertriglyceridaemia`.
+- **One prescription, one "already documented" line — by key, not class.** The
+  class-based check reported a patient on amiodarone as already being on
+  dronedarone, and on metoprolol as already being on labetalol; the duplicate was
+  then hidden from the list, taking its interactions with it. Matching is now by
+  the drug key the alias table already resolves to.
+- **Aliases belong to one drug.** Ticagrelor and diltiazem/verapamil left
+  clopidogrel's and amlodipine's alias lists when they got their own entries, so
+  one prescription is no longer reported as two agents.
+- **New thresholds are pinned at their boundary** (149/150, 499/500, 29/30,
+  189/190) the way the score tables are pinned to their pages: a behavioural test
+  reads the same table the code does, so a digit typed one row high would pass
+  every case that does not name the boundary.
+
+The catalogue is now 36 options and 53 rules, twice its original size, and the
+sources are 12 documents. Every addition in that growth was checked against a
+directional test: the fact in, the offer or block out.
+
+Rejected alternatives: keeping prose evidence and adding URLs only to guidelines
+(a rule still could not be checked); a URL per rule (most rules share a source,
+and repeating the URL invites drift); generating the catalogue from an external
+drug database at runtime (no network in this app, licensing, and a database's
+interaction list is not a clinical recommendation); OR-ing tags and accepting the
+over-offer (finerenone for every diabetic is a false statement about the evidence,
+not a broad reading of it); pinning every drug's text to a page number (the
+guidelines are revised; the citation and the id are what the test can hold).
+
+Known limits: this is a curated catalogue, not a formulary — doses are notes for
+a clinician, never adjusted automatically; the sources are document-level for
+rules, so a reviewer follows the guideline rather than a page; the interaction
+table covers what the catalogue can offer plus common current medications, not
+every drug a patient may bring; and no external interaction database is consulted,
+which is the same reason the app works offline.
