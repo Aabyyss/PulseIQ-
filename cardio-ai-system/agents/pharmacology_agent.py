@@ -1289,6 +1289,34 @@ INTERACTIONS: list[dict[str, str]] = [
      "note": "Diltiazem/verapamil inhibit CYP3A4 and P-gp, sharply raising colchicine levels and toxicity.",
      "action": "Halve the colchicine dose or avoid the combination; review blood counts.",
      "source": ["label"]},
+    {"a": "ranolazine", "b": "nd_ccb", "severity": "major",
+     "note": "Diltiazem/verapamil inhibit CYP3A4 and raise ranolazine levels, adding QT prolongation to their own rate-slowing effect.",
+     "action": "Avoid the combination; if ranolazine is needed, choose a rate-control agent that is not a CYP3A4 inhibitor.",
+     "source": ["label"]},
+    {"a": "ranolazine", "b": "statin", "severity": "major",
+     "note": "Ranolazine raises simvastatin exposure and the risk of myopathy.",
+     "action": "Cap simvastatin at 20 mg or use a statin without this interaction, and warn about muscle pain.",
+     "source": ["label"]},
+    {"a": "ranolazine", "b": "amiodarone", "severity": "major",
+     "note": "Both prolong the QT interval — the combination adds torsades risk.",
+     "action": "Review the ECG/QTc before combining them and avoid other QT-prolonging drugs.",
+     "source": ["label"]},
+    {"a": "dronedarone", "b": "amiodarone", "severity": "major",
+     "note": "Two antiarrhythmics with QT and bradycardic effects — no outcome benefit and real proarrhythmia risk.",
+     "action": "Use one rhythm-control agent; specialist input before any switch.",
+     "source": ["label", "af-2023"]},
+    {"a": "dronedarone", "b": "digoxin", "severity": "major",
+     "note": "Dronedarone inhibits P-gp and raises digoxin levels.",
+     "action": "Halve the digoxin dose and check the level.",
+     "source": ["label"]},
+    {"a": "dronedarone", "b": "statin", "severity": "major",
+     "note": "Dronedarone raises simvastatin exposure — myopathy risk.",
+     "action": "Cap simvastatin at 10 mg or switch to a statin without this interaction.",
+     "source": ["label"]},
+    {"a": "dronedarone", "b": "anticoagulant", "severity": "moderate",
+     "note": "Dronedarone inhibits P-gp and raises DOAC exposure; warfarin needs closer INR checks.",
+     "action": "Review the anticoagulant dose and bleeding risk at each visit.",
+     "source": ["label", "af-2023"]},
 ]
 
 
@@ -1496,9 +1524,11 @@ def review_medications(
     for drug in sorted(DRUGS, key=lambda d: (d["priority"], d["name"])):
         key = drug["key"]
         triggered = {name: indications[name] for name in drug["indications"] if name in indications}
-        already_on = key in current_keys or drug["drug_class"] in {
-            _CLASS_OF.get(k, "") for k in current_keys
-        }
+        # Key, not class: a patient on amiodarone is not "already documented" on
+        # dronedarone, and one on metoprolol is not on labetalol. Class matching
+        # here turned a different agent in the same class into a duplicate of a
+        # prescription the patient does not have.
+        already_on = key in current_keys
         if not triggered and not already_on:
             continue
 
@@ -1582,20 +1612,6 @@ def review_medications(
                 if already_on else "Offer to the clinician for selection and prescription."
             ),
         })
-
-    # The catalogue holds two statin entries (secondary and primary
-    # prevention). A patient already on a statin matches both by class, and a
-    # list that says "already documented" twice for one prescription reads as a
-    # duplicate; the first by priority and name stands for the class.
-    documented_classes: set[str] = set()
-    unique: list[dict[str, Any]] = []
-    for rec in recommendations:
-        if rec["status"] == "already-documented":
-            if rec["drug_class"] in documented_classes:
-                continue
-            documented_classes.add(rec["drug_class"])
-        unique.append(rec)
-    recommendations = unique
 
     # One RAAS strategy at a time: combination ACE inhibitor + ARB adds
     # hyperkalaemia and renal injury without outcome benefit, so when both
