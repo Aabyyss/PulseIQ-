@@ -75,6 +75,10 @@ SOURCES: dict[str, dict[str, str]] = {
         "title": "2018 AHA/ACC/Multisociety Guideline on the Management of Blood Cholesterol",
         "url": "https://www.ahajournals.org/doi/10.1161/CIR.0000000000000625",
     },
+    "hypertension-2017": {
+        "title": "2017 ACC/AHA/AAPA/ABC/ACPM/AGS/APhA/ASH/ASPC/NMA/PCNA Guideline for the Prevention, Detection, Evaluation, and Management of High Blood Pressure in Adults",
+        "url": "https://www.ahajournals.org/doi/10.1161/hyp.0000000000000065",
+    },
     "primary-prevention-2019": {
         "title": "2019 ACC/AHA Guideline on the Primary Prevention of Cardiovascular Disease",
         "url": "https://www.ahajournals.org/doi/10.1161/CIR.0000000000000678",
@@ -208,6 +212,15 @@ CONDITION_PATTERNS: list[tuple[str, str]] = [
      r"\b(?:peripheral arterial disease|peripheral vascular disease|\bpad\b|claudication|aortic plaque|\bpvd\b)\b"),
     ("family_history_cad",
      r"\b(?:family history of (?:heart|cad|coronary|cardiac)|father (?:had|died of)[^.;]{0,20}heart|mother (?:had|died of)[^.;]{0,20}heart|(?:dad|brother|sister) (?:had|died of)[^.;]{0,20}heart|sudden cardiac death in (?:the )?family)\b"),
+    # Severe hypercholesterolaemia and statin intolerance are the two facts that
+    # move lipid therapy past a statin; a history of pancreatitis is what makes a
+    # triglyceride-lowering option worth offering at the severe end.
+    ("familial_hypercholesterolemia",
+     r"\b(?:familial hypercholesterola?emia|\bfh\b|genetic(?:ally)? high cholesterol|inherited high cholesterol)\b"),
+    ("statin_intolerance",
+     r"\b(?:statin intoleran\w*|intolerant to statins?|cannot tolerate statins?|statin[- ]associated muscle|statin[- ]induced myopathy)\b"),
+    ("pancreatitis", r"\bpancreatitis\b"),
+    ("angioedema", r"\bangl?ioedema\b|\bswelling of (?:the )?(?:tongue|lips|throat)\b"),
 ]
 
 _ALL_TAGS = {tag for tag, _ in CONDITION_PATTERNS}
@@ -257,6 +270,8 @@ def lab_tags(labs: dict[str, Any] | None) -> dict[str, float]:
     troponin = _lab(labs, "troponin", "troponin_i", "troponin_t", "troponin_flag")
     lvef = _lab(labs, "lvef", "ef")
     alt = _lab(labs, "alt", "sgpt")
+    tg = _lab(labs, "triglycerides", "tg")
+    uacr = _lab(labs, "uacr", "albumin_creatinine_ratio", "albuminuria")
     if egfr is not None:
         if egfr < 30:
             tags["renal_severe"] = egfr
@@ -277,6 +292,11 @@ def lab_tags(labs: dict[str, Any] | None) -> dict[str, float]:
         tags["thrombocytopenia"] = plt
     if ldl is not None and ldl >= 160:
         tags["dyslipidemia_lab"] = ldl
+    # LDL ≥190 mg/dL is severe hypercholesterolaemia: the band where a statin is
+    # started and a non-statin agent is added rather than deferred, and where
+    # familial hypercholesterolaemia is worked up.
+    if ldl is not None and ldl >= 190:
+        tags["ldl_very_high"] = ldl
     # Non-HDL-C is the same reading one threshold up: the international convention
     # puts its cut-off 30 mg/dL (0.8 mmol/L) above LDL-C's, so LDL-C's 160 is
     # non-HDL-C's 190 (ADR-022, ADR-023). A panel that prints only non-HDL raises
@@ -290,6 +310,17 @@ def lab_tags(labs: dict[str, Any] | None) -> dict[str, float]:
         tags["reduced_ef"] = lvef
     if alt is not None and alt > 120:
         tags["transaminitis"] = alt
+    # Triglycerides split at the same 150/500 boundaries the report screen uses:
+    # ≥150 is the level where an ASCVD patient has an indication for icosapent
+    # ethyl, ≥500 is the level where pancreatitis risk makes fibrate therapy the
+    # immediate question.
+    if tg is not None:
+        if tg >= 500:
+            tags["triglycerides_severe"] = tg
+        elif tg >= 150:
+            tags["triglycerides_elevated"] = tg
+    if uacr is not None and uacr >= 30:
+        tags["albuminuria"] = uacr
     return tags
 
 
@@ -645,6 +676,134 @@ DRUGS: list[dict[str, Any]] = [
         "evidence": "NSAIDs raise bleeding, renal and heart-failure risk in the flagged profiles below.",
         "source": ["ccd-2023", "label"],
     },
+    {
+        "key": "ticagrelor",
+        "name": "Ticagrelor (P2Y12 inhibitor)",
+        "drug_class": "p2y12",
+        "priority": 2,
+        "indications": ["suspected_acs", "prior_pci_cabg"],
+        "avoid": [
+            ("bleeding_risk", "absolute", "Active bleeding tendency — a P2Y12 inhibitor is unsafe without specialist review."),
+            ("peptic_ulcer", "relative", "Recent GI bleed — only with gastroprotection and a defined duration."),
+        ],
+        "caution": [
+            ("obstructive_airway_disease", "Ticagrelor commonly causes dyspnoea, which can be mistaken for bronchospasm — assess rather than assume."),
+            ("bradyarrhythmia", "Bradycardia is a recognised effect — review the rate before adding it."),
+        ],
+        "lab_guards": [("thrombocytopenia", "relative", "Platelets <100 ×10⁹/L — bleeding risk on dual antiplatelet therapy.")],
+        "allergens": ["ticagrelor", "brilinta", "p2y12", "prasugrel", "effient"],
+        "monitoring": ["Bleeding signs", "Dyspnoea", "Adherence/duration per stent protocol"],
+        "dose_note": "180 mg loading dose then 90 mg twice daily for 12 months post-ACS; 60 mg twice daily beyond 12 months where the protocol continues it.",
+        "evidence": "ACS guideline — ticagrelor is a preferred P2Y12 inhibitor in ACS regardless of the planned invasive strategy, and with aspirin after PCI.",
+        "source": ["acs-2025"],
+    },
+    {
+        "key": "arni",
+        "name": "ARNI (sacubitril/valsartan)",
+        "drug_class": "arni",
+        "priority": 3,
+        "indications": ["heart_failure", "reduced_ef"],
+        "avoid": [
+            ("pregnancy", "absolute", "ARNI is contraindicated in pregnancy — stop before conception."),
+            ("angioedema", "absolute", "Prior angioedema on a RAAS agent — ARNI is contraindicated; specialist review."),
+            ("hyperkalemia", "absolute", "Do not start with K+ >5.5 mmol/L — correct potassium first."),
+        ],
+        "caution": [
+            ("chronic_kidney_disease", "Expect a small creatinine rise; recheck at 1–2 weeks."),
+            ("borderline_hyperkalemia", "K+ 5.0–5.5 mmol/L — recheck potassium and creatinine after 1 week."),
+        ],
+        "lab_guards": [("renal_severe", "relative", "eGFR <30 mL/min — start at the lowest dose with close follow-up.")],
+        "allergens": ["sacubitril", "entresto", "arni", "valsartan", "arb"],
+        "monitoring": ["Blood pressure", "Potassium and creatinine at 1–2 weeks", "Angioedema", "Symptoms and NYHA class"],
+        "dose_note": "Sacubitril/valsartan 49/51 mg twice daily, titrated to 97/103 mg; start at 24/26 mg if RAAS-naive or renally impaired. Wait 36 h after the last ACE inhibitor.",
+        "evidence": "Heart-failure guideline — ARNI is preferred over an ACE inhibitor or ARB in symptomatic HFrEF (NYHA II–III) to reduce mortality and hospitalisation.",
+        "source": ["hf-2022"],
+    },
+    {
+        "key": "ivabradine",
+        "name": "Ivabradine",
+        "drug_class": "sinus_node_inhibitor",
+        "priority": 5,
+        "indications": ["heart_failure", "reduced_ef", "established_cad"],
+        "avoid": [
+            ("atrial_fibrillation", "absolute", "Ivabradine acts on the sinus node and does not control rate in atrial fibrillation."),
+            ("bradyarrhythmia", "absolute", "Bradycardia, sick sinus syndrome or heart block without a pacemaker."),
+        ],
+        "caution": [
+            ("hypotension", "Review blood pressure before titrating; both effects are additive."),
+            ("liver_disease", "Hepatic impairment raises exposure — use the lower dose."),
+        ],
+        "lab_guards": [],
+        "allergens": ["ivabradine", "corlanor", "procoralan"],
+        "monitoring": ["Resting heart rate", "Visual phosphenes", "Blood pressure"],
+        "dose_note": "5 mg twice daily, titrated to 7.5 mg twice daily after 2 weeks if resting HR is still ≥60 bpm.",
+        "evidence": "Heart-failure guideline — ivabradine for symptomatic HFrEF in sinus rhythm with HR ≥70 bpm on maximally tolerated beta-blockade; CCS guideline for angina when beta-blockers are contraindicated.",
+        "source": ["hf-2022", "ccd-2023"],
+    },
+    {
+        "key": "hydralazine_isosorbide",
+        "name": "Hydralazine with isosorbide dinitrate",
+        "drug_class": "vasodilator",
+        "priority": 6,
+        "indications": ["heart_failure", "reduced_ef"],
+        "avoid": [
+            ("aortic_stenosis", "relative", "Severe aortic stenosis — vasodilatation can cause syncope; specialist review."),
+            ("angioedema", "relative", "Prior angioedema on a vasodilator — review the reaction before using a nitrate-containing combination."),
+        ],
+        "caution": [
+            ("hypotension", "Review blood pressure before each titration; the combination is a potent vasodilator."),
+            ("chronic_kidney_disease", "Renal impairment raises hydralazine exposure — start low and titrate slowly."),
+        ],
+        "lab_guards": [],
+        "allergens": ["hydralazine", "isosorbide", "isosorbide dinitrate", "bidil", "nitrate", "nitrates"],
+        "monitoring": ["Blood pressure and heart rate", "Headache (expected with nitrates)", "Lupus-like symptoms (hydralazine)", "Adherence (three times daily)"],
+        "dose_note": "Hydralazine 37.5 mg with isosorbide dinitrate 20 mg three times daily, titrated to the maximum tolerated dose.",
+        "evidence": "Heart-failure guideline — the hydralazine/isosorbide dinitrate combination is useful in HFrEF where RAAS blockade is limited by renal function or potassium, and in self-identified Black patients already on guideline-directed therapy.",
+        "source": ["hf-2022"],
+    },
+    {
+        "key": "finerenone",
+        "name": "Finerenone (non-steroidal MRA)",
+        "drug_class": "nonsteroidal_mra",
+        "priority": 4,
+        "indications": ["diabetes", "albuminuria", "chronic_kidney_disease"],
+        "avoid": [
+            ("hyperkalemia", "absolute", "K+ >5.5 mmol/L — correct potassium before starting."),
+            ("renal_severe", "absolute", "eGFR <25 mL/min — finerenone is not initiated at this level."),
+        ],
+        "caution": [
+            ("borderline_hyperkalemia", "K+ 5.0–5.5 mmol/L — recheck potassium at 4 weeks and dose-reduce if it rises."),
+            ("chronic_kidney_disease", "Dose is set by eGFR; recheck eGFR at 4 weeks and then periodically."),
+        ],
+        "lab_guards": [("renal_severe", "absolute", "eGFR <25 mL/min — do not start finerenone.")],
+        "allergens": ["finerenone", "kerendia", "mra"],
+        "monitoring": ["Potassium and eGFR at 4 weeks, then periodically", "Blood pressure", "Genital infections"],
+        "dose_note": "10 mg daily when eGFR 25–60 mL/min, 20 mg daily when eGFR ≥60; titrate on potassium.",
+        "evidence": "KDIGO CKD guideline — non-steroidal MRA for type 2 diabetes with CKD and albuminuria (UACR ≥30 mg/g) already on maximal tolerated RAAS blockade.",
+        "source": ["ckd-2024", "ada-2025"],
+    },
+    {
+        "key": "thiazide",
+        "name": "Thiazide-like diuretic (chlorthalidone/indapamide)",
+        "drug_class": "thiazide",
+        "priority": 6,
+        "indications": ["hypertension"],
+        "avoid": [],
+        "caution": [
+            ("gout", "Thiazides raise urate — review gout control and consider an alternative."),
+            ("hyponatremia", "Sodium <130 mmol/L — investigate and avoid aggressive diuresis."),
+            ("hypokalemia", "K+ <3.5 mmol/L — replace potassium before starting."),
+        ],
+        "lab_guards": [("hyponatremia", "relative", "Sodium <130 mmol/L — review the diuretic choice before starting.")],
+        # Sulfonamide cross-reactivity with thiazides is uncommon and poorly
+        # supported, so a sulfa allergy is a review flag here, not a block.
+        "allergens": ["thiazide", "thiazides", "hydrochlorothiazide", "hctz", "chlorthalidone", "indapamide"],
+        "allergen_soft": ["sulfa", "sulfonamide", "sulfonamides", "sulfa drugs"],
+        "monitoring": ["Sodium and potassium at 2–4 weeks", "Urate if gout", "Blood pressure"],
+        "dose_note": "Chlorthalidone 12.5–25 mg daily, or indapamide 1.25–2.5 mg daily.",
+        "evidence": "Hypertension guideline — a thiazide-type diuretic is a first-line agent for hypertension, alone or as add-on therapy.",
+        "source": ["hypertension-2017"],
+    },
 ]
 
 _DRUG_BY_KEY = {d["key"]: d for d in DRUGS}
@@ -655,7 +814,15 @@ _KEY_BY_NAME = {d["name"]: d["key"] for d in DRUGS}
 # Used for interaction screening and "already documented" detection.
 MED_ALIASES: dict[str, tuple[str, ...]] = {
     "aspirin": ("aspirin", "asa", "acetylsalicylic", "disprin", "ecosprin", "aspilet", "aspin", "salicylate"),
-    "clopidogrel": ("clopidogrel", "plavix", "ticagrelor", "brilinta", "prasugrel", "effient"),
+    # Ticagrelor is its own entry now, so it is not an alias of clopidogrel:
+    # a patient on it should not be reported as being on the other P2Y12 agent.
+    "clopidogrel": ("clopidogrel", "plavix", "prasugrel", "effient"),
+    "ticagrelor": ("ticagrelor", "brilinta"),
+    "arni": ("sacubitril", "entresto", "sacubitril/valsartan", "sacubitril valsartan", "arni"),
+    "ivabradine": ("ivabradine", "corlanor", "procoralan"),
+    "hydralazine_isosorbide": ("hydralazine", "isosorbide dinitrate", "isosorbide", "bidil", "apresoline"),
+    "finerenone": ("finerenone", "kerendia"),
+    "thiazide": ("hydrochlorothiazide", "hctz", "chlorthalidone", "indapamide", "bendroflumethiazide", "thiazide"),
     "statin_high_intensity": ("atorvastatin", "rosuvastatin", "simvastatin", "pravastatin", "statin", "lipitor", "crestor", "zocor"),
     "beta_blocker": ("metoprolol", "bisoprolol", "carvedilol", "atenolol", "nebivolol", "propranolol", "lopressor", "betaloc", "concor"),
     "ace_inhibitor": ("ramipril", "lisinopril", "enalapril", "captopril", "perindopril", "trandolapril", "ace inhibitor", "acei"),
@@ -725,6 +892,12 @@ _ALLERGY_ALTERNATIVES: dict[str, str] = {
     "digoxin": "Rate control without digoxin: beta-blocker or calcium-channel blocker, or specialist rhythm-management input.",
     "amiodarone": "Iodine/amiodarone allergy: rhythm management needs specialist input (alternative antiarrhythmics or ablation).",
     "ppi": "Use an H2 receptor antagonist or antacid for gastroprotection with specialist input.",
+    "ticagrelor": "If a P2Y12 inhibitor is essential (post-PCI), clopidogrel is the usual alternative — specialist input required.",
+    "arni": "An ACE inhibitor or ARB is the alternative RAAS strategy if ARNI is not tolerated; recheck potassium and renal function.",
+    "ivabradine": "Rate control needs another route: beta-blocker, digoxin or specialist rhythm input.",
+    "hydralazine_isosorbide": "If a nitrate or hydralazine allergy is confirmed, other vasodilators need specialist input — do not rechallenge.",
+    "finerenone": "Other potassium-sparing options are limited; discuss with the prescriber and recheck potassium before any substitute.",
+    "thiazide": "A calcium-channel blocker or an ACE inhibitor/ARB is the usual alternative antihypertensive — avoid other sulfonamide diuretics if the reaction was a true allergy.",
 }
 
 
@@ -882,6 +1055,14 @@ def indications_from_presentation(symptoms: list[str], tags: list[str], derived:
             add("dyslipidemia", "dyslipidaemia in the history")
         if tag == "cerebrovascular_disease":
             add("cerebrovascular_disease", "prior stroke/TIA")
+        if tag == "statin_intolerance":
+            add("statin_intolerance", "documented statin intolerance")
+        if tag == "familial_hypercholesterolemia":
+            add("familial_hypercholesterolemia", "familial hypercholesterolaemia in the history")
+        if tag == "pancreatitis":
+            add("pancreatitis", "previous pancreatitis")
+        if tag == "angioedema":
+            add("angioedema", "history of angioedema")
 
     if "chest pain" in symptoms:
         add("suspected_acs", "chest pain reported (suspected acute coronary syndrome)")
@@ -897,6 +1078,14 @@ def indications_from_presentation(symptoms: list[str], tags: list[str], derived:
     # attribution when non-HDL is the only fraction above its threshold.
     if derived.get("non_hdl_high") is not None:
         add("non_hdl_high", f"non-HDL {derived['non_hdl_high']:g} mg/dL")
+    if derived.get("ldl_very_high") is not None:
+        add("ldl_very_high", f"LDL {derived['ldl_very_high']:g} mg/dL (severe hypercholesterolaemia)")
+    if derived.get("triglycerides_elevated") is not None:
+        add("triglycerides_elevated", f"triglycerides {derived['triglycerides_elevated']:g} mg/dL")
+    if derived.get("triglycerides_severe") is not None:
+        add("triglycerides_severe", f"triglycerides {derived['triglycerides_severe']:g} mg/dL (pancreatitis risk)")
+    if derived.get("albuminuria") is not None:
+        add("albuminuria", f"UACR {derived['albuminuria']:g} mg/g")
     if derived.get("troponin_elevated") is not None:
         add("suspected_acs", "troponin above the reference limit")
     return got
@@ -1104,6 +1293,21 @@ def review_medications(
             rec["review_flags"].append(
                 "Dual RAAS blockade adds hyperkalaemia and renal injury without outcome benefit."
             )
+
+    # ARNI outranks the other RAAS strategies in HFrEF, so when it is offered an
+    # ACE inhibitor or ARB is the alternative rather than a parallel option — and
+    # an ACE inhibitor needs a 36-hour washout before the first ARNI dose.
+    if "arni" in offered_keys:
+        for rec in recommendations:
+            if rec["drug_class"] in {"ace_inhibitor", "arb"} and rec["status"] == "recommended":
+                rec["status"] = "alternative"
+                rec["action"] = (
+                    "Offer only if the ARNI is not tolerated, and observe the 36-hour washout "
+                    "after an ACE inhibitor; never combine the two."
+                )
+                rec["review_flags"].append(
+                    "ARNI is preferred in symptomatic HFrEF — one RAAS strategy at a time."
+                )
 
     # Below the conventional threshold the option is still listed (the rhythm
     # and other indications decide), but the score says why it is not automatic.
