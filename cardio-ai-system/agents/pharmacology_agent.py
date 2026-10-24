@@ -841,6 +841,48 @@ DRUGS: list[dict[str, Any]] = [
         "evidence": "Cholesterol guideline — a PCSK9 inhibitor for familial hypercholesterolaemia or severe LDL-C elevation when LDL-C stays above threshold on a maximally tolerated statin plus ezetimibe.",
         "source": ["cholesterol-2018"],
     },
+    {
+        "key": "icosapent_ethyl",
+        "name": "Icosapent ethyl (purified EPA)",
+        "drug_class": "omega3",
+        "priority": 5,
+        "indications": ["triglycerides_elevated", "established_cad", "prior_mi"],
+        "avoid": [
+            ("bleeding_risk", "relative", "Bleeding tendency — high-dose EPA adds to antiplatelet/anticoagulant bleeding."),
+        ],
+        "caution": [
+            ("atrial_fibrillation", "Trial data show a higher incidence of atrial fibrillation — review rate and rhythm at follow-up."),
+            ("liver_disease", "Review hepatic disease before starting; monitor ALT."),
+        ],
+        "lab_guards": [("thrombocytopenia", "relative", "Platelets <100 ×10⁹/L — review bleeding risk before adding 2 g twice daily.")],
+        "allergens": ["icosapent", "vascepa", "epa", "omega-3", "omega 3", "fish oil"],
+        "allergen_soft": ["fish", "shellfish"],
+        "monitoring": ["Triglycerides at 4–12 weeks", "ALT", "Bleeding signs", "Atrial fibrillation"],
+        "dose_note": "Icosapent ethyl 2 g twice daily with food, on top of a statin.",
+        "evidence": "Chronic coronary disease guideline — icosapent ethyl for patients with ASCVD or diabetes and residual hypertriglyceridaemia (150–499 mg/dL) despite statin therapy.",
+        "source": ["ccd-2023"],
+    },
+    {
+        "key": "fenofibrate",
+        "name": "Fenofibrate",
+        "drug_class": "fibrate",
+        "priority": 6,
+        "indications": ["triglycerides_severe", "pancreatitis"],
+        "avoid": [
+            ("liver_disease", "relative", "Active hepatic or biliary disease — fibrates are contraindicated in significant liver disease."),
+            ("renal_severe", "relative", "eGFR <30 mL/min — dose-reduce substantially and review the indication."),
+        ],
+        "caution": [
+            ("chronic_kidney_disease", "Dose is set by eGFR; recheck creatinine at 4 weeks."),
+            ("diabetes", "Fibrates can modestly raise creatinine — interpret the renal trend with that in mind."),
+        ],
+        "lab_guards": [("renal_severe", "relative", "eGFR <30 mL/min — start at the lowest dose or choose another agent.")],
+        "allergens": ["fenofibrate", "tricor", "lipanthyl", "fibrate", "fibrates"],
+        "monitoring": ["Triglycerides and ALT at 8–12 weeks", "Creatinine", "Muscle symptoms if combined with a statin"],
+        "dose_note": "Fenofibrate 145 mg daily (micronized 48–145 mg); reduce in renal impairment.",
+        "evidence": "Cholesterol guideline — a fibrate for severe hypertriglyceridaemia (≥500 mg/dL) to reduce pancreatitis risk, after secondary causes are addressed.",
+        "source": ["cholesterol-2018"],
+    },
 ]
 
 _DRUG_BY_KEY = {d["key"]: d for d in DRUGS}
@@ -862,6 +904,8 @@ MED_ALIASES: dict[str, tuple[str, ...]] = {
     "thiazide": ("hydrochlorothiazide", "hctz", "chlorthalidone", "indapamide", "bendroflumethiazide", "thiazide"),
     "ezetimibe": ("ezetimibe", "zetia", "ezetrol"),
     "pcsk9_inhibitor": ("evolocumab", "repatha", "alirocumab", "praluent", "pcsk9"),
+    "icosapent_ethyl": ("icosapent", "vascepa", "epa", "omega-3", "omega 3", "fish oil"),
+    "fenofibrate": ("fenofibrate", "tricor", "lipanthyl", "fibrate"),
     "statin_high_intensity": ("atorvastatin", "rosuvastatin", "simvastatin", "pravastatin", "statin", "lipitor", "crestor", "zocor"),
     "beta_blocker": ("metoprolol", "bisoprolol", "carvedilol", "atenolol", "nebivolol", "propranolol", "lopressor", "betaloc", "concor"),
     "ace_inhibitor": ("ramipril", "lisinopril", "enalapril", "captopril", "perindopril", "trandolapril", "ace inhibitor", "acei"),
@@ -939,6 +983,8 @@ _ALLERGY_ALTERNATIVES: dict[str, str] = {
     "thiazide": "A calcium-channel blocker or an ACE inhibitor/ARB is the usual alternative antihypertensive — avoid other sulfonamide diuretics if the reaction was a true allergy.",
     "ezetimibe": "A PCSK9 inhibitor or bempedoic acid is the non-statin alternative; reviewer input is needed on the reaction history.",
     "pcsk9_inhibitor": "Ezetimibe or bempedoic acid is the non-injectable alternative — do not rechallenge an injection reaction without review.",
+    "icosapent_ethyl": "A fibrate is the usual alternative for severe hypertriglyceridaemia; review the reaction before any omega-3 product.",
+    "fenofibrate": "Icosapent ethyl or a statin-first strategy is the alternative; do not substitute another fibrate without review.",
 }
 
 
@@ -1314,6 +1360,20 @@ def review_medications(
                 if already_on else "Offer to the clinician for selection and prescription."
             ),
         })
+
+    # The catalogue holds two statin entries (secondary and primary
+    # prevention). A patient already on a statin matches both by class, and a
+    # list that says "already documented" twice for one prescription reads as a
+    # duplicate; the first by priority and name stands for the class.
+    documented_classes: set[str] = set()
+    unique: list[dict[str, Any]] = []
+    for rec in recommendations:
+        if rec["status"] == "already-documented":
+            if rec["drug_class"] in documented_classes:
+                continue
+            documented_classes.add(rec["drug_class"])
+        unique.append(rec)
+    recommendations = unique
 
     # One RAAS strategy at a time: combination ACE inhibitor + ARB adds
     # hyperkalaemia and renal injury without outcome benefit, so when both
