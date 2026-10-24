@@ -434,3 +434,89 @@ def test_a_panel_that_prints_only_non_hdl_still_raises_the_statin():
     # threshold is not quietly applied to a number that is not an LDL.
     assert "non_hdl_high" not in lab_tags({"non_hdl": 189.0})
     assert "non_hdl_high" not in lab_tags({"non_hdl": 0.0})
+
+
+# ---------------------------------------------------------------------------
+# Catalogue invariants — the tables a clinician is asked to trust
+# ---------------------------------------------------------------------------
+
+def test_every_drug_and_rule_names_a_source_that_resolves():
+    """A citation nobody can follow is the same as no citation.
+
+    Every entry carries at least one id from SOURCES, and every id resolves to a
+    title and a publisher URL. This is the check that keeps a new drug from
+    arriving with prose evidence and no source, and a new rule from arriving with
+    no source at all.
+    """
+    from agents import pharmacology_agent as pharmacology
+
+    assert len(pharmacology.SOURCES) >= 10
+    for source_id, source in pharmacology.SOURCES.items():
+        assert source.get("title"), source_id
+        assert str(source.get("url", "")).startswith("http"), source_id
+
+    for drug in pharmacology.DRUGS:
+        ids = drug.get("source")
+        assert ids, f"{drug['key']} has no source"
+        for source_id in ids if isinstance(ids, list) else [ids]:
+            assert source_id in pharmacology.SOURCES, f"{drug['key']} -> {source_id}"
+
+    for rule in pharmacology.INTERACTIONS:
+        ids = rule.get("source")
+        assert ids, f"{rule['a']} + {rule['b']} has no source"
+        for source_id in ids if isinstance(ids, list) else [ids]:
+            assert source_id in pharmacology.SOURCES, f"{rule['a']} + {rule['b']} -> {source_id}"
+
+
+def test_the_catalogue_has_no_duplicate_key_name_or_rule_pair():
+    from agents import pharmacology_agent as pharmacology
+
+    keys = [drug["key"] for drug in pharmacology.DRUGS]
+    names = [drug["name"] for drug in pharmacology.DRUGS]
+    assert len(keys) == len(set(keys))
+    assert len(names) == len(set(names))
+    pairs = [tuple(sorted((rule["a"], rule["b"]))) for rule in pharmacology.INTERACTIONS]
+    assert len(pairs) == len(set(pairs))
+    for rule in pharmacology.INTERACTIONS:
+        assert rule["a"] != rule["b"], rule
+        assert rule["severity"] in {"major", "moderate"}, rule
+
+
+def test_every_rule_target_is_a_drug_a_class_or_an_alias():
+    """A rule aimed at a key nothing produces is a rule that can never fire."""
+    from agents import pharmacology_agent as pharmacology
+
+    known = (
+        {drug["key"] for drug in pharmacology.DRUGS}
+        | {drug["drug_class"] for drug in pharmacology.DRUGS}
+        | set(pharmacology.MED_ALIASES)
+    )
+    for rule in pharmacology.INTERACTIONS:
+        assert rule["a"] in known, rule
+        assert rule["b"] in known, rule
+
+
+def test_every_option_can_be_recognised_as_a_current_medication():
+    """A drug that cannot be matched in the current list cannot be screened.
+
+    One entry per class is enough — the two statin entries describe the same
+    molecules, so the alias table names the class once.
+    """
+    from agents import pharmacology_agent as pharmacology
+
+    aliased_classes = {
+        drug["drug_class"]
+        for drug in pharmacology.DRUGS
+        if drug["key"] in pharmacology.MED_ALIASES
+    }
+    for drug in pharmacology.DRUGS:
+        assert drug["key"] in pharmacology.MED_ALIASES or drug["drug_class"] in aliased_classes, drug["key"]
+
+
+def test_every_option_states_a_dose_a_monitoring_plan_and_its_evidence():
+    from agents import pharmacology_agent as pharmacology
+
+    for drug in pharmacology.DRUGS:
+        for field in ("indications", "allergens", "monitoring", "dose_note", "evidence", "source"):
+            assert drug.get(field), f"{drug['key']} has no {field}"
+        assert drug["priority"] >= 1
