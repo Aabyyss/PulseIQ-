@@ -1,13 +1,16 @@
 /**
  * PulseIQ UI audit — automated contrast + layout regression check.
  *
- * Runs the built app (vite preview, or any base URL) through two passes:
+ * Runs the built app (vite preview, or any base URL) through three passes:
  *
  * 1. Contrast: every visible text element's resolved foreground is compared
  *    against its real rendered background (nearest ancestor that paints one,
- *    alpha-composited) at 1440px and 390px. Fails below WCAG AA — 4.5:1 for
- *    body text, 3:1 for large text (24px+, or 19px+ bold). CSS animations
- *    are disabled first so entrance transitions are audited at final state.
+ *    alpha-composited) at 1440px and 390px, in **both themes**. Fails below
+ *    WCAG AA — 4.5:1 for body text, 3:1 for large text (24px+, or 19px+ bold).
+ *    CSS animations are disabled first so entrance transitions are audited at
+ *    final state. The theme is applied through the stored preference before
+ *    the page boots, and the sweep asserts it took effect: an emulation that
+ *    silently failed would audit the dark palette twice and call it light.
  *
  * 2. Layout: per route at phone, tablet, laptop and desktop widths (375 through
  *    2560 px) — horizontal page overflow, clipped text (scrollWidth >
@@ -15,9 +18,19 @@
  *    a real machine reports (1366x768 and 1536x864 are the most common laptop
  *    panels), because a layout that only holds at 1440 is not responsive.
  *
- * Both passes sign in first. They used to run signed out, which meant every
+ * 3. States: the screens a route cannot show on first paint. The account menu,
+ *    the "Full consult" tab and the "Consultations" history tab are opened at
+ *    1440px and 390px in both themes, and the rendered state — not the route it
+ *    sits on — is audited for contrast and layout. A state that fails to open
+ *    is a failure of its own: auditing the page under the name of a panel that
+ *    never appeared is the same blind spot as auditing /login as the workspace.
+ *
+ * All three passes sign in first. They used to run signed out, which meant every
  * protected route quietly redirected to /login and the sweep audited the same
- * form eight times — green, and blind to the workspace.
+ * form eight times — green, and blind to the workspace. While signed in, each
+ * workspace route is also required to carry the real shell: the dock with its
+ * active item and the account menu. A page that renders without them is a
+ * different page from the one a clinician uses, whatever its URL says.
  *
  * Usage:
  *   node scripts/ui-audit.cjs                        # build + vite preview
@@ -67,16 +80,39 @@ const CHROME_CANDIDATES = [
   "/usr/bin/chromium-browser",
 ].filter(Boolean);
 
+// `dock` is the accessible name of the dock item that must be current on the
+// route (the same string as NAV[].label in app-shell.tsx). Pages that are not a
+// dock destination carry `dock: null`: they must still render the dock, but
+// nothing may claim to be the current page there.
 const ROUTES = [
-  { path: "/", name: "home" },
-  { path: "/consultation", name: "consultation" },
-  { path: "/medications", name: "medications" },
-  { path: "/history", name: "history" },
-  { path: "/notes", name: "notes" },
-  { path: "/patients", name: "patients" },
-  { path: "/guidance", name: "guidance" },
-  { path: "/security", name: "security" },
-  { path: "/agents", name: "agents" },
+  { path: "/", name: "home", dock: "Overview" },
+  { path: "/consultation", name: "consultation", dock: "Consultation" },
+  { path: "/medications", name: "medications", dock: "Medication review" },
+  { path: "/history", name: "history", dock: "History & visits" },
+  { path: "/notes", name: "notes", dock: "My notes" },
+  { path: "/patients", name: "patients", dock: "Patients" },
+  { path: "/guidance", name: "guidance", dock: "Guidance" },
+  { path: "/security", name: "security", dock: "Security" },
+  { path: "/agents", name: "agents", dock: "Agent registry" },
+  // /thank-you is audited because a save lands here, but it is not a dock
+  // destination.
+  { path: "/thank-you", name: "thank-you", dock: null },
+  { path: "/privacy", name: "privacy", dock: null },
+  { path: "/terms", name: "terms", dock: null },
+];
+
+// The palette is class-based (`html.dark`), so the stored preference is what a
+// returning clinician sees. Both are audited: light mode is the one this repo
+// has historically regressed (`light-theme.css` overrides the dark defaults),
+// and dark is the one the launch default paints.
+const THEMES = ["dark", "light"];
+
+// The two widths a state is opened at: a laptop and a phone. The dock and the
+// account menu are the same components at both, but the phone is where a menu
+// can overflow the viewport and where the dock scrolls.
+const STATE_VIEWPORTS = [
+  { width: 1440, height: 900, name: "1440" },
+  { width: 390, height: 844, name: "390" },
 ];
 
 const CONTRAST_VIEWPORTS = [
@@ -95,6 +131,35 @@ const LAYOUT_VIEWPORTS = [
   { width: 1536, height: 864, name: "1536" },
   { width: 1920, height: 1080, name: "1920" },
   { width: 2560, height: 1440, name: "2560" },
+];
+
+/**
+ * Screens that only exist after an interaction. `open` performs the user
+ * gesture; `witness` is what proves the state arrived. Both run inside the
+ * sweep so a renamed tab or a menu that stopped opening fails the audit rather
+ * than quietly auditing the page behind it.
+ */
+const STATES = [
+  {
+    name: "account-menu",
+    route: ROUTES.find((r) => r.name === "home"),
+    open: (page) => page.getByRole("button", { name: "Account menu" }).click(),
+    witness: (page) => page.getByRole("menu").waitFor({ timeout: 5000 }),
+  },
+  {
+    name: "consultation-full-tab",
+    route: ROUTES.find((r) => r.name === "consultation"),
+    open: (page) => page.getByRole("tab", { name: "Full consult" }).click(),
+    witness: (page) =>
+      page.getByRole("tab", { name: "Full consult", selected: true }).waitFor({ timeout: 5000 }),
+  },
+  {
+    name: "history-consultations-tab",
+    route: ROUTES.find((r) => r.name === "history"),
+    open: (page) => page.getByRole("tab", { name: "Consultations" }).click(),
+    witness: (page) =>
+      page.getByRole("tab", { name: "Consultations", selected: true }).waitFor({ timeout: 5000 }),
+  },
 ];
 
 const AUDIT_EMAIL = process.env.PULSEIQ_AUDIT_EMAIL || "demo@cardio.local";
@@ -262,6 +327,35 @@ function layoutAuditScript() {
   return issues;
 }
 
+/**
+ * The shell a signed-in route has to carry. Returns what is missing.
+ *
+ * A route can render its own content and still not be the workspace: a broken
+ * dock, a lost session and a page rendered outside `<AppShell>` all look like
+ * "some HTML at the right URL". The dock's current item is checked by name so
+ * `/medications` cannot pass with `Home` highlighted, and the account menu
+ * proves the page knows who is signed in.
+ */
+function shellAuditScript(expectedDock) {
+  const missing = [];
+  const dock = document.querySelector('nav[aria-label="Workspace"]');
+  if (!dock) {
+    missing.push("the workspace dock");
+  } else {
+    const items = dock.querySelectorAll("a[aria-label]");
+    if (items.length < 9) missing.push(`dock items (${items.length}/9)`);
+    const current = dock.querySelector('[aria-current="page"]');
+    if (expectedDock && !current) missing.push("the active dock item");
+    else if (expectedDock && current.getAttribute("aria-label") !== expectedDock) {
+      missing.push(
+        `the active dock item (${"\u201c"}${current.getAttribute("aria-label")}${"\u201d"} instead of ${"\u201c"}${expectedDock}${"\u201d"})`
+      );
+    }
+  }
+  if (!document.querySelector('[aria-label="Account menu"]')) missing.push("the account menu");
+  return missing;
+}
+
 /* ---------- driver ---------- */
 
 /** The path a route should leave the browser on, ignoring one trailing slash. */
@@ -279,6 +373,30 @@ function parseArgs() {
     // useful on a laptop where no backend is running.
     requireSignIn: args.includes("--require-sign-in") || process.env.PULSEIQ_AUDIT_REQUIRE_SIGN_IN === "1",
   };
+}
+
+/**
+ * Put the theme in the stored preference before the document boots, so the
+ * boot snippet in index.html paints the right palette on the first frame — the
+ * same path a returning clinician takes. Setting the class after load would
+ * audit a page that had already rendered in the other theme.
+ */
+async function primeTheme(page, theme) {
+  await page.addInitScript((value) => {
+    try {
+      localStorage.setItem("pulseiq.theme", value);
+    } catch {
+      /* storage unavailable — the sweep's theme check will fail, and should */
+    }
+  }, theme);
+}
+
+/** Whether the boot snippet actually applied the theme we asked for. */
+async function themeApplied(page, theme) {
+  return page.evaluate(
+    (want) => document.documentElement.classList.contains("dark") === (want === "dark"),
+    theme
+  );
 }
 
 /**
@@ -380,12 +498,18 @@ function waitFor(url, timeoutMs) {
     });
 
     const violations = [];
+    const layoutIssues = [];
+    const redirects = [];
+    const themeIssues = [];
+    const shellIssues = [];
+    const stateIssues = [];
     let sampledTotal = 0;
+    let themeChecks = 0;
+    const sampledByTheme = Object.fromEntries(THEMES.map((theme) => [theme, 0]));
 
     // Where each page actually landed. A redirect to /login is the failure this
     // flag exists to catch: the sweep would otherwise measure the sign-in form
     // under the name of the route it was asked for.
-    const redirects = [];
     const recordLanding = (page, route, viewport, pass) => {
       const landed = new URL(page.url()).pathname;
       if (normalisePath(landed) === normalisePath(route.path)) return;
@@ -399,29 +523,55 @@ function waitFor(url, timeoutMs) {
       }
     };
 
-    for (const vp of CONTRAST_VIEWPORTS) {
-      const page = await browser.newPage({ viewport: { width: vp.width, height: vp.height } });
-      await page.emulateMedia({ reducedMotion: "reduce" });
-      await signIn(page, base, signedIn);
-      assertSession(page, vp.name, "contrast");
-      for (const route of ROUTES) {
-        await page.goto(base + route.path, { waitUntil: "networkidle", timeout: 30000 }).catch(() => {});
-        recordLanding(page, route, vp.name, "contrast");
-        // Freeze animations/transitions so entrance states are audited at final values
-        await page.addStyleTag({
-          content: `*, *::before, *::after {
-            animation: none !important; transition: none !important;
-          }`,
-        });
-        await page.waitForTimeout(150);
-        const out = await page.evaluate(`(${contrastAuditScript})()`);
-        sampledTotal += out.sampled;
-        for (const v of out.violations) violations.push({ viewport: vp.name, route: route.name, ...v });
+    // The theme is only audited if it really applied: a preference the boot
+    // snippet ignored would make both passes the same palette under two names.
+    const checkTheme = async (page, theme, where) => {
+      themeChecks += 1;
+      if (await themeApplied(page, theme)) return;
+      themeIssues.push({ theme, where });
+    };
+
+    // Signed out there is no account menu to require, so the shell check is a
+    // workspace check by definition.
+    const checkShell = async (page, route, where) => {
+      if (!signedIn) return;
+      const missing = await page.evaluate(`(${shellAuditScript})(${JSON.stringify(route.dock)})`);
+      if (missing.length) shellIssues.push({ route: route.name, where, missing });
+    };
+
+    // Entrance transitions are audited at their final values, in every pass.
+    const freeze = `*, *::before, *::after {
+      animation: none !important; transition: none !important;
+    }`;
+
+    for (const theme of THEMES) {
+      for (const vp of CONTRAST_VIEWPORTS) {
+        const page = await browser.newPage({ viewport: { width: vp.width, height: vp.height } });
+        await primeTheme(page, theme);
+        await page.emulateMedia({ reducedMotion: "reduce", colorScheme: theme });
+        await signIn(page, base, signedIn);
+        await checkTheme(page, theme, `${vp.name}px sign-in`);
+        assertSession(page, vp.name, `contrast/${theme}`);
+        for (const route of ROUTES) {
+          await page.goto(base + route.path, { waitUntil: "networkidle", timeout: 30000 }).catch(() => {});
+          recordLanding(page, route, vp.name, `contrast/${theme}`);
+          await checkTheme(page, theme, `${vp.name}px ${route.name}`);
+          await checkShell(page, route, `contrast/${theme} ${vp.name}`);
+          await page.addStyleTag({ content: freeze });
+          await page.waitForTimeout(150);
+          const out = await page.evaluate(`(${contrastAuditScript})()`);
+          sampledTotal += out.sampled;
+          sampledByTheme[theme] += out.sampled;
+          for (const v of out.violations) {
+            violations.push({ theme, viewport: vp.name, route: route.name, ...v });
+          }
+        }
+        await page.close();
       }
-      await page.close();
     }
 
-    const layoutIssues = [];
+    // Layout does not depend on the palette, so one theme covers it: the width
+    // ladder is what a layout bug shows up on.
     for (const vp of LAYOUT_VIEWPORTS) {
       const page = await browser.newPage({ viewport: { width: vp.width, height: vp.height } });
       await signIn(page, base, signedIn);
@@ -429,10 +579,58 @@ function waitFor(url, timeoutMs) {
       for (const route of ROUTES) {
         await page.goto(base + route.path, { waitUntil: "networkidle", timeout: 30000 }).catch(() => {});
         recordLanding(page, route, vp.name, "layout");
+        await checkShell(page, route, `layout ${vp.name}`);
         const issues = await page.evaluate(`(${layoutAuditScript})()`);
         for (const i of issues) layoutIssues.push({ viewport: vp.name, route: route.name, ...i });
       }
       await page.close();
+    }
+
+    // The states a route cannot show on first paint. Each one is opened and
+    // proved — a tab that never switched, or a menu that never rendered, is
+    // recorded as its own failure instead of auditing the page behind it.
+    let statesAudited = 0;
+    if (signedIn) {
+      for (const theme of THEMES) {
+        for (const state of STATES) {
+          for (const vp of STATE_VIEWPORTS) {
+            const page = await browser.newPage({ viewport: { width: vp.width, height: vp.height } });
+            const where = `${state.name} @ ${vp.name}px ${theme}`;
+            try {
+              await primeTheme(page, theme);
+              await page.emulateMedia({ reducedMotion: "reduce", colorScheme: theme });
+              await signIn(page, base, signedIn);
+              await page.goto(base + state.route.path, { waitUntil: "networkidle", timeout: 30000 });
+              recordLanding(page, state.route, vp.name, `state:${state.name}`);
+              await checkTheme(page, theme, where);
+              await checkShell(page, state.route, where);
+              await page.addStyleTag({ content: freeze });
+              await state.open(page);
+              await state.witness(page);
+              await page.waitForTimeout(120);
+              const out = await page.evaluate(`(${contrastAuditScript})()`);
+              sampledTotal += out.sampled;
+              sampledByTheme[theme] += out.sampled;
+              for (const v of out.violations) {
+                violations.push({ theme, viewport: vp.name, route: state.name, state: state.name, ...v });
+              }
+              for (const i of await page.evaluate(`(${layoutAuditScript})()`)) {
+                layoutIssues.push({ theme, viewport: vp.name, route: state.name, state: state.name, ...i });
+              }
+              statesAudited += 1;
+            } catch (err) {
+              stateIssues.push({
+                state: state.name,
+                theme,
+                viewport: vp.name,
+                error: String(err.message || err).split("\n")[0],
+              });
+            } finally {
+              await page.close();
+            }
+          }
+        }
+      }
     }
 
     await browser.close();
@@ -445,10 +643,17 @@ function waitFor(url, timeoutMs) {
           base,
           signedIn,
           requireSignIn,
+          themes: THEMES,
           sampledTotal,
+          sampledByTheme,
+          themeChecks,
+          statesAudited,
           violations,
           layoutIssues,
           redirects,
+          themeIssues,
+          shellIssues,
+          stateIssues,
         },
         null,
         2
@@ -456,15 +661,51 @@ function waitFor(url, timeoutMs) {
     );
 
     console.log(
-      `\nContrast: ${sampledTotal} text elements sampled across ${CONTRAST_VIEWPORTS.length} viewports × ${ROUTES.length} routes`
+      `\nContrast: ${sampledTotal} text elements sampled across ${CONTRAST_VIEWPORTS.length} viewports × ${ROUTES.length} routes × ${THEMES.length} themes` +
+        (signedIn ? ` (${THEMES.map((t) => `${t} ${sampledByTheme[t]}`).join(", ")})` : "")
     );
     console.log(
       `Layout:   ${LAYOUT_VIEWPORTS.length} viewports × ${ROUTES.length} routes checked` +
-        (signedIn ? " (signed in)" : " (signed out)") +
-        "\n"
+        (signedIn ? " (signed in)" : " (signed out)")
     );
+    console.log(
+      signedIn
+        ? `States:   ${statesAudited}/${STATES.length * STATE_VIEWPORTS.length * THEMES.length} open states audited`
+        : "States:   skipped (signed out — the workspace is not reachable)"
+    );
+    console.log("");
 
     let failed = false;
+    if (themeIssues.length) {
+      failed = true;
+      console.log(`\n✗ Theme: ${themeIssues.length} page load(s) did not apply the theme asked for`);
+      for (const t of themeIssues.slice(0, 5)) {
+        console.log(`  [${t.where}] asked for ${t.theme}`);
+      }
+      if (themeIssues.length > 5) console.log(`  … and ${themeIssues.length - 5} more (see ${REPORT})`);
+    } else if (themeChecks) {
+      console.log(`✓ Theme: ${themeChecks} page loads applied the requested palette`);
+    }
+    if (shellIssues.length) {
+      failed = true;
+      console.log(`\n✗ Shell: ${shellIssues.length} signed-in route(s) rendered without the workspace shell`);
+      for (const s of shellIssues.slice(0, 5)) {
+        console.log(`  [${s.where} ${s.route}] missing ${s.missing.join(", ")}`);
+      }
+      if (shellIssues.length > 5) console.log(`  … and ${shellIssues.length - 5} more (see ${REPORT})`);
+    } else if (signedIn) {
+      console.log("✓ Shell: every signed-in route carried the dock, its active item and the account menu");
+    }
+    if (stateIssues.length) {
+      failed = true;
+      console.log(`\n✗ States: ${stateIssues.length} state(s) did not open`);
+      for (const s of stateIssues.slice(0, 5)) {
+        console.log(`  [${s.state} @ ${s.viewport}px ${s.theme}] ${s.error}`);
+      }
+      if (stateIssues.length > 5) console.log(`  … and ${stateIssues.length - 5} more (see ${REPORT})`);
+    } else if (statesAudited) {
+      console.log(`✓ States: all ${statesAudited} open-state audits reached the state they name`);
+    }
     if (violations.length) {
       failed = true;
       console.log(`✗ Contrast violations (${violations.length}):`);
