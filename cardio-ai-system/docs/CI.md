@@ -10,7 +10,7 @@ move on purpose, not overnight.
 |---|---|
 | `backend` | The pytest suite (259 cases) and the script checks: clinical direction, the published score tables against their sources, de-identification, the local stores, the login limiter, the FHIR bundle, the live medication screen. |
 | `frontend` | `tsc -b`, the vitest suite (55 cases: extraction patterns, session/retry behaviour, PDF layout, the microphone meter's thresholds) and the production build. |
-| `ui-audit` | The built app, **signed in**, swept at 3 contrast viewports × 9 routes and 9 layout widths × 9 routes: WCAG AA contrast against each element's real rendered background, no horizontal overflow, no clipped text, no tap target under 24 px. |
+| `ui-audit` | The built app, **signed in**, swept in **both themes**: contrast at 3 viewports × 12 routes × 2 palettes, layout at 9 widths × 12 routes, and 12 open-state audits (account menu, both consult tabs, each at 1440 and 390 in both themes). WCAG AA against each element's real rendered background, no horizontal overflow, no clipped text, no tap target under 24 px — plus the dock, its current item and the account menu on every signed-in route. |
 
 `.github/workflows/deploy-pages.yml` publishes the frontend to GitHub Pages; it
 builds the same bundle the `frontend` job builds, so a Pages deploy that
@@ -46,19 +46,50 @@ backend fails the job. The sweep also compares the URL each page landed on with
 the route it requested, and fails on any redirect to `/login` while signed in —
 a page that renders the sign-in form is not the page it was asked for.
 
+## What the audit covers beyond a first paint
+
+Three checks in the sweep exist because measuring one render of each route was
+not enough (ADR-029):
+
+- **Both palettes.** Each contrast viewport and route is loaded once per theme
+  with `pulseiq.theme` written before the document boots, and the *system*
+  preference emulated as the other theme — so only the stored preference can
+  produce the audited palette. Every load asserts the class it asked for took
+  effect; `themeChecks` and `themeIssues` record how many did. Deleting the
+  stored write fails all 90 loads, which is how the check was proved to have
+  teeth.
+- **The screens behind a click.** The account menu, the "Full consult" tab and
+  the "Consultations" list are opened at 1440 and 390 in both themes, proved to
+  have arrived (menu role; tab `selected`), then audited for contrast and
+  layout. A state that never opens fails the job as `stateIssues` — auditing the
+  page behind a panel that did not appear is the same blind spot as auditing
+  `/login` as the workspace.
+- **The shell.** Every signed-in route must render the dock with nine
+  destinations, the dock item that matches the route (by accessible name) and
+  the account menu. A page can render its own content and still not be the
+  workspace; `shellIssues` names what was missing.
+
+The audit found two real defects on its first run: the dock marked "Overview" as
+current on `/privacy`, `/terms` and `/thank-you` while `NavLink` dropped the
+matching `aria-current`, and three delete buttons in the consultations tab were
+22 px square.
+
 ## Artifacts
 
 `ui-audit-report` is uploaded whether the job passes or fails and contains:
 
-- `scripts/ui-audit-report.json` — `sampledTotal`, every contrast violation,
-  every layout issue (page overflow, clipped text, small target), plus
-  `signedIn`, `requireSignIn` and `redirects` so the artifact states what was
-  audited, not only that it passed.
+- `scripts/ui-audit-report.json` — `sampledTotal` and `sampledByTheme`, every
+  contrast violation (tagged with theme and, for a state, its name), every
+  layout issue (page overflow, clipped text, small target), plus `signedIn`,
+  `requireSignIn`, `themes`, `themeChecks`, `statesAudited`, `redirects`,
+  `themeIssues`, `shellIssues` and `stateIssues` so the artifact states what was
+  audited and what failed, not only that it did.
 - `backend-audit.log` — the server's stdout. A red audit has two possible
   authors, the layout and the server the pages were reading from.
 
 The job is capped at `timeout-minutes: 25`: it installs a Python stack, builds
-the bundle, starts a server and walks 108 page loads.
+the bundle, starts a server and walks 72 contrast loads, 108 layout loads and 12
+state loads.
 
 ## Reproducing any job locally
 
