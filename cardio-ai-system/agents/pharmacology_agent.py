@@ -45,6 +45,64 @@ DISCLAIMER = (
 
 
 # ---------------------------------------------------------------------------
+# Sources
+# ---------------------------------------------------------------------------
+# Every drug entry and every interaction rule names at least one id from this
+# table, and `backend/test_pharmacology_agent.py` fails when one does not
+# resolve. A citation nobody can follow is the same as no citation, so each
+# entry carries the publisher's URL as well as the title. `label` is the FDA
+# prescribing information (DailyMed) — the source for CYP/P-gp and dose-limit
+# statements that no single guideline lists.
+
+SOURCES: dict[str, dict[str, str]] = {
+    "ccd-2023": {
+        "title": "2023 AHA/ACC/ACCP/ASPC/NLA/PCNA Guideline for the Management of Patients With Chronic Coronary Disease",
+        "url": "https://www.ahajournals.org/doi/10.1161/CIR.0000000000001168",
+    },
+    "hf-2022": {
+        "title": "2022 AHA/ACC/HFSA Guideline for the Management of Heart Failure",
+        "url": "https://www.ahajournals.org/doi/10.1161/CIR.0000000000001063",
+    },
+    "acs-2025": {
+        "title": "2025 ACC/AHA/ACEP/NAEMSP/SCAI Guideline for the Management of Patients With Acute Coronary Syndromes",
+        "url": "https://www.ahajournals.org/doi/10.1161/CIR.0000000000001309",
+    },
+    "af-2023": {
+        "title": "2023 ACC/AHA/ACCP/HRS Guideline for the Diagnosis and Management of Atrial Fibrillation",
+        "url": "https://www.ahajournals.org/doi/10.1161/CIR.0000000000001193",
+    },
+    "cholesterol-2018": {
+        "title": "2018 AHA/ACC/Multisociety Guideline on the Management of Blood Cholesterol",
+        "url": "https://www.ahajournals.org/doi/10.1161/CIR.0000000000000625",
+    },
+    "primary-prevention-2019": {
+        "title": "2019 ACC/AHA Guideline on the Primary Prevention of Cardiovascular Disease",
+        "url": "https://www.ahajournals.org/doi/10.1161/CIR.0000000000000678",
+    },
+    "ckd-2024": {
+        "title": "KDIGO 2024 Clinical Practice Guideline for the Evaluation and Management of Chronic Kidney Disease",
+        "url": "https://doi.org/10.1016/j.kint.2023.10.018",
+    },
+    "ada-2025": {
+        "title": "Standards of Care in Diabetes—2025 (American Diabetes Association)",
+        "url": "https://diabetesjournals.org/care/issue/48/Supplement_1",
+    },
+    "acog-222": {
+        "title": "Gestational Hypertension and Preeclampsia: ACOG Practice Bulletin, Number 222",
+        "url": "https://doi.org/10.1097/AOG.0000000000003891",
+    },
+    "gold-2025": {
+        "title": "Global Strategy for the Prevention, Diagnosis and Management of COPD: 2025 Report (GOLD)",
+        "url": "https://goldcopd.org/2025-gold-report/",
+    },
+    "label": {
+        "title": "FDA prescribing information (DailyMed) — drug-specific interactions and dose limits",
+        "url": "https://dailymed.nlm.nih.gov/dailymed/",
+    },
+}
+
+
+# ---------------------------------------------------------------------------
 # Input normalisation
 # ---------------------------------------------------------------------------
 
@@ -266,6 +324,7 @@ DRUGS: list[dict[str, Any]] = [
         "monitoring": ["Bleeding signs (bruising, melena) at each review", "Haemoglobin if anaemic or on dual therapy"],
         "dose_note": "Suspected ACS: 162–325 mg chewed at presentation, then 75–100 mg once daily.",
         "evidence": "ACC/AHA chest pain guideline — aspirin for suspected ACS unless contraindicated.",
+        "source": ["acs-2025"],
     },
     {
         "key": "clopidogrel",
@@ -283,6 +342,7 @@ DRUGS: list[dict[str, Any]] = [
         "monitoring": ["Bleeding signs", "Adherence/duration per stent protocol"],
         "dose_note": "300–600 mg loading then 75 mg daily, per ACS/PCI protocol and bleeding risk.",
         "evidence": "ACC/AHA ACS guideline — P2Y12 inhibitor added to aspirin for ACS or after PCI.",
+        "source": ["acs-2025"],
     },
     {
         "key": "statin_high_intensity",
@@ -303,6 +363,7 @@ DRUGS: list[dict[str, Any]] = [
         "monitoring": ["Lipid panel at 6–8 weeks", "ALT if symptomatic", "Muscle symptoms (myopathy)"],
         "dose_note": "Atorvastatin 40–80 mg nightly, or rosuvastatin 20–40 mg — high intensity for ASCVD/ACS.",
         "evidence": "AHA/ACC cholesterol guideline — high-intensity statin for established ASCVD and ACS.",
+        "source": ["cholesterol-2018", "ccd-2023"],
     },
     {
         "key": "statin_primary_prevention",
@@ -323,6 +384,7 @@ DRUGS: list[dict[str, Any]] = [
         "monitoring": ["Lipid panel at 6–8 weeks", "ALT if symptomatic", "Muscle symptoms (myopathy)"],
         "dose_note": "Atorvastatin 20–40 mg nightly, or rosuvastatin 10–20 mg — moderate intensity for primary prevention.",
         "evidence": "AHA/ACC cholesterol guideline — a statin is indicated when the ten-year ASCVD risk is intermediate (≥7.5%) or high, after a clinician-patient risk discussion.",
+        "source": ["primary-prevention-2019", "cholesterol-2018"],
     },
     {
         "key": "beta_blocker",
@@ -343,6 +405,7 @@ DRUGS: list[dict[str, Any]] = [
         "monitoring": ["Heart rate and blood pressure", "Symptoms of fatigue/bronchospasm"],
         "dose_note": "Metoprolol succinate 25–50 mg daily (or bisoprolol 2.5–5 mg) once haemodynamically stable.",
         "evidence": "Beta-blockade after ACS/for stable CAD and HFrEF (guideline-directed medical therapy).",
+        "source": ["ccd-2023", "hf-2022"],
     },
     {
         "key": "ace_inhibitor",
@@ -366,6 +429,7 @@ DRUGS: list[dict[str, Any]] = [
         "monitoring": ["Potassium and creatinine at 1–2 weeks", "Cough and angioedema", "Blood pressure"],
         "dose_note": "Ramipril 2.5 mg daily, titrate to 10 mg (or lisinopril 5→20 mg) as tolerated.",
         "evidence": "RAAS blockade for hypertension, HFrEF and CAD with diabetes or CKD.",
+        "source": ["hf-2022", "ckd-2024"],
     },
     {
         "key": "arb",
@@ -383,6 +447,7 @@ DRUGS: list[dict[str, Any]] = [
         "monitoring": ["Potassium and creatinine at 1–2 weeks", "Blood pressure"],
         "dose_note": "Losartan 50 mg daily (or valsartan 80 mg) — the alternative when an ACE inhibitor causes cough.",
         "evidence": "ARBs where ACE inhibitors are not tolerated; same RAAS indications.",
+        "source": ["hf-2022"],
     },
     {
         "key": "ccb",
@@ -397,6 +462,7 @@ DRUGS: list[dict[str, Any]] = [
         "monitoring": ["Blood pressure", "Ankle oedema"],
         "dose_note": "Amlodipine 5–10 mg once daily.",
         "evidence": "First-line antihypertensive class; add-on for angina when beta-blockade is unsuitable.",
+        "source": ["ccd-2023"],
     },
     {
         "key": "loop_diuretic",
@@ -416,6 +482,7 @@ DRUGS: list[dict[str, Any]] = [
         "monitoring": ["Weight and urine output", "Potassium, sodium and creatinine"],
         "dose_note": "Furosemide 20–40 mg once daily for congestion; adjust to weight and urine output.",
         "evidence": "Guideline-directed decongestion in heart failure with volume overload.",
+        "source": ["hf-2022"],
     },
     {
         "key": "mra",
@@ -436,6 +503,7 @@ DRUGS: list[dict[str, Any]] = [
         "monitoring": ["Potassium and creatinine at 1 and 4 weeks", "Gynaecomastia"],
         "dose_note": "Spironolactone 12.5–25 mg daily when EF is reduced and potassium/eGFR allow.",
         "evidence": "MRA for HFrEF; the potassium/eGFR gates come from that trial population.",
+        "source": ["hf-2022"],
     },
     {
         "key": "sglt2_inhibitor",
@@ -453,6 +521,7 @@ DRUGS: list[dict[str, Any]] = [
         "monitoring": ["eGFR and potassium", "Genital infections", "Volume status / blood pressure", "Ketoacidosis symptoms"],
         "dose_note": "Dapagliflozin 10 mg daily (empagliflozin 10 mg) once eGFR allows.",
         "evidence": "SGLT2 inhibitor for heart failure and diabetes with cardiovascular disease.",
+        "source": ["hf-2022", "ada-2025"],
     },
     {
         "key": "nitrate",
@@ -467,6 +536,7 @@ DRUGS: list[dict[str, Any]] = [
         "monitoring": ["Blood pressure and heart rate after each dose", "Headache (expected)"],
         "dose_note": "Sublingual GTN 0.4 mg as needed for ongoing ischaemic pain — screen for PDE5 inhibitors first.",
         "evidence": "ACC/AHA chest pain guideline — nitrates for ischaemic pain, contraindicated with PDE5 inhibitors.",
+        "source": ["ccd-2023", "acs-2025"],
     },
     {
         "key": "anticoagulant",
@@ -492,6 +562,7 @@ DRUGS: list[dict[str, Any]] = [
         "monitoring": ["Haemoglobin, platelets and renal function at baseline and intervals", "Bleeding signs", "INR if warfarin", "CHA₂DS₂-VASc review"],
         "dose_note": "Apixaban 5 mg twice daily (2.5 mg when 2 of: age ≥80, weight ≤60 kg, creatinine ≥1.5 mg/dL).",
         "evidence": "CHA₂DS₂-VASc-guided anticoagulation for atrial fibrillation or prior thromboembolism.",
+        "source": ["af-2023"],
     },
     {
         "key": "metformin",
@@ -509,6 +580,7 @@ DRUGS: list[dict[str, Any]] = [
         "monitoring": ["eGFR every 3–6 months", "B12 if long-term use", "Gastrointestinal tolerance"],
         "dose_note": "Metformin 500 mg once or twice daily with food, titrated slowly; hold for contrast studies or acute illness.",
         "evidence": "First-line glucose-lowering therapy in type 2 diabetes with cardiovascular disease.",
+        "source": ["ada-2025"],
     },
     {
         "key": "ppi",
@@ -523,6 +595,7 @@ DRUGS: list[dict[str, Any]] = [
         "monitoring": ["Indication for continuing after the bleeding-risk period ends"],
         "dose_note": "Pantoprazole 20–40 mg daily while on antithrombotic therapy (preferred over omeprazole with clopidogrel).",
         "evidence": "Gastroprotection when antiplatelet/anticoagulant bleeding risk is elevated (age, ulcer history, dual therapy).",
+        "source": ["ccd-2023", "label"],
     },
     {
         "key": "digoxin",
@@ -540,6 +613,7 @@ DRUGS: list[dict[str, Any]] = [
         "monitoring": ["Digoxin level", "Potassium and renal function", "Bradycardia or nausea (toxicity)"],
         "dose_note": "Digoxin 0.125–0.25 mg daily (lower if elderly or renal impairment).",
         "evidence": "Rate control in atrial fibrillation when beta-blockade is contraindicated or insufficient.",
+        "source": ["af-2023"],
     },
     {
         "key": "amiodarone",
@@ -554,6 +628,7 @@ DRUGS: list[dict[str, Any]] = [
         "monitoring": ["Thyroid function and LFTs every 6 months", "ECG (QT)", "Annual ophthalmology review"],
         "dose_note": "Specialist-led loading then 200 mg daily — long-term toxicity limits duration.",
         "evidence": "Rhythm control in atrial fibrillation when rate control fails or symptoms persist.",
+        "source": ["af-2023"],
     },
     {
         "key": "nsaid",
@@ -568,6 +643,7 @@ DRUGS: list[dict[str, Any]] = [
         "monitoring": [],
         "dose_note": "Avoid; use paracetamol for analgesia in this profile.",
         "evidence": "NSAIDs raise bleeding, renal and heart-failure risk in the flagged profiles below.",
+        "source": ["ccd-2023", "label"],
     },
 ]
 
@@ -659,61 +735,80 @@ _ALLERGY_ALTERNATIVES: dict[str, str] = {
 INTERACTIONS: list[dict[str, str]] = [
     {"a": "p2y12", "b": "anticoagulant", "severity": "major",
      "note": "P2Y12 inhibitor plus anticoagulant markedly increases bleeding (and the risk compounds with aspirin).",
-     "action": "Use only with a defined indication and stop date; add gastroprotection and review at each visit."},
+     "action": "Use only with a defined indication and stop date; add gastroprotection and review at each visit.",
+     "source": ["acs-2025", "af-2023"]},
     {"a": "aspirin", "b": "anticoagulant", "severity": "major",
      "note": "Antiplatelet plus anticoagulant roughly doubles major bleeding.",
-     "action": "Combine only with a clear indication (e.g. recent stent); add gastroprotection and set a stop date."},
+     "action": "Combine only with a clear indication (e.g. recent stent); add gastroprotection and set a stop date.",
+     "source": ["af-2023"]},
     {"a": "aspirin", "b": "p2y12", "severity": "major",
      "note": "Dual antiplatelet therapy raises bleeding without benefit outside ACS/PCI.",
-     "action": "Use only per ACS/PCI protocol, and document the planned duration."},
+     "action": "Use only per ACS/PCI protocol, and document the planned duration.",
+     "source": ["acs-2025"]},
     {"a": "aspirin", "b": "nsaid", "severity": "major",
      "note": "NSAID plus antiplatelet increases GI bleeding and renal risk.",
-     "action": "Avoid NSAIDs; use paracetamol for analgesia."},
+     "action": "Avoid NSAIDs; use paracetamol for analgesia.",
+     "source": ["ccd-2023", "label"]},
     {"a": "nsaid", "b": "anticoagulant", "severity": "major",
      "note": "NSAID plus anticoagulant substantially increases GI and intracranial bleeding.",
-     "action": "Avoid NSAIDs; if unavoidable add gastroprotection (generally not recommended)."},
+     "action": "Avoid NSAIDs; if unavoidable add gastroprotection (generally not recommended).",
+     "source": ["label", "af-2023"]},
     {"a": "nsaid", "b": "ace_inhibitor", "severity": "moderate",
      "note": "NSAIDs blunt antihypertensive effect and can worsen renal function.",
-     "action": "Avoid where possible; if used, check creatinine and potassium within a week."},
+     "action": "Avoid where possible; if used, check creatinine and potassium within a week.",
+     "source": ["ckd-2024"]},
     {"a": "nsaid", "b": "arb", "severity": "moderate",
      "note": "NSAIDs blunt ARB effect and can worsen renal function.",
-     "action": "Avoid where possible; monitor renal function if used."},
+     "action": "Avoid where possible; monitor renal function if used.",
+     "source": ["ckd-2024"]},
     {"a": "nsaid", "b": "loop_diuretic", "severity": "moderate",
      "note": "NSAIDs reduce diuretic efficacy ('triple whammy' with a RAAS blocker).",
-     "action": "Avoid; review diuretic dose if NSAIDs are unavoidable."},
+     "action": "Avoid; review diuretic dose if NSAIDs are unavoidable.",
+     "source": ["label", "hf-2022"]},
     {"a": "ace_inhibitor", "b": "mra", "severity": "major",
      "note": "RAAS blocker plus MRA increases hyperkalaemia risk.",
-     "action": "Check potassium and creatinine at 1 and 4 weeks; stop if K+ >5.5 mmol/L."},
+     "action": "Check potassium and creatinine at 1 and 4 weeks; stop if K+ >5.5 mmol/L.",
+     "source": ["hf-2022", "ckd-2024"]},
     {"a": "arb", "b": "mra", "severity": "major",
      "note": "RAAS blocker plus MRA increases hyperkalaemia risk.",
-     "action": "Check potassium and creatinine at 1 and 4 weeks."},
+     "action": "Check potassium and creatinine at 1 and 4 weeks.",
+     "source": ["hf-2022"]},
     {"a": "ace_inhibitor", "b": "arb", "severity": "major",
      "note": "Dual RAAS blockade adds hyperkalaemia and renal injury without outcome benefit.",
-     "action": "Use one agent only."},
+     "action": "Use one agent only.",
+     "source": ["hf-2022"]},
     {"a": "beta_blocker", "b": "nd_ccb", "severity": "major",
      "note": "Beta-blocker plus verapamil/diltiazem causes bradycardia, heart block and hypotension.",
-     "action": "Avoid the combination; amlodipine is the safe calcium-channel option here."},
+     "action": "Avoid the combination; amlodipine is the safe calcium-channel option here.",
+     "source": ["label", "af-2023"]},
     {"a": "statin_high_intensity", "b": "amiodarone", "severity": "major",
      "note": "Amiodarone raises simvastatin/atorvastatin exposure — myopathy/rhabdomyolysis risk.",
-     "action": "Cap simvastatin at 20 mg, or switch to rosuvastatin/pravastatin and warn about muscle pain."},
+     "action": "Cap simvastatin at 20 mg, or switch to rosuvastatin/pravastatin and warn about muscle pain.",
+     "source": ["label"]},
     {"a": "amiodarone", "b": "anticoagulant", "severity": "major",
      "note": "Amiodarone raises warfarin INR and DOAC exposure (P-gp inhibition).",
-     "action": "Reduce the anticoagulant dose and monitor INR/bleeding closely."},
+     "action": "Reduce the anticoagulant dose and monitor INR/bleeding closely.",
+     "source": ["label"]},
     {"a": "amiodarone", "b": "digoxin", "severity": "major",
      "note": "Amiodarone approximately doubles digoxin levels.",
-     "action": "Halve the digoxin dose and check the level."},
+     "action": "Halve the digoxin dose and check the level.",
+     "source": ["label"]},
     {"a": "digoxin", "b": "loop_diuretic", "severity": "moderate",
      "note": "Diuretic-induced hypokalaemia potentiates digoxin toxicity.",
-     "action": "Monitor potassium and digoxin level; replace potassium as needed."},
+     "action": "Monitor potassium and digoxin level; replace potassium as needed.",
+     "source": ["label", "hf-2022"]},
     {"a": "nitrate", "b": "pde5_inhibitor", "severity": "major",
      "note": "Nitrate plus a PDE5 inhibitor (sildenafil/tadalafil) causes profound hypotension.",
-     "action": "Contraindicated — separate by at least 24 h (48 h for tadalafil) and counsel the patient."},
+     "action": "Contraindicated — separate by at least 24 h (48 h for tadalafil) and counsel the patient.",
+     "source": ["label", "ccd-2023"]},
     {"a": "clopidogrel", "b": "ppi", "severity": "moderate",
      "note": "Omeprazole (not pantoprazole) reduces clopidogrel activation via CYP2C19.",
-     "action": "Use pantoprazole when gastroprotection is needed alongside clopidogrel."},
+     "action": "Use pantoprazole when gastroprotection is needed alongside clopidogrel.",
+     "source": ["label", "ccd-2023"]},
     {"a": "metformin", "b": "loop_diuretic", "severity": "moderate",
      "note": "Diuretic-induced volume depletion raises the risk of metformin-associated lactic acidosis.",
-     "action": "Hold metformin during acute illness or aggressive diuresis."},
+     "action": "Hold metformin during acute illness or aggressive diuresis.",
+     "source": ["ada-2025", "label"]},
 ]
 
 
