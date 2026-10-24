@@ -384,6 +384,7 @@ DRUGS: list[dict[str, Any]] = [
         "avoid": [
             ("pregnancy", "absolute", "Statins are contraindicated in pregnancy and breastfeeding."),
             ("liver_disease", "relative", "Active hepatic disease — check transaminases before starting."),
+            ("statin_intolerance", "relative", "Documented statin intolerance — review the reaction before rechallenging, and consider a different statin or a non-statin agent."),
         ],
         "caution": [
             ("diabetes", "Statin therapy can modestly raise glucose — benefit still outweighs it in established ASCVD."),
@@ -405,6 +406,7 @@ DRUGS: list[dict[str, Any]] = [
         "avoid": [
             ("pregnancy", "absolute", "Statins are contraindicated in pregnancy and breastfeeding."),
             ("liver_disease", "relative", "Active hepatic disease — check transaminases before starting."),
+            ("statin_intolerance", "relative", "Documented statin intolerance — review the reaction before rechallenging, and consider a different statin or a non-statin agent."),
         ],
         "caution": [
             ("diabetes", "Statin therapy can modestly raise glucose — in primary prevention the ten-year risk still decides."),
@@ -804,6 +806,41 @@ DRUGS: list[dict[str, Any]] = [
         "evidence": "Hypertension guideline — a thiazide-type diuretic is a first-line agent for hypertension, alone or as add-on therapy.",
         "source": ["hypertension-2017"],
     },
+    {
+        "key": "ezetimibe",
+        "name": "Ezetimibe",
+        "drug_class": "cholesterol_absorption_inhibitor",
+        "priority": 4,
+        "indications": ["dyslipidemia", "dyslipidemia_lab", "non_hdl_high", "ldl_very_high", "statin_intolerance", "established_cad", "prior_mi"],
+        "avoid": [
+            ("pregnancy", "relative", "Not recommended in pregnancy or breastfeeding — stop before conception and plan lipid therapy with the prescriber."),
+            ("liver_disease", "relative", "Active hepatic disease — check transaminases before adding it to a statin."),
+        ],
+        "caution": [("transaminitis", "ALT >3× upper limit — investigate before adding another lipid-lowering agent.")],
+        "lab_guards": [("transaminitis", "relative", "ALT >3× upper limit — investigate before starting.")],
+        "allergens": ["ezetimibe", "zetia", "ezetrol"],
+        "monitoring": ["Lipid panel at 4–12 weeks", "ALT when combined with a statin", "Muscle symptoms if a statin is co-prescribed"],
+        "dose_note": "Ezetimibe 10 mg once daily, with or without a statin.",
+        "evidence": "Cholesterol guideline — ezetimibe is added to maximally tolerated statin therapy when LDL-C remains above the treatment threshold, and is an option when a statin cannot be used.",
+        "source": ["cholesterol-2018"],
+    },
+    {
+        "key": "pcsk9_inhibitor",
+        "name": "PCSK9 inhibitor (evolocumab/alirocumab)",
+        "drug_class": "pcsk9_inhibitor",
+        "priority": 5,
+        "indications": ["familial_hypercholesterolemia", "ldl_very_high", "statin_intolerance"],
+        "avoid": [
+            ("pregnancy", "relative", "Not recommended in pregnancy — specialist lipid planning before conception."),
+        ],
+        "caution": [("liver_disease", "No dose adjustment is established; review hepatic disease with the prescriber.")],
+        "lab_guards": [],
+        "allergens": ["evolocumab", "alirocumab", "repatha", "praluent", "pcsk9"],
+        "monitoring": ["Lipid panel at 4–12 weeks", "Injection-site reactions", "Adherence to the injection schedule"],
+        "dose_note": "Evolocumab 140 mg every 2 weeks or 420 mg monthly; alirocumab 75–150 mg every 2 weeks.",
+        "evidence": "Cholesterol guideline — a PCSK9 inhibitor for familial hypercholesterolaemia or severe LDL-C elevation when LDL-C stays above threshold on a maximally tolerated statin plus ezetimibe.",
+        "source": ["cholesterol-2018"],
+    },
 ]
 
 _DRUG_BY_KEY = {d["key"]: d for d in DRUGS}
@@ -823,6 +860,8 @@ MED_ALIASES: dict[str, tuple[str, ...]] = {
     "hydralazine_isosorbide": ("hydralazine", "isosorbide dinitrate", "isosorbide", "bidil", "apresoline"),
     "finerenone": ("finerenone", "kerendia"),
     "thiazide": ("hydrochlorothiazide", "hctz", "chlorthalidone", "indapamide", "bendroflumethiazide", "thiazide"),
+    "ezetimibe": ("ezetimibe", "zetia", "ezetrol"),
+    "pcsk9_inhibitor": ("evolocumab", "repatha", "alirocumab", "praluent", "pcsk9"),
     "statin_high_intensity": ("atorvastatin", "rosuvastatin", "simvastatin", "pravastatin", "statin", "lipitor", "crestor", "zocor"),
     "beta_blocker": ("metoprolol", "bisoprolol", "carvedilol", "atenolol", "nebivolol", "propranolol", "lopressor", "betaloc", "concor"),
     "ace_inhibitor": ("ramipril", "lisinopril", "enalapril", "captopril", "perindopril", "trandolapril", "ace inhibitor", "acei"),
@@ -898,6 +937,8 @@ _ALLERGY_ALTERNATIVES: dict[str, str] = {
     "hydralazine_isosorbide": "If a nitrate or hydralazine allergy is confirmed, other vasodilators need specialist input — do not rechallenge.",
     "finerenone": "Other potassium-sparing options are limited; discuss with the prescriber and recheck potassium before any substitute.",
     "thiazide": "A calcium-channel blocker or an ACE inhibitor/ARB is the usual alternative antihypertensive — avoid other sulfonamide diuretics if the reaction was a true allergy.",
+    "ezetimibe": "A PCSK9 inhibitor or bempedoic acid is the non-statin alternative; reviewer input is needed on the reaction history.",
+    "pcsk9_inhibitor": "Ezetimibe or bempedoic acid is the non-injectable alternative — do not rechallenge an injection reaction without review.",
 }
 
 
