@@ -55,16 +55,19 @@ const NAV: NavItem[] = [
   { to: "/agents", label: "Agent registry", short: "Agents", icon: Bot }
 ];
 
-/** Longest prefix wins, so `/history` doesn't swallow a deeper route. */
-function activeItem(pathname: string): NavItem {
+/**
+ * Longest prefix wins, so `/history` doesn't swallow a deeper route.
+ *
+ * A path that is not a destination returns null rather than the overview: the
+ * legal pages and the saved-visit confirmation are not "Overview", and marking
+ * the home item current there told screen readers they were somewhere they were
+ * not (the visual dot said the same, because both read this function).
+ */
+function activeItem(pathname: string): NavItem | null {
   return (
     NAV.filter((item) => (item.end ? pathname === item.to : pathname.startsWith(item.to))).sort(
       (a, b) => b.to.length - a.to.length
-    )[0] ??
-    // Unknown path: the breadcrumb names the overview page, not whichever item
-    // happens to sit first.
-    NAV.find((item) => item.end) ??
-    NAV[0]
+    )[0] ?? null
   );
 }
 
@@ -188,7 +191,7 @@ function AccountMenu() {
   );
 }
 
-function Topbar({ title }: { title: string }) {
+function Topbar({ title }: { title?: string }) {
   return (
     <header className="sticky top-0 z-30 flex h-14 items-center gap-3 border-b border-line bg-canvas/85 px-4 backdrop-blur-md sm:px-6 lg:px-10">
       {/* The mark is aria-hidden and the wordmark is hidden on phones, so the
@@ -202,11 +205,16 @@ function Topbar({ title }: { title: string }) {
 
       {/* The breadcrumb is a wide-screen nicety: on a phone the page's own
           heading and the dock's active tab already name where you are, and
-          the fragment that fits there is "Consult…". */}
-      <span aria-hidden="true" className="hidden text-faint/60 sm:inline">
-        /
-      </span>
-      <span className="hidden truncate text-xs font-medium text-fg sm:block">{title}</span>
+          the fragment that fits there is "Consult…". Pages outside the dock
+          have no destination to name, so they render no crumb at all. */}
+      {title ? (
+        <>
+          <span aria-hidden="true" className="hidden text-faint/60 sm:inline">
+            /
+          </span>
+          <span className="hidden truncate text-xs font-medium text-fg sm:block">{title}</span>
+        </>
+      ) : null}
 
       <div className="ml-auto flex items-center gap-2">
         <div className="hidden sm:block">
@@ -254,11 +262,11 @@ function AppDock() {
             <NavLink
               to={item.to}
               end={item.end}
-              data-active={active.to === item.to}
+              data-active={active?.to === item.to}
               // The dock prints short labels; the accessible name stays the
               // full destination so screen readers and the E2E scripts agree.
               aria-label={item.label}
-              aria-current={active.to === item.to ? "page" : undefined}
+              aria-current={active?.to === item.to ? "page" : undefined}
               title={item.label}
               className={({ isActive }) =>
                 cn(
@@ -347,7 +355,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       </a>
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <Topbar title={active.label} />
+        <Topbar title={active?.label} />
         <main
           id="main"
           className="mx-auto w-full max-w-[1240px] flex-1 px-4 pb-10 pt-6 sm:px-6 lg:px-10 lg:pt-8 xl:max-w-[1320px] 2xl:max-w-[1440px]"
