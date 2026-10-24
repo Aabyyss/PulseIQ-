@@ -28,6 +28,14 @@
   changes an instrument transcribes the published values in
   `backend/test_score_sources.py` *and* names the paper and the page in the
   module docstring; the case fails if the citation disappears.
+- **A clinical option or rule names a source id, never prose alone.**
+  `agents/pharmacology_agent.py` holds the drug catalogue and the interaction
+  table; every entry names at least one id from its `SOURCES` registry (title and
+  publisher URL) and the invariant tests fail on a missing or dangling id. A new
+  lab threshold gets a boundary test at the value that changes the decision
+  (149/150, 499/500), because a case that only tests 700 passes with a digit typed
+  one row high. `docs/MEDICATIONS.md` is generated from those tables — regenerate
+  it in the same change so the page and the code cannot disagree.
 - **Model hygiene:** never hand-edit `models/`. Retrain via
   `backend/train_model.py`, which rewrites the pickle + metadata and asserts
   the label direction.
@@ -73,5 +81,5 @@
 
 `docs/ARCHITECTURE.md` (structure) · `docs/DATA_FLOW.md` (sequences) ·
 `docs/API_SPEC.md` (contract) · `docs/ADR.md` (decisions) ·
-`docs/TECH_STACK.md` (versions) · `docs/COMPATIBILITY.md` (limits) ·
-`docs/SECURITY.md` (boundaries).
+`docs/MEDICATIONS.md` (catalogue and sources) · `docs/TECH_STACK.md` (versions) ·
+`docs/COMPATIBILITY.md` (limits) · `docs/SECURITY.md` (boundaries).
