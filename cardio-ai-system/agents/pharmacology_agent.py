@@ -883,6 +883,48 @@ DRUGS: list[dict[str, Any]] = [
         "evidence": "Cholesterol guideline — a fibrate for severe hypertriglyceridaemia (≥500 mg/dL) to reduce pancreatitis risk, after secondary causes are addressed.",
         "source": ["cholesterol-2018"],
     },
+    {
+        "key": "colchicine",
+        "name": "Colchicine (low dose)",
+        "drug_class": "anti_inflammatory",
+        "priority": 6,
+        "indications": ["established_cad", "prior_mi"],
+        "avoid": [
+            ("renal_severe", "relative", "eGFR <30 mL/min — dose must be halved and reviewed; toxicity rises steeply."),
+            ("liver_disease", "relative", "Hepatic impairment — colchicine clearance falls; specialist review."),
+        ],
+        "caution": [
+            ("chronic_kidney_disease", "Dose by eGFR; recheck renal function and blood counts at review."),
+            ("bleeding_risk", "Colchicine can cause marrow suppression — check the blood count if bruising appears."),
+        ],
+        "lab_guards": [("renal_severe", "relative", "eGFR <30 mL/min — reduce the dose and review before starting.")],
+        "allergens": ["colchicine", "colcrys", "mitigare"],
+        "monitoring": ["Gastrointestinal tolerance", "Blood count", "CK if muscle symptoms", "Renal function"],
+        "dose_note": "Colchicine 0.5 mg once daily; 0.5 mg on alternate days if eGFR <30 or on a CYP3A4/P-gp inhibitor.",
+        "evidence": "Chronic coronary disease guideline — low-dose colchicine (0.5 mg daily) may be considered for secondary prevention of atherosclerotic events.",
+        "source": ["ccd-2023"],
+    },
+    {
+        "key": "ranolazine",
+        "name": "Ranolazine",
+        "drug_class": "antianginal",
+        "priority": 6,
+        "indications": ["established_cad"],
+        "avoid": [
+            ("liver_disease", "absolute", "Cirrhosis — ranolazine is contraindicated in significant hepatic impairment."),
+            ("bradyarrhythmia", "relative", "QT prolongation risk — review the ECG and rate before starting."),
+        ],
+        "caution": [
+            ("chronic_kidney_disease", "Dose is limited in renal impairment; review QTc."),
+            ("hypokalemia", "Correct potassium before starting — hypokalaemia adds to QT risk."),
+        ],
+        "lab_guards": [],
+        "allergens": ["ranolazine", "ranexa"],
+        "monitoring": ["ECG/QTc at baseline and after titration", "Blood pressure", "Dizziness"],
+        "dose_note": "Ranolazine 375–500 mg twice daily, titrated to a maximum of 1000 mg twice daily.",
+        "evidence": "Chronic coronary disease guideline — ranolazine for refractory angina when other antianginal therapy is insufficient or not tolerated.",
+        "source": ["ccd-2023"],
+    },
 ]
 
 _DRUG_BY_KEY = {d["key"]: d for d in DRUGS}
@@ -906,6 +948,8 @@ MED_ALIASES: dict[str, tuple[str, ...]] = {
     "pcsk9_inhibitor": ("evolocumab", "repatha", "alirocumab", "praluent", "pcsk9"),
     "icosapent_ethyl": ("icosapent", "vascepa", "epa", "omega-3", "omega 3", "fish oil"),
     "fenofibrate": ("fenofibrate", "tricor", "lipanthyl", "fibrate"),
+    "colchicine": ("colchicine", "colcrys", "mitigare"),
+    "ranolazine": ("ranolazine", "ranexa"),
     "statin_high_intensity": ("atorvastatin", "rosuvastatin", "simvastatin", "pravastatin", "statin", "lipitor", "crestor", "zocor"),
     "beta_blocker": ("metoprolol", "bisoprolol", "carvedilol", "atenolol", "nebivolol", "propranolol", "lopressor", "betaloc", "concor"),
     "ace_inhibitor": ("ramipril", "lisinopril", "enalapril", "captopril", "perindopril", "trandolapril", "ace inhibitor", "acei"),
@@ -985,6 +1029,8 @@ _ALLERGY_ALTERNATIVES: dict[str, str] = {
     "pcsk9_inhibitor": "Ezetimibe or bempedoic acid is the non-injectable alternative — do not rechallenge an injection reaction without review.",
     "icosapent_ethyl": "A fibrate is the usual alternative for severe hypertriglyceridaemia; review the reaction before any omega-3 product.",
     "fenofibrate": "Icosapent ethyl or a statin-first strategy is the alternative; do not substitute another fibrate without review.",
+    "colchicine": "Do not substitute another colchicine preparation; the anti-inflammatory option needs prescriber review.",
+    "ranolazine": "Angina control needs another route: beta-blocker, calcium-channel blocker or nitrate, with the same review.",
 }
 
 
