@@ -1295,3 +1295,113 @@ green CI run and should be revisited against a real duration; the sweep still
 needs a Chromium binary, which the runner provides and a developer must point
 `EDGE_PATH` at; and none of this touches the microphone, which no CI job
 exercises (ADR-026).
+
+## ADR-029 · Audit the palettes and the states a route does not show on first paint
+**Status:** Accepted (2026-10-24)
+
+The audit measured one palette and one paint per route. Both were half the app.
+Light mode is not a tint of dark mode here — `light-theme.css` re-specifies every
+surface, and the contrast failures this repo has actually shipped were light-mode
+ones (a dark navy panel under dark-violet text on the login page). The account
+menu, the "Full consult" tab and the "Consultations" list are screens no first
+paint reveals, so nothing had ever measured them at all.
+
+Decision: contrast runs in both themes, a state pass opens the screens a route
+hides behind an interaction, and a signed-in route must carry the workspace shell.
+
+- **The stored preference is the path, and the check proves it.** `primeTheme()`
+  writes `pulseiq.theme` before the document boots, so the same boot snippet a
+  returning clinician relies on paints the page. The *system* preference is
+  emulated as the other theme, which leaves the stored value as the only way to
+  land on the audited palette. This mattered immediately: the first version
+  emulated the same preference it stored, so deleting the write changed nothing
+  and the check still reported 90 loads on the requested theme. With the
+  preference removed the sweep now fails all 90 ("asked for dark").
+- **States are declared, opened and proved.** Each entry names the route, the
+  gesture and a witness (the menu role; the tab in `selected` state). A state
+  that never arrives is recorded as `stateIssues` and fails the sweep, because
+  auditing the page behind a panel that did not open is the same blind spot as
+  auditing `/login` as the workspace. Entrance animations are frozen first, so
+  the opened panel is measured at its final values.
+- **The shell is part of the page.** While signed in, every route must render the
+  dock with nine destinations, its current item *by accessible name*, and the
+  account menu. This is what caught the dock marking "Overview" as current on
+  `/privacy`, `/terms` and `/thank-you` while `NavLink` dropped the matching
+  `aria-current` — the dot and the accessible name disagreed.
+- **Three routes joined the table**: `/thank-you` (where a save lands) and the two
+  legal pages. They are exactly the routes that are not dock destinations, so the
+  shell check requires the dock but no current item there.
+- **Layout stays one palette.** A width bug is not a colour, and doubling the
+  9-width ladder would double the slowest pass for no new information. States get
+  1440 and 390: the laptop and the phone, where a menu can run off-screen and the
+  dock scrolls.
+
+Rejected alternatives: clicking the theme toggle mid-sweep (it is a state of its
+own, it moves between pages, and it mutates the preference the next load reads);
+screenshot baseline diffing (no baselines, and font/AA noise buries a real
+regression); routing each state to a URL (none of these states is routable — that
+would be a product change made for the test); requiring an active dock item
+everywhere (the app correctly has none on pages outside the dock). The sweep
+found two real defects on its first run: 45 loads with no current page and three
+22 px delete buttons in the consultations tab.
+
+Consequences: contrast page loads double (3 viewports × 12 routes × 2 themes),
+the summary reports the split per theme, and the report separates `themeIssues`,
+`shellIssues` and `stateIssues` so a failure names its own cause. Verified
+locally at 8 327–10 853 sampled text elements across runs (the count follows the
+data rendered), 0 contrast violations, 0 layout issues, 12/12 states reached,
+90/90 loads on the requested palette; with the stored preference removed, and
+with one state's tab renamed, the sweep exits 1 and names the failure.
+
+Known limits: two widths per state, no hover/focus/drag states, no data-bearing
+dialog (the app has none today), and the state pass is skipped when the sweep
+runs signed out — the workspace is not reachable, and saying "skipped" is more
+honest than auditing the sign-in form under three state names.
+
+## ADR-030 · The end-to-end journey runs in CI, and one gate requires every check
+**Status:** Accepted (2026-10-24)
+
+Four gates existed on paper. Three ran on every push. The journey — sign in,
+capture a line, save, get a PDF, land on the thank-you page, find the visit in
+history — was a script someone ran by hand, so the app's main promise was the one
+thing a push could not break loudly.
+
+Decision: the journey runs in CI against a built bundle and a live API, and a
+single `gate` job requires all four checks.
+
+- **Its own job, its own servers.** The audit and the journey both need an API,
+  but they fail for different reasons and at different speeds. One job means one
+  timeout, one log and one red X for two unrelated failure classes; separate jobs
+  keep the diagnosis and let the faster check report while the slower one runs.
+- **`vite preview`, not `vite dev`.** The job builds the bundle and serves it on
+  4173, then runs the journey with `--base-url http://127.0.0.1:4173`. A save path
+  that only works under the dev transform is not the app. `--base-url` now
+  refuses to start a server of its own, so the URL in the log is the app tested.
+- **The browser is named, not assumed.** `playwright-core` drives a browser that
+  already exists. The job checks `google-chrome` and prints its version before
+  the journey, so an image change is a clear "no browser" failure rather than a
+  thirty-second locator timeout inside a step.
+- **The gate fails rather than skips.** `needs:` plus `if: always()` means a red
+  backend makes `gate` red, not absent, and branch protection only has to require
+  one check that cannot be forgotten.
+
+Rejected alternatives: folding the journey into `ui-audit` (see above: two time
+budgets, two artifacts, two causes); letting Playwright download its own Chromium
+(another download on every push for a browser the image already has); running the
+journey through `npm run e2e` with no arguments (it starts a dev server and tests
+that instead); a composite action shared with the audit (two jobs' setup is
+easier to read inline than one indirection used twice).
+
+Consequences: CI grows a job that installs the Python runtime, builds the bundle
+and starts two servers; the journey registers `e2e-verify@cardio.local` on the
+fresh database and stores one visit per run; and a push that breaks the save path
+now fails before merge. Locally, `node scripts/e2e-save-visit.cjs --base-url
+http://127.0.0.1:4173` against a preview server reproduced the CI path exactly:
+8 steps, exit 0; against a dead port it stopped in the Servers step and named the
+URL.
+
+Known limits: no microphone and no model server in CI (the journey types the
+transcript line rather than speaking it, and the backend answers from the
+rule-based path); the PDF is asserted by the download event, not by parsing the
+file; and the job's wall-clock duration is a local measurement until the first CI
+run reports its own.
