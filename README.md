@@ -161,7 +161,7 @@ cardio-ai-system/
 
 | Gate | Runs | What it proves |
 |---|---|---|
-| Backend pytest suite | CI · every push | 273 cases: clinical direction (symptom text → expected risk band), the published scores pinned row-by-row against their sources, the 36-option medication catalogue and its 53 interaction rules pinned to 12 citations, de-identification, the local stores, the login limiter, the FHIR bundle, the live medication screen |
+| Backend pytest suite | CI · every push | 280 cases: clinical direction (symptom text → expected risk band), the published scores pinned row-by-row against their sources, the 36-option medication catalogue and its 53 interaction rules pinned to 12 citations, de-identification, the local stores, the login limiter, the FHIR bundle, the live medication screen |
 | Backend script checks | CI · every push | The older password-free runners, including the end-to-end pipeline walk (symptom text → mapped features → prediction) — nonzero exit fails the job |
 | Frontend unit tests | CI · every push | `npm run test` (vitest + jsdom): extraction patterns, session and retry behaviour, page metadata, PDF pagination |
 | Frontend typecheck & build | CI · every push | `tsc -b` plus a production Vite build |
@@ -177,7 +177,7 @@ capture languages, and extending the agent registry.
 Before submitting, run the suites that CI runs:
 
 ```bash
-cd cardio-ai-system && make install-dev && python -m pytest backend -q   # 273 cases
+cd cardio-ai-system && make install-dev && python -m pytest backend -q   # 280 cases
 cd frontend && npm ci && npm run typecheck && npm run test && npm run lint && npm run build
 ```
 

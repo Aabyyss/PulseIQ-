@@ -60,10 +60,19 @@ typecheck: ## TypeScript check (tsc --noEmit)
 build: ## Production frontend build (tsc -b && vite build)
 	cd $(FE) && npm run build
 
-ui-audit: ## WCAG contrast/layout sweep across routes and viewports
+ui-audit: ## WCAG contrast/layout sweep across routes and viewports (signed in)
 	cd $(FE) && npm run ui-audit
 
-check: test build lint ## Full local gate: tests + typecheck + lint + build
+e2e: ## End-to-end journey: sign in, capture a line, save, thank-you, history
+	cd $(FE) && npm run e2e
+
+check: test build lint ## Tests + typecheck + lint + build (no browser needed)
+
+# Everything CI runs, in dependency order. The backend must be up for the last
+# two; `ui-audit` builds and serves its own bundle, `e2e` reuses :5173 or starts
+# its own servers. Kept separate from `check` so a laptop without a browser can
+# still run the code gates.
+gate: check ui-audit e2e ## check + UI audit + E2E journey — what CI's Gate requires
 
 lint: ## ESLint over the frontend
 	cd $(FE) && npm run lint
