@@ -152,7 +152,7 @@ cardio-ai-system/
 ├── frontend/    React application (vitest for the non-React logic)
 ├── models/      trained model and metadata
 ├── data/        dataset
-├── docs/        design notes (ADR, API spec, data flow, security, CI) · screenshots · walkthrough video
+├── docs/        design notes (ADR, API spec, data flow, security, CI, medication catalogue) · screenshots · walkthrough video
 ├── scripts/     demo recording + video encode, screenshot capture, E2E journey, UI audit
 └── setup.ps1 · run-*.ps1 · Start-PulseIQ.cmd
 ```
@@ -161,13 +161,13 @@ cardio-ai-system/
 
 | Gate | Runs | What it proves |
 |---|---|---|
-| Backend pytest suite | CI · every push | 259 cases: clinical direction (symptom text → expected risk band), the published scores pinned row-by-row against their sources, de-identification, the local stores, the login limiter, the FHIR bundle, the live medication screen |
+| Backend pytest suite | CI · every push | 273 cases: clinical direction (symptom text → expected risk band), the published scores pinned row-by-row against their sources, the 36-option medication catalogue and its 53 interaction rules pinned to 12 citations, de-identification, the local stores, the login limiter, the FHIR bundle, the live medication screen |
 | Backend script checks | CI · every push | The older password-free runners, including the end-to-end pipeline walk (symptom text → mapped features → prediction) — nonzero exit fails the job |
 | Frontend unit tests | CI · every push | `npm run test` (vitest + jsdom): extraction patterns, session and retry behaviour, page metadata, PDF pagination |
 | Frontend typecheck & build | CI · every push | `tsc -b` plus a production Vite build |
-| UI contrast & layout audit | CI · every push | WCAG AA contrast of every text node at 390/1366/1440 px, plus horizontal-overflow, clipped-text and tap-target sweeps of 9 routes × 9 widths (375–2560 px, the laptop panels included) — signed in with a throwaway account when a backend is reachable, and any violation fails the run |
+| UI contrast & layout audit | CI · every push | WCAG AA contrast of every text node at 390/1366/1440 px in **both themes**, the account menu and both consult tabs opened and audited, and horizontal-overflow, clipped-text and tap-target sweeps of 12 routes × 9 widths (375–2560 px, the laptop panels included) — signed in, with the dock and account menu required on every route, and any violation fails the run |
+| E2E journey | CI · every push | Playwright walks sign-in → capture a line → save → PDF → thank-you → history against the **built bundle** served by `vite preview` and a live API, failing on any console error or failed API call |
 | Lint | local | `npm run lint` — zero errors, zero warnings without a `--max-warnings` guard |
-| E2E journey | local | `npm run e2e` — Playwright walks sign-in → dictation → save → thank-you → history against real servers and fails on any console error or failed API call |
 
 ## 🤝 Contributing
 
@@ -177,18 +177,21 @@ capture languages, and extending the agent registry.
 Before submitting, run the suites that CI runs:
 
 ```bash
-cd cardio-ai-system && make install-dev && python -m pytest backend -q   # 259 cases
+cd cardio-ai-system && make install-dev && python -m pytest backend -q   # 273 cases
 cd frontend && npm ci && npm run typecheck && npm run test && npm run lint && npm run build
 ```
 
 `npm run e2e` and `npm run ui-audit` (both need the servers up) cover the full journey and the
 UI gates; `make check` chains the tests, typecheck, lint and build.
 
-CI runs the same three jobs on `ubuntu-24.04` ([docs/CI.md](cardio-ai-system/docs/CI.md)). The
-`ui-audit` job is the one worth knowing about: it installs the runtime requirements, starts the
-API on the port the built app forwards `/api` to, waits for `/health`, and then sweeps the app
-**signed in**, failing if any route renders the sign-in page instead of itself. It uploads the
-report and the server log either way, so a red audit can be diagnosed from its artifacts.
+CI runs four gates on `ubuntu-24.04` and a `Gate` job that requires all of them
+([docs/CI.md](cardio-ai-system/docs/CI.md)); require `Gate` in branch protection rather than
+remembering four checks. The `ui-audit` job installs the runtime requirements, starts the API on
+the port the built app forwards `/api` to, waits for `/health`, and then sweeps the app **signed
+in** in both themes, failing if any route renders the sign-in page instead of itself, if a state
+it opens never arrives, or if the workspace shell is missing. The `e2e` job builds the bundle,
+serves it with `vite preview` and walks the save path against the real API. Both upload their
+logs either way, so a red run can be diagnosed from its artifacts.
 
 ## ⚠️ Scope
 
