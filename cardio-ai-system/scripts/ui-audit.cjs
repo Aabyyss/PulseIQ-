@@ -391,6 +391,10 @@ async function primeTheme(page, theme) {
   }, theme);
 }
 
+function oppositeOf(theme) {
+  return theme === "dark" ? "light" : "dark";
+}
+
 /** Whether the boot snippet actually applied the theme we asked for. */
 async function themeApplied(page, theme) {
   return page.evaluate(
@@ -548,7 +552,11 @@ function waitFor(url, timeoutMs) {
       for (const vp of CONTRAST_VIEWPORTS) {
         const page = await browser.newPage({ viewport: { width: vp.width, height: vp.height } });
         await primeTheme(page, theme);
-        await page.emulateMedia({ reducedMotion: "reduce", colorScheme: theme });
+        // The system preference is set to the *other* theme on purpose: the
+        // boot snippet prefers the stored value, so a page that still lands on
+        // the requested palette proves it read what we stored. Emulating the
+        // same theme here would let both paths agree and hide a broken one.
+        await page.emulateMedia({ reducedMotion: "reduce", colorScheme: oppositeOf(theme) });
         await signIn(page, base, signedIn);
         await checkTheme(page, theme, `${vp.name}px sign-in`);
         assertSession(page, vp.name, `contrast/${theme}`);
@@ -598,7 +606,7 @@ function waitFor(url, timeoutMs) {
             const where = `${state.name} @ ${vp.name}px ${theme}`;
             try {
               await primeTheme(page, theme);
-              await page.emulateMedia({ reducedMotion: "reduce", colorScheme: theme });
+              await page.emulateMedia({ reducedMotion: "reduce", colorScheme: oppositeOf(theme) });
               await signIn(page, base, signedIn);
               await page.goto(base + state.route.path, { waitUntil: "networkidle", timeout: 30000 });
               recordLanding(page, state.route, vp.name, `state:${state.name}`);
