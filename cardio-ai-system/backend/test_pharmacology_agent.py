@@ -520,3 +520,162 @@ def test_every_option_states_a_dose_a_monitoring_plan_and_its_evidence():
         for field in ("indications", "allergens", "monitoring", "dose_note", "evidence", "source"):
             assert drug.get(field), f"{drug['key']} has no {field}"
         assert drug["priority"] >= 1
+
+
+# ---------------------------------------------------------------------------
+# The options beyond the original eighteen, by clinical direction
+# ---------------------------------------------------------------------------
+
+def test_arni_is_preferred_over_an_ace_inhibitor_in_hfref():
+    review = review_medications(
+        conditions=["heart failure"],
+        labs={"lvef": 30, "egfr": 60, "potassium": 4.2},
+        age=65,
+        allergies=["none"],
+        current_medications=["none recorded"],
+    )
+    arni = _rec(review, "ARNI")
+    ace = _rec(review, "ramipril")
+    assert arni is not None and arni["status"] == "recommended"
+    assert ace is not None and ace["status"] == "alternative"
+    assert "36-hour" in ace["action"]
+
+
+def test_documented_ace_inhibitor_makes_the_arni_swap_a_major_interaction():
+    review = review_medications(
+        conditions=["heart failure"],
+        labs={"lvef": 30, "egfr": 60, "potassium": 4.2},
+        age=65,
+        allergies=["none"],
+        current_medications=["ramipril 10 mg"],
+    )
+    pairs = [tuple(alert["pair"]) for alert in review["interaction_alerts"]]
+    assert ("arni", "ace_inhibitor") in pairs
+    alert = next(a for a in review["interaction_alerts"] if tuple(a["pair"]) == ("arni", "ace_inhibitor"))
+    assert alert["severity"] == "major"
+    assert "36 hours" in alert["action"]
+
+
+def test_ivabradine_is_refused_in_atrial_fibrillation():
+    review = review_medications(
+        conditions=["atrial fibrillation", "heart failure"],
+        labs={"lvef": 30, "egfr": 60, "potassium": 4.2},
+        age=70,
+        allergies=["none"],
+        current_medications=["none recorded"],
+    )
+    blocked = _blocked(review, "ivabradine")
+    assert blocked is not None
+    assert blocked["severity"] == "absolute"
+    assert "sinus node" in " ".join(block["note"] for block in blocked["blocks"])
+
+
+def test_flecainide_is_refused_with_ischaemic_or_structural_disease():
+    for conditions, labs in (
+        (["atrial fibrillation", "prior MI"], {"lvef": 55}),
+        (["atrial fibrillation", "heart failure"], {"lvef": 30}),
+    ):
+        review = review_medications(
+            conditions=conditions,
+            labs=labs,
+            age=70,
+            allergies=["none"],
+            current_medications=["none recorded"],
+        )
+        blocked = _blocked(review, "flecainide")
+        assert blocked is not None, conditions
+        assert blocked["severity"] == "absolute", conditions
+
+
+def test_dronedarone_is_refused_in_heart_failure():
+    review = review_medications(
+        conditions=["atrial fibrillation", "heart failure"],
+        labs={"lvef": 30, "egfr": 60, "potassium": 4.2},
+        age=72,
+        allergies=["none"],
+        current_medications=["none recorded"],
+    )
+    blocked = _blocked(review, "dronedarone")
+    assert blocked is not None
+    assert blocked["severity"] == "absolute"
+
+
+def test_statin_intolerance_blocks_the_statin_and_offers_the_non_statin_routes():
+    review = review_medications(
+        conditions=["statin intolerance"],
+        labs={"ldl": 200},
+        age=48,
+        allergies=["none"],
+        current_medications=["none recorded"],
+    )
+    statin = _blocked(review, "statin")
+    assert statin is not None
+    assert statin["status"] == "review-before-use"
+    assert "reaction" in " ".join(block["note"] for block in statin["blocks"]).lower()
+    assert _rec(review, "ezetimibe") is not None
+    assert _rec(review, "PCSK9") is not None
+    assert _rec(review, "bempedoic") is not None
+
+
+def test_labetalol_is_the_pregnancy_option_while_raas_blockade_is_absolute():
+    review = review_medications(
+        conditions=["hypertension"],
+        pregnancy=True,
+        age=31,
+        sex="female",
+        labs={"egfr": 80, "potassium": 4.0},
+        allergies=["none"],
+        current_medications=["none recorded"],
+    )
+    labetalol = _rec(review, "labetalol")
+    assert labetalol is not None and labetalol["status"] == "recommended"
+    assert _blocked(review, "ramipril")["severity"] == "absolute"
+    assert _blocked(review, "losartan")["severity"] == "absolute"
+    # No lipid indication here, so the statin is neither offered nor listed as
+    # blocked — the pregnancy gate is covered by its own case above.
+    assert _rec(review, "statin") is None
+
+
+def test_finerenone_needs_albuminuria_and_refuses_a_low_egfr():
+    offered = review_medications(
+        conditions=["diabetes", "chronic kidney disease"],
+        labs={"egfr": 50, "potassium": 4.5, "uacr": 60},
+        age=62,
+        allergies=["none"],
+        current_medications=["none recorded"],
+    )
+    assert _rec(offered, "finerenone") is not None
+
+    no_albuminuria = review_medications(
+        conditions=["diabetes", "chronic kidney disease"],
+        labs={"egfr": 50, "potassium": 4.5},
+        age=62,
+        allergies=["none"],
+        current_medications=["none recorded"],
+    )
+    assert _rec(no_albuminuria, "finerenone") is None
+
+    low_egfr = review_medications(
+        conditions=["diabetes", "chronic kidney disease"],
+        labs={"egfr": 20, "potassium": 4.5, "uacr": 60},
+        age=62,
+        allergies=["none"],
+        current_medications=["none recorded"],
+    )
+    blocked = _blocked(low_egfr, "finerenone")
+    assert blocked is not None and blocked["severity"] == "absolute"
+
+
+def test_sulfa_history_flags_a_thiazide_without_blocking_it():
+    review = review_medications(
+        conditions=["hypertension"],
+        allergies=["sulfa"],
+        age=58,
+        labs={"egfr": 80, "potassium": 4.2, "sodium": 139},
+        current_medications=["none recorded"],
+    )
+    # Cross-reactivity is a flag on the option, not a block: a sulfa allergy
+    # must not remove a first-line antihypertensive from the list.
+    thiazide = _rec(review, "thiazide")
+    assert thiazide is not None
+    assert any("sulfa" in flag.lower() for flag in thiazide["review_flags"])

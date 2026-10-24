@@ -221,6 +221,8 @@ CONDITION_PATTERNS: list[tuple[str, str]] = [
      r"\b(?:statin intoleran\w*|intolerant to statins?|cannot tolerate statins?|statin[- ]associated muscle|statin[- ]induced myopathy)\b"),
     ("pancreatitis", r"\bpancreatitis\b"),
     ("angioedema", r"\bangl?ioedema\b|\bswelling of (?:the )?(?:tongue|lips|throat)\b"),
+    ("refractory_angina",
+     r"\b(?:refractory|intractable|persistent|ongoing) angina\b|\bangina (?:despite|on maximal|on full)\b"),
 ]
 
 _ALL_TAGS = {tag for tag, _ in CONDITION_PATTERNS}
@@ -726,7 +728,7 @@ DRUGS: list[dict[str, Any]] = [
         "name": "Ivabradine",
         "drug_class": "sinus_node_inhibitor",
         "priority": 5,
-        "indications": ["heart_failure", "reduced_ef", "established_cad"],
+        "indications": ["heart_failure", "reduced_ef"],
         "avoid": [
             ("atrial_fibrillation", "absolute", "Ivabradine acts on the sinus node and does not control rate in atrial fibrillation."),
             ("bradyarrhythmia", "absolute", "Bradycardia, sick sinus syndrome or heart block without a pacemaker."),
@@ -768,7 +770,10 @@ DRUGS: list[dict[str, Any]] = [
         "name": "Finerenone (non-steroidal MRA)",
         "drug_class": "nonsteroidal_mra",
         "priority": 4,
-        "indications": ["diabetes", "albuminuria", "chronic_kidney_disease"],
+        # Diabetes *with* albuminuria: the trial population, and not every CKD
+        # patient with diabetes. A compound indication keeps the two facts
+        # together instead of OR-ing them.
+        "indications": ["diabetic_kidney_disease"],
         "avoid": [
             ("hyperkalemia", "absolute", "K+ >5.5 mmol/L — correct potassium before starting."),
             ("renal_severe", "absolute", "eGFR <25 mL/min — finerenone is not initiated at this level."),
@@ -846,7 +851,7 @@ DRUGS: list[dict[str, Any]] = [
         "name": "Icosapent ethyl (purified EPA)",
         "drug_class": "omega3",
         "priority": 5,
-        "indications": ["triglycerides_elevated", "established_cad", "prior_mi"],
+        "indications": ["residual_hypertriglyceridaemia"],
         "avoid": [
             ("bleeding_risk", "relative", "Bleeding tendency — high-dose EPA adds to antiplatelet/anticoagulant bleeding."),
         ],
@@ -909,7 +914,7 @@ DRUGS: list[dict[str, Any]] = [
         "name": "Ranolazine",
         "drug_class": "antianginal",
         "priority": 6,
-        "indications": ["established_cad"],
+        "indications": ["refractory_angina"],
         "avoid": [
             ("liver_disease", "absolute", "Cirrhosis — ranolazine is contraindicated in significant hepatic impairment."),
             ("bradyarrhythmia", "relative", "QT prolongation risk — review the ECG and rate before starting."),
@@ -999,7 +1004,7 @@ DRUGS: list[dict[str, Any]] = [
         "name": "Labetalol (pregnancy hypertension)",
         "drug_class": "beta_blocker",
         "priority": 3,
-        "indications": ["pregnancy", "hypertension"],
+        "indications": ["pregnancy_hypertension"],
         "avoid": [
             ("obstructive_airway_disease", "relative", "Asthma — a cardioselective agent or an alternative class is preferred; review for bronchospasm."),
             ("bradyarrhythmia", "relative", "Bradycardia or heart block — review conduction before starting."),
@@ -1021,7 +1026,7 @@ DRUGS: list[dict[str, Any]] = [
         "name": "GLP-1 receptor agonist (semaglutide/dulaglutide)",
         "drug_class": "glp1_ra",
         "priority": 5,
-        "indications": ["diabetes", "obesity", "established_cad", "prior_mi"],
+        "indications": ["diabetes", "obesity", "diabetes_with_ascvd"],
         "avoid": [
             ("pregnancy", "absolute", "GLP-1 receptor agonists are contraindicated in pregnancy and not for use while breastfeeding."),
             ("pancreatitis", "relative", "Previous pancreatitis — weigh the recurrence risk before starting."),
@@ -1042,7 +1047,7 @@ DRUGS: list[dict[str, Any]] = [
         "name": "Bempedoic acid",
         "drug_class": "acl_inhibitor",
         "priority": 6,
-        "indications": ["statin_intolerance", "ldl_very_high", "dyslipidemia_lab"],
+        "indications": ["statin_intolerance", "ldl_very_high"],
         "avoid": [
             ("pregnancy", "relative", "Not recommended in pregnancy — plan lipid therapy before conception."),
             ("liver_disease", "relative", "Active hepatic disease — check transaminases before starting."),
@@ -1480,6 +1485,8 @@ def indications_from_presentation(symptoms: list[str], tags: list[str], derived:
             add("angioedema", "history of angioedema")
         if tag == "pregnancy":
             add("pregnancy", "pregnancy in the history")
+        if tag == "refractory_angina":
+            add("refractory_angina", "angina that persists despite standard therapy")
 
     if "chest pain" in symptoms:
         add("suspected_acs", "chest pain reported (suspected acute coronary syndrome)")
@@ -1503,6 +1510,23 @@ def indications_from_presentation(symptoms: list[str], tags: list[str], derived:
         add("triglycerides_severe", f"triglycerides {derived['triglycerides_severe']:g} mg/dL (pancreatitis risk)")
     if derived.get("albuminuria") is not None:
         add("albuminuria", f"UACR {derived['albuminuria']:g} mg/g")
+    # Indications are OR-ed, so a drug that needs two facts together gets a
+    # compound name here rather than a list of tags that would offer it on
+    # either one. These four are the cases where a single fact is not the
+    # indication.
+    if "diabetes" in tags and derived.get("albuminuria") is not None:
+        add("diabetic_kidney_disease", f"diabetes with albuminuria (UACR {derived['albuminuria']:g} mg/g)")
+    if "diabetes" in tags and ({"established_cad", "prior_mi", "prior_pci_cabg"} & set(tags)):
+        add("diabetes_with_ascvd", "diabetes with established atherosclerotic disease")
+    if "pregnancy" in tags and "hypertension" in tags:
+        add("pregnancy_hypertension", "hypertension in pregnancy")
+    if derived.get("triglycerides_elevated") is not None and (
+        {"established_cad", "prior_mi", "prior_pci_cabg", "diabetes"} & set(tags)
+    ):
+        add(
+            "residual_hypertriglyceridaemia",
+            f"triglycerides {derived['triglycerides_elevated']:g} mg/dL with ASCVD or diabetes",
+        )
     if derived.get("troponin_elevated") is not None:
         add("suspected_acs", "troponin above the reference limit")
     return got
