@@ -1,7 +1,7 @@
 # Continuous integration
 
 `.github/workflows/tests.yml` runs on every push to `main`, on every pull
-request, and on `workflow_dispatch`. All three jobs are pinned to
+request, and on `workflow_dispatch`. All five jobs are pinned to
 `ubuntu-24.04` deliberately: `ubuntu-latest` migrates to Ubuntu 26 and the
 toolchain here (Playwright/Chromium, `pip`, the audit's contrast maths) should
 move on purpose, not overnight.
@@ -11,6 +11,8 @@ move on purpose, not overnight.
 | `backend` | The pytest suite (259 cases) and the script checks: clinical direction, the published score tables against their sources, de-identification, the local stores, the login limiter, the FHIR bundle, the live medication screen. |
 | `frontend` | `tsc -b`, the vitest suite (55 cases: extraction patterns, session/retry behaviour, PDF layout, the microphone meter's thresholds) and the production build. |
 | `ui-audit` | The built app, **signed in**, swept in **both themes**: contrast at 3 viewports × 12 routes × 2 palettes, layout at 9 widths × 12 routes, and 12 open-state audits (account menu, both consult tabs, each at 1440 and 390 in both themes). WCAG AA against each element's real rendered background, no horizontal overflow, no clipped text, no tap target under 24 px — plus the dock, its current item and the account menu on every signed-in route. |
+| `e2e` | The journey a clinician takes — sign in, capture a transcript line, save the visit, download the PDF, land on thank-you, find it in history — against the **built bundle** served by `vite preview` and a live API (ADR-030). |
+| `gate` | Nothing of its own: it is red unless the four jobs above are green. This is the single check to require in branch protection. |
 
 `.github/workflows/deploy-pages.yml` publishes the frontend to GitHub Pages; it
 builds the same bundle the `frontend` job builds, so a Pages deploy that
@@ -74,6 +76,29 @@ current on `/privacy`, `/terms` and `/thank-you` while `NavLink` dropped the
 matching `aria-current`, and three delete buttons in the consultations tab were
 22 px square.
 
+## What the journey job needs
+
+The e2e job is the audit job's sibling with a different question. It builds the
+same bundle, starts the same API on 8000, then serves the build with
+`vite preview` on 4173 and runs the journey against that URL:
+
+```bash
+node scripts/e2e-save-visit.cjs --base-url http://127.0.0.1:4173
+```
+
+- **`vite preview`, not `vite dev`.** A save path that only works under the dev
+transform is not the app. `preview.proxy` forwards `/api` and `/ws`, so the REST
+save and the WebSocket concept stream both run against one origin.
+- **`--base-url` starts nothing.** If nothing answers at the URL, the journey
+  stops in its Servers step and names it, instead of quietly starting a dev
+  server on another port and walking the one nobody is serving.
+- **The browser is checked by name.** `playwright-core` drives an existing
+  browser; the job fails with `no Chrome on this runner` when the image stops
+  shipping one, rather than surfacing a thirty-second locator timeout.
+- **The journey registers `e2e-verify@cardio.local`** on the fresh database and
+  stores one visit per run. The assertion on the visit count is `before + 1`, so
+  repeated runs do not make it lie.
+
 ## Artifacts
 
 `ui-audit-report` is uploaded whether the job passes or fails and contains:
@@ -109,9 +134,22 @@ python -m uvicorn backend.api_server:app --host 127.0.0.1 --port 8000   # termin
 node scripts/ui-audit.cjs --require-sign-in                              # terminal 2
 ```
 
+The journey job, exactly as CI runs it — backend, then the built bundle:
+
+```bash
+cd cardio-ai-system
+python -m uvicorn backend.api_server:app --host 127.0.0.1 --port 8000   # terminal 1
+cd frontend && npm run build && npx vite preview --host 127.0.0.1 --port 4173   # terminal 2
+cd .. && node scripts/e2e-save-visit.cjs --base-url http://127.0.0.1:4173       # terminal 3
+```
+
 With the servers already up and a browser in hand, `npm run ui-audit` from
 `frontend/` runs the same sweep without `--require-sign-in`, and
-`npm run e2e` runs the journey instead of the audit. Both need the backend.
+`npm run e2e` runs the journey against the dev server instead of a build. Both
+need the backend.
+
+Require `Gate` in branch protection. It is the only check that cannot pass while
+one of the four is red or missing.
 
 ## Limits
 
