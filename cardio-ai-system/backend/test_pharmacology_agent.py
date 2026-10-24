@@ -679,3 +679,100 @@ def test_sulfa_history_flags_a_thiazide_without_blocking_it():
     thiazide = _rec(review, "thiazide")
     assert thiazide is not None
     assert any("sulfa" in flag.lower() for flag in thiazide["review_flags"])
+
+
+# ---------------------------------------------------------------------------
+# Interactions among the grown catalogue
+# ---------------------------------------------------------------------------
+
+def _pairs(review):
+    return [tuple(alert["pair"]) for alert in review["interaction_alerts"]]
+
+
+def test_colchicine_plus_a_statin_is_a_major_interaction():
+    review = review_medications(
+        conditions=["prior MI"],
+        labs={"ldl": 80, "egfr": 70, "potassium": 4.3},
+        age=70,
+        allergies=["none"],
+        current_medications=["atorvastatin 80 mg"],
+    )
+    assert _rec(review, "colchicine") is not None
+    assert ("colchicine", "statin") in _pairs(review)
+    alert = next(a for a in review["interaction_alerts"] if tuple(a["pair"]) == ("colchicine", "statin"))
+    assert alert["severity"] == "major"
+    assert "muscle pain" in alert["action"]
+
+
+def test_ranolazine_plus_diltiazem_is_major_and_names_the_mechanism():
+    review = review_medications(
+        conditions=["stable angina", "refractory angina"],
+        labs={"lvef": 55, "egfr": 70},
+        age=68,
+        allergies=["none"],
+        current_medications=["diltiazem 180 mg"],
+    )
+    assert _rec(review, "ranolazine") is not None
+    assert ("ranolazine", "nd_ccb") in _pairs(review)
+    alert = next(a for a in review["interaction_alerts"] if tuple(a["pair"]) == ("ranolazine", "nd_ccb"))
+    assert "CYP3A4" in alert["note"]
+
+
+def test_ticagrelor_plus_a_statin_is_flagged():
+    review = review_medications(
+        symptoms=["chest pain"],
+        labs={"egfr": 70, "potassium": 4.0, "ldl": 80},
+        age=60,
+        risk_level="High",
+        allergies=["none"],
+        current_medications=["simvastatin 40 mg"],
+    )
+    assert _rec(review, "ticagrelor") is not None
+    assert ("ticagrelor", "statin") in _pairs(review)
+
+
+def test_finerenone_plus_spironolactone_is_flagged_rather_than_stacked():
+    review = review_medications(
+        conditions=["diabetes", "heart failure"],
+        labs={"egfr": 55, "potassium": 4.2, "uacr": 80, "lvef": 35},
+        age=66,
+        allergies=["none"],
+        current_medications=["spironolactone 25 mg"],
+    )
+    assert _rec(review, "finerenone") is not None
+    assert ("finerenone", "mra") in _pairs(review)
+
+
+def test_thiazide_added_to_a_loop_diuretic_is_flagged():
+    review = review_medications(
+        conditions=["hypertension", "heart failure"],
+        labs={"egfr": 60, "potassium": 4.1, "sodium": 138, "lvef": 45},
+        age=71,
+        allergies=["none"],
+        current_medications=["furosemide 40 mg"],
+    )
+    assert _rec(review, "thiazide") is not None
+    assert ("thiazide", "loop_diuretic") in _pairs(review)
+
+
+def test_hydralazine_isosorbide_plus_a_pde5_inhibitor_is_major():
+    review = review_medications(
+        conditions=["heart failure"],
+        labs={"lvef": 30, "egfr": 70, "potassium": 4.3},
+        age=64,
+        allergies=["none"],
+        current_medications=["sildenafil 50 mg"],
+    )
+    assert _rec(review, "Hydralazine") is not None
+    assert ("hydralazine_isosorbide", "pde5_inhibitor") in _pairs(review)
+
+
+def test_the_new_lab_tags_split_at_their_published_thresholds():
+    assert "triglycerides_elevated" not in lab_tags({"triglycerides": 149})
+    assert lab_tags({"triglycerides": 150})["triglycerides_elevated"] == 150
+    assert "triglycerides_severe" not in lab_tags({"triglycerides": 499})
+    assert lab_tags({"triglycerides": 500})["triglycerides_severe"] == 500
+    assert "albuminuria" not in lab_tags({"uacr": 29})
+    assert lab_tags({"uacr": 30})["albuminuria"] == 30
+    assert "ldl_very_high" not in lab_tags({"ldl": 189})
+    assert lab_tags({"ldl": 190})["ldl_very_high"] == 190
