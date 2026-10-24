@@ -23,6 +23,9 @@
  *
  * Servers are reused when already running; otherwise the backend (uvicorn)
  * and frontend (vite) are started by this script and stopped when it ends.
+ * With `--base-url` the script tests exactly that URL and starts nothing: CI
+ * builds the production bundle and serves it with `vite preview`, and a script
+ * that quietly started a dev server beside it would test a different app.
  *
  * Usage:
  *   node scripts/e2e-save-visit.cjs                    # or: cd frontend && npm run e2e
@@ -67,9 +70,8 @@ function findChrome() {
 function parseArgs() {
   const args = process.argv.slice(2);
   const i = args.indexOf("--base-url");
-  const baseUrl =
-    i >= 0 ? args[i + 1] : process.env.PULSEIQ_URL || "http://localhost:5173";
-  return { baseUrl };
+  const explicit = i >= 0 ? args[i + 1] : process.env.PULSEIQ_URL || null;
+  return { baseUrl: explicit || "http://localhost:5173", explicit };
 }
 
 async function isUp(url, timeoutMs = 2500) {
@@ -134,7 +136,7 @@ async function ensureAccount(baseUrl) {
 }
 
 (async () => {
-  const base = parseArgs().baseUrl;
+  const { baseUrl: base, explicit: explicitBase } = parseArgs();
   const spawned = [];
   let browser;
 
@@ -163,6 +165,13 @@ async function ensureAccount(baseUrl) {
     }
     if (await isUp(base)) {
       pass(`frontend already running at ${base}`);
+    } else if (explicitBase) {
+      // Fail here rather than starting a dev server on another port: the caller
+      // named the app it wants tested, and that app is not answering.
+      throw new Error(
+        `nothing answered at ${base} (--base-url). Start the app there, or omit ` +
+          "--base-url to let this script start the backend and dev server itself."
+      );
     } else {
       spawned.push({
         what: "frontend",
