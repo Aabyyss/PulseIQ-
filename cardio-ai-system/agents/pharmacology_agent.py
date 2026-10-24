@@ -925,6 +925,97 @@ DRUGS: list[dict[str, Any]] = [
         "evidence": "Chronic coronary disease guideline — ranolazine for refractory angina when other antianginal therapy is insufficient or not tolerated.",
         "source": ["ccd-2023"],
     },
+    {
+        "key": "dronedarone",
+        "name": "Dronedarone",
+        "drug_class": "antiarrhythmic",
+        "priority": 7,
+        "indications": ["atrial_fibrillation", "atrial_fibrillation_symptomatic"],
+        "avoid": [
+            ("heart_failure", "absolute", "Dronedarone is contraindicated in symptomatic heart failure or recent decompensation — mortality rose in that population."),
+            ("reduced_ef", "absolute", "LVEF <40% — do not use dronedarone."),
+            ("bradyarrhythmia", "relative", "Bradycardia or AV block — review rate and conduction before starting."),
+        ],
+        "caution": [
+            ("liver_disease", "Hepatic injury is a recognised effect — check LFTs before and during therapy."),
+            ("chronic_kidney_disease", "Renal impairment raises exposure; review the dose and creatinine."),
+        ],
+        "lab_guards": [],
+        "allergens": ["dronedarone", "multaq"],
+        "monitoring": ["ECG (rate and QTc)", "Liver function tests", "Creatinine", "Symptoms of heart failure"],
+        "dose_note": "Dronedarone 400 mg twice daily with meals.",
+        "evidence": "Atrial fibrillation guideline — dronedarone to maintain sinus rhythm in paroxysmal or persistent AF without LV dysfunction; not for permanent AF.",
+        "source": ["af-2023"],
+    },
+    {
+        "key": "flecainide",
+        "name": "Flecainide",
+        "drug_class": "antiarrhythmic",
+        "priority": 8,
+        "indications": ["atrial_fibrillation_symptomatic"],
+        "avoid": [
+            ("established_cad", "absolute", "Flecainide is contraindicated in ischaemic heart disease — proarrhythmic risk."),
+            ("prior_mi", "absolute", "Prior myocardial infarction — do not use flecainide."),
+            ("heart_failure", "absolute", "Structural heart disease with heart failure — contraindicated."),
+            ("reduced_ef", "absolute", "LVEF <40% — do not use flecainide."),
+            ("bradyarrhythmia", "relative", "Conduction disease — review the ECG before starting."),
+        ],
+        "caution": [
+            ("chronic_kidney_disease", "Renal impairment raises exposure — start low and review the ECG."),
+            ("liver_disease", "Hepatic impairment raises exposure — reduce the dose."),
+        ],
+        "lab_guards": [],
+        "allergens": ["flecainide", "tambocor", "flecaine"],
+        "monitoring": ["ECG (QRS width) at baseline and after titration", "Rate control during episodes", "Exercise testing if ischaemia is possible"],
+        "dose_note": "Flecainide 50–150 mg twice daily (maximum 300 mg/day), with a rate-control agent.",
+        "evidence": "Atrial fibrillation guideline — flecainide for rhythm control in AF without structural or ischaemic heart disease; contraindicated when either is present.",
+        "source": ["af-2023"],
+    },
+    {
+        "key": "nd_ccb",
+        "name": "Non-dihydropyridine CCB (diltiazem/verapamil)",
+        "drug_class": "nd_ccb",
+        "priority": 4,
+        "indications": ["atrial_fibrillation", "atrial_fibrillation_symptomatic", "hypertension"],
+        "avoid": [
+            ("heart_failure", "absolute", "Diltiazem/verapamil are negative inotropes — do not use in heart failure with reduced ejection fraction."),
+            ("reduced_ef", "absolute", "LVEF <40% — use a beta-blocker or another rate-control strategy."),
+            ("bradyarrhythmia", "relative", "Bradycardia or AV block — review conduction before starting."),
+            ("pregnancy", "relative", "Diltiazem/verapamil are not first-line in pregnancy — nifedipine or labetalol are preferred."),
+        ],
+        "caution": [
+            ("aortic_stenosis", "Vasodilatation and negative inotropy — specialist review in severe aortic stenosis."),
+            ("hypertension", "Monitor blood pressure during titration; both agents cause vasodilatation."),
+        ],
+        "lab_guards": [],
+        "allergens": ["diltiazem", "verapamil", "isoptin", "dilzem", "calcium channel blocker", "ccb"],
+        "monitoring": ["Heart rate and blood pressure", "ECG for conduction delay", "Ankle oedema"],
+        "dose_note": "Diltiazem 120–360 mg daily (extended release) or verapamil 80–120 mg three times daily.",
+        "evidence": "Atrial fibrillation guideline — a non-dihydropyridine calcium-channel blocker for rate control when a beta-blocker is contraindicated or insufficient, and not in HFrEF.",
+        "source": ["af-2023", "hypertension-2017"],
+    },
+    {
+        "key": "labetalol",
+        "name": "Labetalol (pregnancy hypertension)",
+        "drug_class": "beta_blocker",
+        "priority": 3,
+        "indications": ["pregnancy", "hypertension"],
+        "avoid": [
+            ("obstructive_airway_disease", "relative", "Asthma — a cardioselective agent or an alternative class is preferred; review for bronchospasm."),
+            ("bradyarrhythmia", "relative", "Bradycardia or heart block — review conduction before starting."),
+            ("heart_failure", "relative", "Start low and titrate slowly; avoid during acute decompensation."),
+        ],
+        "caution": [
+            ("diabetes", "Beta-blockade can mask hypoglycaemia awareness — counsel the patient."),
+            ("asthma", "Review airway disease before titration."),
+        ],
+        "lab_guards": [],
+        "allergens": ["labetalol", "trandate", "normodyne", "beta blocker", "beta-blocker"],
+        "monitoring": ["Blood pressure and heart rate", "Fetal growth in pregnancy", "Symptoms of bronchospasm"],
+        "dose_note": "Labetalol 100 mg twice daily, titrated to 400 mg twice daily (maximum 2400 mg/day).",
+        "evidence": "ACOG practice bulletin — labetalol is a first-line agent for chronic and severe hypertension in pregnancy; the hypertension guideline covers its use outside pregnancy.",
+        "source": ["acog-222", "hypertension-2017"],
+    },
 ]
 
 _DRUG_BY_KEY = {d["key"]: d for d in DRUGS}
@@ -950,11 +1041,16 @@ MED_ALIASES: dict[str, tuple[str, ...]] = {
     "fenofibrate": ("fenofibrate", "tricor", "lipanthyl", "fibrate"),
     "colchicine": ("colchicine", "colcrys", "mitigare"),
     "ranolazine": ("ranolazine", "ranexa"),
+    "dronedarone": ("dronedarone", "multaq"),
+    "flecainide": ("flecainide", "tambocor", "flecaine"),
+    "labetalol": ("labetalol", "trandate", "normodyne"),
     "statin_high_intensity": ("atorvastatin", "rosuvastatin", "simvastatin", "pravastatin", "statin", "lipitor", "crestor", "zocor"),
     "beta_blocker": ("metoprolol", "bisoprolol", "carvedilol", "atenolol", "nebivolol", "propranolol", "lopressor", "betaloc", "concor"),
     "ace_inhibitor": ("ramipril", "lisinopril", "enalapril", "captopril", "perindopril", "trandolapril", "ace inhibitor", "acei"),
     "arb": ("losartan", "valsartan", "irbesartan", "candesartan", "telmisartan", "olmesartan", "arb"),
-    "ccb": ("amlodipine", "nifedipine", "diltiazem", "verapamil", "lercanidipine", "norvasc"),
+    # Diltiazem and verapamil are non-dihydropyridines with their own entry; a
+    # patient on one of them must not also be reported as being on amlodipine.
+    "ccb": ("amlodipine", "nifedipine", "lercanidipine", "norvasc", "calcium channel blocker"),
     "loop_diuretic": ("furosemide", "lasix", "bumetanide", "torasemide", "torsemide"),
     "mra": ("spironolactone", "eplerenone", "aldactone"),
     "sglt2_inhibitor": ("dapagliflozin", "empagliflozin", "canagliflozin", "ertugliflozin", "forxiga", "jardiance"),
@@ -1031,6 +1127,10 @@ _ALLERGY_ALTERNATIVES: dict[str, str] = {
     "fenofibrate": "Icosapent ethyl or a statin-first strategy is the alternative; do not substitute another fibrate without review.",
     "colchicine": "Do not substitute another colchicine preparation; the anti-inflammatory option needs prescriber review.",
     "ranolazine": "Angina control needs another route: beta-blocker, calcium-channel blocker or nitrate, with the same review.",
+    "dronedarone": "Rhythm control needs specialist input — another antiarrhythmic, or catheter ablation, rather than a substitute here.",
+    "flecainide": "Rhythm control needs specialist input — a different antiarrhythmic or ablation; do not substitute another sodium-channel blocker.",
+    "nd_ccb": "If diltiazem/verapamil cannot be used, a beta-blocker (outside HFrEF) or digoxin is the rate-control alternative.",
+    "labetalol": "Nifedipine or methyldopa are the other pregnancy-safe antihypertensives; do not substitute a RAAS agent in pregnancy.",
 }
 
 
@@ -1196,6 +1296,8 @@ def indications_from_presentation(symptoms: list[str], tags: list[str], derived:
             add("pancreatitis", "previous pancreatitis")
         if tag == "angioedema":
             add("angioedema", "history of angioedema")
+        if tag == "pregnancy":
+            add("pregnancy", "pregnancy in the history")
 
     if "chest pain" in symptoms:
         add("suspected_acs", "chest pain reported (suspected acute coronary syndrome)")
