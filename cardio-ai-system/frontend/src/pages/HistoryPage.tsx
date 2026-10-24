@@ -270,8 +270,9 @@ export function HistoryPage() {
                           <button
                             type="button"
                             title="Delete entry"
+                            aria-label="Delete entry"
                             onClick={() => void handleDelete(item.id)}
-                            className="rounded border border-line p-1 text-faint transition-colors hover:border-danger/40 hover:text-danger"
+                            className="flex h-6 w-6 items-center justify-center rounded border border-line text-faint transition-colors hover:border-danger/40 hover:text-danger"
                           >
                             <Trash2 className="h-3 w-3" strokeWidth={1.75} />
                           </button>
@@ -388,8 +389,9 @@ export function HistoryPage() {
                               <button
                                 type="button"
                                 title="Delete visit"
+                                aria-label="Delete visit"
                                 onClick={() => void handleDeleteConsultation(visit.id)}
-                                className="rounded border border-line p-1 text-faint transition-colors hover:border-danger/40 hover:text-danger"
+                                className="flex h-6 w-6 items-center justify-center rounded border border-line text-faint transition-colors hover:border-danger/40 hover:text-danger"
                               >
                                 <Trash2 className="h-3 w-3" strokeWidth={1.75} />
                               </button>
