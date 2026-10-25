@@ -239,6 +239,10 @@ const FOCUS_VIEWPORTS = [
 ];
 const FOCUS_ROUTES = ROUTES.filter((route) => ["home", "consultation", "medications"].includes(route.name));
 
+// The screens a clinician is most likely to print for a patient: the saved
+// visit, the patient summary and the record list.
+const PRINT_ROUTES = ROUTES.filter((route) => ["consultation", "patients", "history"].includes(route.name));
+
 const AUDIT_EMAIL = process.env.PULSEIQ_AUDIT_EMAIL || "demo@cardio.local";
 const AUDIT_PASSWORD = process.env.PULSEIQ_AUDIT_PASSWORD || "DemoPass123";
 
@@ -762,6 +766,51 @@ function waitFor(url, timeoutMs) {
       await page.close();
     }
 
+    // Print: the chrome must disappear and the content must remain. Emulated
+    // rather than asserted from the stylesheet, because `print:hidden` on a
+    // wrapper only helps if the wrapper is the element that would print.
+    const printIssues = [];
+    {
+      const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+      await signIn(page, base, signedIn);
+      await page.emulateMedia({ media: "print" });
+      for (const route of PRINT_ROUTES) {
+        await page.goto(base + route.path, { waitUntil: "networkidle", timeout: 30000 }).catch(() => {});
+        recordLanding(page, route, "print", "print");
+        // A page that renders its list after mount prints a skeleton if it is
+        // measured too early; wait for content (or the 4s timeout, which then
+        // correctly reports an empty print).
+        await page
+          .waitForFunction(
+            () => (document.querySelector("main")?.innerText.trim().length ?? 0) > 20,
+            undefined,
+            { timeout: 4000 }
+          )
+          .catch(() => {});
+        const found = await page.evaluate(() => {
+          const shown = (el) => {
+            if (!el) return false;
+            const cs = getComputedStyle(el);
+            const rect = el.getBoundingClientRect();
+            return cs.display !== "none" && cs.visibility !== "hidden" && rect.width > 0 && rect.height > 0;
+          };
+          const out = [];
+          if (shown(document.querySelector('nav[aria-label="Workspace"]'))) out.push("the workspace navigation printed");
+          if (shown(document.querySelector("header.sticky"))) out.push("the sticky top bar printed");
+          if (shown(document.querySelector("body > div > div > footer")) || shown(document.querySelector("footer"))) {
+            out.push("the site footer printed");
+          }
+          const main = document.querySelector("main");
+          if (!main || main.innerText.trim().length < 20) out.push("the printed page had no content");
+          if (document.documentElement.scrollWidth > window.innerWidth + 1) out.push("the printed page overflows horizontally");
+          return out;
+        });
+        for (const detail of found) printIssues.push({ route: route.name, detail });
+      }
+      await page.emulateMedia({ media: "screen" });
+      await page.close();
+    }
+
     // Focus: every control on three routes, focused in turn, must still be
     // reachable under whatever is layered over the page.
     const focusIssues = [];
@@ -947,6 +996,7 @@ function waitFor(url, timeoutMs) {
           layoutIssues,
           textSpacingIssues,
           focusIssues,
+          printIssues,
           redirects,
           themeIssues,
           shellIssues,
@@ -1029,6 +1079,13 @@ function waitFor(url, timeoutMs) {
       if (layoutIssues.length > 25) console.log(`  … and ${layoutIssues.length - 25} more (see ${REPORT})`);
     } else {
       console.log("✓ Layout: no overflow, clipping, or undersized targets");
+    }
+    if (printIssues.length) {
+      failed = true;
+      console.log(`\n✗ Print: ${printIssues.length} issue(s)`);
+      for (const issue of printIssues) console.log(`  [${issue.route}] ${issue.detail}`);
+    } else {
+      console.log(`✓ Print: ${PRINT_ROUTES.length} screens drop the chrome and keep their content`);
     }
     if (focusIssues.length) {
       failed = true;

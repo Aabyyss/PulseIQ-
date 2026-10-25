@@ -209,6 +209,53 @@
   }
 }
 
+/*
+ * Print: a consultation summary is a handout.
+ *
+ * The shell's navigation, top bar and footer are hidden by their own
+ * `print:hidden` classes, so nothing here has to guess at structure. What is
+ * left is the content on white paper, without the app's elevation or the
+ * translucent surfaces that print as grey blocks.
+ */
+@media print {
+  @page {
+    margin: 12mm;
+  }
+
+  html,
+  body {
+    background: #ffffff !important;
+    color: #111111 !important;
+  }
+
+  main {
+    max-width: none !important;
+    padding: 0 !important;
+  }
+
+  .panel,
+  .panel-flat,
+  .shadow-panel,
+  .shadow-pop {
+    border-color: #cccccc !important;
+    background: #ffffff !important;
+    box-shadow: none !important;
+  }
+
+  /* An underline is what tells a reader on paper that a word is a destination. */
+  main a {
+    color: #111111 !important;
+    text-decoration: underline;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
 /* A drawn ECG trace that reads as instrumentation, not ornament. */
 .trace path {
   stroke-dasharray: 620;

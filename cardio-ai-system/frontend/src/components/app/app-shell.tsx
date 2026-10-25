@@ -112,7 +112,7 @@ function AccountMenu() {
  */
 function Topbar({ title, onOpenPalette }: { title?: string; onOpenPalette: () => void }) {
   return (
-    <header className="sticky top-0 z-30 flex h-14 items-center gap-3 border-b border-line bg-canvas/85 px-4 backdrop-blur-md sm:px-6 lg:px-8">
+    <header className="sticky top-0 z-30 flex h-14 items-center gap-3 border-b border-line bg-canvas/85 px-4 backdrop-blur-md print:hidden sm:px-6 lg:px-8">
       <Link to="/" aria-label="PulseIQ overview" className="flex items-center gap-2.5 lg:hidden">
         <LogoMark className="h-7 w-7" />
         <span className="hidden sm:block">
@@ -169,7 +169,7 @@ function Topbar({ title, onOpenPalette }: { title?: string; onOpenPalette: () =>
  */
 function SiteFooter() {
   return (
-    <footer className="border-t border-line bg-canvas/60 px-4 pb-24 pt-5 sm:px-6 lg:px-8 lg:pb-8">
+    <footer className="border-t border-line bg-canvas/60 px-4 pb-24 pt-5 print:hidden sm:px-6 lg:px-8 lg:pb-8">
       <div className="mx-auto flex w-full max-w-[1240px] flex-col items-start justify-between gap-3 sm:flex-row sm:items-center">
         <p className="text-2xs text-faint">
           {SITE_NAME} · runs entirely on this device · no cookies, no tracking
@@ -225,7 +225,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="flex min-h-dvh flex-col lg:flex-row">
-      <a href="#main" className="skip-link">
+      <a href="#main" className="skip-link print:hidden">
         Skip to content
       </a>
 

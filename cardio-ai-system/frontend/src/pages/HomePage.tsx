@@ -232,7 +232,10 @@ export function HomePage() {
       {/* Aside: the desktop-only column that makes the wide layout a feed
           rather than a stretched page. It never carries unique information, so
           a phone loses nothing by not showing it. */}
-      <aside className="hidden space-y-4 xl:sticky xl:top-20 xl:block" aria-label="Workspace shortcuts">
+      <aside
+        className="hidden space-y-4 print:hidden xl:sticky xl:top-20 xl:block"
+        aria-label="Workspace shortcuts"
+      >
         <Card>
           <CardContent className="p-5">
             <p className="label">This workspace</p>

@@ -41,7 +41,7 @@ export function WorkspaceNav() {
       <nav
         aria-label="Workspace"
         className={cn(
-          "fixed inset-x-0 bottom-0 z-40 border-t border-line bg-canvas/95 backdrop-blur-md",
+          "fixed inset-x-0 bottom-0 z-40 border-t border-line bg-canvas/95 backdrop-blur-md print:hidden",
           // Rail presentation
           "lg:sticky lg:inset-x-auto lg:bottom-auto lg:top-0 lg:z-30 lg:h-dvh lg:w-[232px] lg:shrink-0",
           "lg:border-r lg:border-t-0 lg:bg-canvas/60 lg:backdrop-blur-none xl:w-[248px]"

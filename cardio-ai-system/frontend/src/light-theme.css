@@ -171,11 +171,13 @@ html:not(.dark) .text-accent-ink { color: #ffffff; }
     background: #fff !important;
     color: #1f2937 !important;
   }
-  aside,
-  nav,
-  header,
-  .print\:hidden,
-  button {
+  /*
+   * Only what marks itself for print. This used to hide every `nav`, `header`
+   * and `button`, which removed each page's own `<header>` title and every
+   * patient card (they are buttons) — a printed page with no content that still
+   * looked like a print stylesheet had worked.
+   */
+  .print\:hidden {
     display: none !important;
   }
   main {
