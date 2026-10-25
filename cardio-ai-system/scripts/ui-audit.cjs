@@ -721,6 +721,74 @@ function waitFor(url, timeoutMs) {
       await page.close();
     }
 
+    // Installability and the offline shell. These are properties of the built
+    // bundle (manifest, worker, cached shell), not of a route, and none of them
+    // are visible in a contrast sweep. Preview serves the production build, so
+    // this is the same bundle a browser would install.
+    const pwaIssues = [];
+    {
+      const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
+      const context = page.context();
+      try {
+        await page.goto(base + "/", { waitUntil: "networkidle", timeout: 30000 });
+        const manifest = await page.evaluate(async () => {
+          const link = document.querySelector('link[rel="manifest"]');
+          if (!link) return { error: "no manifest link" };
+          const href = link.getAttribute("href");
+          const response = await fetch(href);
+          if (!response.ok) return { error: `manifest HTTP ${response.status}` };
+          return { href, json: await response.json() };
+        });
+        if (manifest.error) {
+          pwaIssues.push(manifest.error);
+        } else {
+          const m = manifest.json || {};
+          if (!m.name || !m.short_name) pwaIssues.push("manifest has no name/short_name");
+          if (!m.start_url) pwaIssues.push("manifest has no start_url");
+          if (!["standalone", "fullscreen", "minimal-ui", "window-controls-overlay"].includes(m.display)) {
+            pwaIssues.push(`manifest display is ${m.display}`);
+          }
+          const sizes = (m.icons || []).map((icon) => icon.sizes);
+          if (!sizes.includes("192x192") || !sizes.includes("512x512")) {
+            pwaIssues.push(`manifest icons are ${sizes.join(", ") || "missing"}`);
+          }
+          for (const icon of m.icons || []) {
+            const status = await page.evaluate(async (src) => (await fetch(src)).status, icon.src);
+            if (status !== 200) pwaIssues.push(`icon ${icon.src} answered ${status}`);
+          }
+        }
+
+        const worker = await page.evaluate(async () => {
+          if (!("serviceWorker" in navigator)) return { error: "no service worker support" };
+          const registration = await Promise.race([
+            navigator.serviceWorker.ready,
+            new Promise((resolve) => setTimeout(() => resolve(null), 10000)),
+          ]);
+          return registration ? { scope: registration.scope, active: Boolean(registration.active) } : { error: "worker never became ready" };
+        });
+        if (worker.error) {
+          pwaIssues.push(worker.error);
+        } else if (!worker.active) {
+          pwaIssues.push("service worker registered without an active worker");
+        }
+
+        // The point of the worker: a route opened with no network still renders
+        // the app rather than the browser's offline error.
+        await context.setOffline(true);
+        await page.goto(base + "/history", { waitUntil: "domcontentloaded", timeout: 15000 }).catch(() => {});
+        const offlineOk = await page
+          .evaluate(() => Boolean(document.querySelector("#root") && document.body.innerText.trim().length > 0))
+          .catch(() => false);
+        if (!offlineOk) pwaIssues.push("offline navigation did not render the cached shell");
+        await context.setOffline(false);
+      } catch (error) {
+        pwaIssues.push(`PWA pass failed: ${String(error.message || error).split("\n")[0]}`);
+      } finally {
+        await context.setOffline(false).catch(() => {});
+        await page.close();
+      }
+    }
+
     // The states a route cannot show on first paint. Each one is opened and
     // proved — a tab that never switched, or a menu that never rendered, is
     // recorded as its own failure instead of auditing the page behind it.
@@ -792,6 +860,7 @@ function waitFor(url, timeoutMs) {
           sampledByTheme,
           themeChecks,
           statesAudited,
+          pwaIssues,
           violations,
           layoutIssues,
           textSpacingIssues,
@@ -850,6 +919,13 @@ function waitFor(url, timeoutMs) {
       if (stateIssues.length > 5) console.log(`  … and ${stateIssues.length - 5} more (see ${REPORT})`);
     } else if (statesAudited) {
       console.log(`✓ States: all ${statesAudited} open-state audits reached the state they name`);
+    }
+    if (pwaIssues.length) {
+      failed = true;
+      console.log(`\n✗ Installable app: ${pwaIssues.length} issue(s)`);
+      for (const issue of pwaIssues) console.log(`  - ${issue}`);
+    } else {
+      console.log("✓ Installable app: manifest fields and icons resolve, worker active, offline route renders the shell");
     }
     if (violations.length) {
       failed = true;
