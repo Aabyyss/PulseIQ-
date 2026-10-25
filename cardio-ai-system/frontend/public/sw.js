@@ -28,15 +28,28 @@ const SHELL = [
   "/apple-touch-icon.png"
 ];
 
+/**
+ * Cache the shell and the bundle it references.
+ *
+ * The build's JavaScript and CSS carry content hashes, so a static list cannot
+ * name them. They are read out of the built `index.html` instead: without them
+ * an offline navigation would return the HTML and then fail to load the app,
+ * which renders an empty page and reads as "the shell did not work".
+ */
+async function precache() {
+  const cache = await caches.open(VERSION);
+  await cache.addAll(SHELL);
+  const html = await (await fetch("/index.html", { cache: "reload" })).text();
+  const assets = [...new Set([...html.matchAll(/(?:src|href)="(\/assets\/[^"]+)"/g)].map((m) => m[1]))];
+  if (assets.length) await cache.addAll(assets);
+}
+
 self.addEventListener("install", (event) => {
   event.waitUntil(
-    caches
-      .open(VERSION)
-      // `addAll` rejects the whole install if one URL 404s; the shell list is
-      // small and versioned, so a failure here means the build is broken and
-      // installing anyway would cache a half-shell.
-      .then((cache) => cache.addAll(SHELL))
-      .then(() => self.skipWaiting())
+    // `addAll` rejects the whole install if one URL 404s; the shell list is
+    // small and versioned, so a failure here means the build is broken and
+    // installing anyway would cache a half-shell.
+    precache().then(() => self.skipWaiting())
   );
 });
 
@@ -61,14 +74,18 @@ self.addEventListener("fetch", (event) => {
 
   if (request.mode === "navigate") {
     event.respondWith(
-      fetch(request).catch(() => caches.match("/index.html", { ignoreSearch: true }))
+      fetch(request).catch(() => caches.match("/index.html", { ignoreSearch: true, ignoreVary: true }))
     );
     return;
   }
 
   if (url.pathname.startsWith("/assets/")) {
     event.respondWith(
-      caches.match(request).then((hit) => {
+      // `ignoreVary` is load-bearing: the preview server answers with
+      // `Vary: Origin`, and a module script request carries an Origin that the
+      // install-time fetch did not, so a strict match misses the asset it just
+      // cached and the offline shell loads without its JavaScript.
+      caches.match(request, { ignoreVary: true }).then((hit) => {
         if (hit) return hit;
         return fetch(request).then((response) => {
           // Only a complete, same-origin, OK response is worth storing.

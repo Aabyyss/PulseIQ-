@@ -26,15 +26,22 @@ const request = (path: string, overrides: Partial<Requestish> = {}): Requestish 
   ...overrides
 });
 
-function makeResponse(label: string) {
+const BUILT_HTML = `<!doctype html><html><head>
+  <link rel="stylesheet" href="/assets/index-abc.css">
+</head><body><div id="root"></div>
+  <script type="module" src="/assets/index-abc.js"></script>
+</body></html>`;
+
+function makeResponse(label: string, body = "") {
   const response = {
     ok: true,
     type: "basic",
     label,
-    clone: () => ({ ok: true, type: "basic", label })
+    text: async () => body,
+    clone: () => ({ ok: true, type: "basic", label, text: async () => body })
   };
-  // The worker only reads `ok`, `type` and `clone`; the cast keeps the test
-  // free of a full Response implementation.
+  // The worker only reads `ok`, `type`, `text` and `clone`; the cast keeps the
+  // test free of a full Response implementation.
   return response as unknown as never;
 }
 
@@ -44,6 +51,10 @@ function makeResponse(label: string) {
  */
 function harness() {
   const stores = new Map<string, Map<string, unknown>>();
+  // Recorded so a test can assert the one option that matters here: matching
+  // must ignore `Vary`, or a cached asset misses on a request that carries an
+  // Origin the install-time fetch did not.
+  const matchOptions: { ignoreVary?: boolean; ignoreSearch?: boolean }[] = [];
   const ensure = (name: string) => {
     if (!stores.has(name)) stores.set(name, new Map());
     return stores.get(name)!;
@@ -57,8 +68,9 @@ function harness() {
       put: async (req: Requestish, res: unknown) => {
         store.set(new URL(req.url, ORIGIN).href, res);
       },
-      match: async (req: unknown) => {
+      match: async (req: unknown, options?: { ignoreVary?: boolean; ignoreSearch?: boolean }) => {
         const key = new URL(String((req as Requestish)?.url ?? req), ORIGIN).href;
+        if (options) matchOptions.push(options);
         return store.get(key);
       }
     };
@@ -68,7 +80,8 @@ function harness() {
     open: async (name: string) => cacheFor(name),
     keys: async () => [...stores.keys()],
     delete: async (name: string) => stores.delete(name),
-    match: async (req: unknown) => {
+    match: async (req: unknown, options?: { ignoreVary?: boolean; ignoreSearch?: boolean }) => {
+      if (options) matchOptions.push(options);
       const key = new URL(String((req as Requestish)?.url ?? req), ORIGIN).href;
       for (const store of stores.values()) if (store.has(key)) return store.get(key);
       return undefined;
@@ -85,7 +98,11 @@ function harness() {
     clients: { claim: vi.fn(async () => {}) }
   };
 
-  const fetchMock = vi.fn(async () => makeResponse("network"));
+  const fetchMock = vi.fn(async (req: Requestish) =>
+    String(req?.url ?? req).endsWith("/index.html")
+      ? makeResponse("/index.html", BUILT_HTML)
+      : makeResponse("network")
+  );
   new Function("self", "caches", "fetch", source)(self, caches, fetchMock);
 
   async function dispatch(type: string, event: unknown) {
@@ -101,7 +118,7 @@ function harness() {
     return await (respondWith.mock.calls[0] as unknown[])[0];
   }
 
-  return { stores, ensure, fetchMock, self, dispatch, dispatchFetch };
+  return { stores, ensure, fetchMock, self, dispatch, dispatchFetch, matchOptions };
 }
 
 describe("service worker", () => {
@@ -115,6 +132,10 @@ describe("service worker", () => {
     const shell = worker.ensure("pulseiq-shell-v1");
     expect(shell.has(ORIGIN + "/index.html")).toBe(true);
     expect(shell.has(ORIGIN + "/manifest.webmanifest")).toBe(true);
+    // The hashed bundle has to be in the cache too, or an offline navigation
+    // gets HTML that cannot start the app.
+    expect(shell.has(ORIGIN + "/assets/index-abc.js")).toBe(true);
+    expect(shell.has(ORIGIN + "/assets/index-abc.css")).toBe(true);
 
     // A previous version's cache must not survive an update.
     worker.ensure("pulseiq-shell-v0").set(ORIGIN + "/index.html", makeResponse("old"));
@@ -153,6 +174,20 @@ describe("service worker", () => {
       request("/medications", { mode: "navigate" })
     )) as { label?: string } | null;
     expect(response?.label).toBe("network");
+  });
+
+  it("matches cached assets ignoring Vary, which is what makes them reachable offline", async () => {
+    const worker = harness();
+    const asset = request("/assets/index-abc123.js");
+    await worker.dispatchFetch(asset);
+    // The preview server sends `Vary: Origin`; a module script request carries
+    // an Origin the install-time fetch did not, and a strict match misses.
+    expect(worker.matchOptions.every((options) => options.ignoreVary === true)).toBe(true);
+    expect(worker.matchOptions.length).toBeGreaterThan(0);
+
+    worker.fetchMock.mockRejectedValueOnce(new TypeError("offline"));
+    await worker.dispatchFetch(request("/history", { mode: "navigate" }));
+    expect(worker.matchOptions.some((options) => options.ignoreSearch && options.ignoreVary)).toBe(true);
   });
 
   it("stores a hashed asset on first use and serves it from cache afterwards", async () => {
