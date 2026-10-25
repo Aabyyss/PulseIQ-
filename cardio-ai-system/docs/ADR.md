@@ -1471,3 +1471,56 @@ rules, so a reviewer follows the guideline rather than a page; the interaction
 table covers what the catalogue can offer plus common current medications, not
 every drug a patient may bring; and no external interaction database is consulted,
 which is the same reason the app works offline.
+
+---
+
+## ADR-032 · One destination list, presented as a phone bar and a desktop rail
+
+**Context.** The workspace's navigation was a single bottom dock holding all
+nine destinations in one horizontally scrolling strip. It survived the earlier
+app-shell work, but on a 390px phone it gave each item about 43px, pushed three
+destinations off-screen behind a scroll gesture most people never try, and left
+a desktop with no navigation furniture beyond the same bar floating under the
+content. The user's brief — an app-like layout that works on phones, tablets,
+laptops and desktops — could not be met by one presentation at every width.
+
+**Decision.** There is one list (`frontend/src/lib/navigation.ts`), one active
+rule and three presentations:
+
+- below `lg` (1024px), a bottom bar of **five** destinations plus **More**, which
+  opens the remaining four in a native `<dialog>` bottom sheet;
+- from `lg`, a labelled sticky rail with all nine, a "New consultation" action
+  and engine state at its foot;
+- from `xl`, the overview adds an aside column.
+
+The rail is sticky and in normal flow, not fixed, so content cannot be laid out
+under it. The phone bar is fixed, adds `env(safe-area-inset-bottom)`, and the
+document gets `scroll-padding` so focused controls and anchors do not land
+behind either.
+
+**Why five, and why a rail.** Material's navigation bar is specified for three
+to five equally important destinations in compact windows; Apple's tab-bar
+guidance warns against making More the default hiding place. The five chosen are
+the destinations a session touches — overview, consult, medications, history,
+patients. Material puts rail and drawer layouts above ~600–840dp; 1024px is
+where the labelled rail fits comfortably beside a full content column, and it is
+also where a laptop user expects application navigation.
+
+**Rejected.** Nine items in one row (the original dock); a hamburger drawer at
+every width (an extra tap for the most-used screen, and a modal for navigation);
+a rail on tablets in portrait (768px leaves too little for the clinical column);
+fixed sidebar (content can hide beneath it at intermediate widths); two separate
+navigation lists for the two presentations (they drift the first time a route is
+added to one).
+
+**Consequences.** Every new destination must be added to `NAV` and, if it is one
+of the first five, displaces another into the shelf; the audit counts visible
+destinations at both presentations, and the E2E journey asserts nine at 1440, five
+plus More at 390, and that the sheet actually navigates. The rail's brand link is
+inside the `<nav>` but outside the list, which is what the state-counting checks
+had to learn.
+
+**Verification.** `scripts/ui-audit.cjs` shell pass (visible-count by width),
+22 state audits including the More sheet, E2E "Adaptive navigation" step,
+`navigation.test.ts` for the list and active rule. Documented in
+[DESIGN.md](DESIGN.md).
