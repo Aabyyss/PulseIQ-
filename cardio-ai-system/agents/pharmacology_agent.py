@@ -429,7 +429,7 @@ DRUGS: list[dict[str, Any]] = [
         "indications": ["suspected_acs", "established_cad", "prior_mi", "heart_failure", "reduced_ef", "atrial_fibrillation"],
         "avoid": [
             ("bradyarrhythmia", "absolute", "Bradycardia, AV block or sick sinus syndrome without a pacemaker."),
-            ("obstructive_airway_disease", "relative", "Asthma/COPD — a cardioselective agent at low dose only if the benefit is clear; review for bronchospasm."),
+            ("obstructive_airway_disease", "relative", "Asthma/COPD — use a cardioselective agent at low dose; GOLD advises against withholding a beta-blocker for COPD alone."),
         ],
         "caution": [
             ("diabetes", "Beta-blockade can mask hypoglycaemia awareness — counsel the patient."),
@@ -439,8 +439,8 @@ DRUGS: list[dict[str, Any]] = [
         "allergens": ["beta blocker", "beta-blocker", "metoprolol", "bisoprolol", "carvedilol", "atenolol", "lopressor", "betaloc"],
         "monitoring": ["Heart rate and blood pressure", "Symptoms of fatigue/bronchospasm"],
         "dose_note": "Metoprolol succinate 25–50 mg daily (or bisoprolol 2.5–5 mg) once haemodynamically stable.",
-        "evidence": "Beta-blockade after ACS/for stable CAD and HFrEF (guideline-directed medical therapy).",
-        "source": ["ccd-2023", "hf-2022"],
+        "evidence": "Beta-blockade after ACS/for stable CAD and HFrEF (guideline-directed medical therapy), including cardioselective use in COPD.",
+        "source": ["ccd-2023", "hf-2022", "gold-2025"],
     },
     {
         "key": "ace_inhibitor",

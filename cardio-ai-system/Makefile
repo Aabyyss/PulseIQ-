@@ -17,7 +17,8 @@ PORT_F := 5173
 
 .DEFAULT_GOAL := help
 .PHONY: help setup install-backend install-dev install-frontend train run-backend run-frontend \
-        test test-backend test-frontend typecheck lint build ui-audit check docker-up docker-down clean
+        test test-backend test-frontend typecheck lint build ui-audit verify-sources check \
+        docker-up docker-down clean
 
 help: ## Show available targets
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*?## "}{printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}'
@@ -62,6 +63,9 @@ build: ## Production frontend build (tsc -b && vite build)
 
 ui-audit: ## WCAG contrast/layout sweep across routes and viewports (signed in)
 	cd $(FE) && npm run ui-audit
+
+verify-sources: ## Every catalogue citation resolves (add NETWORK=1 to check live)
+	$(PY) scripts/verify_sources.py $(if $(NETWORK),--network,)
 
 e2e: ## End-to-end journey: sign in, capture a line, save, thank-you, history
 	cd $(FE) && npm run e2e
