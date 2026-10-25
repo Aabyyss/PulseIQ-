@@ -1,18 +1,19 @@
 # Continuous integration
 
 `.github/workflows/tests.yml` runs on every push to `main`, on every pull
-request, and on `workflow_dispatch`. All five jobs are pinned to
+request, and on `workflow_dispatch`. All six jobs are pinned to
 `ubuntu-24.04` deliberately: `ubuntu-latest` migrates to Ubuntu 26 and the
 toolchain here (Playwright/Chromium, `pip`, the audit's contrast maths) should
 move on purpose, not overnight.
 
 | Job | Proves |
 |---|---|
-| `backend` | The pytest suite (280 cases) and the script checks: clinical direction, the published score tables against their sources, the 36-option medication catalogue and its 53 sourced rules, de-identification, the local stores, the login limiter, the FHIR bundle, the live medication screen. |
-| `frontend` | `tsc -b`, the vitest suite (60 cases: extraction patterns, session/retry behaviour, PDF layout, the microphone meter's thresholds, the theme boot path) and the production build. |
-| `ui-audit` | The built app, **signed in**, swept in **both themes**: contrast at 3 viewports × 12 routes × 2 palettes, layout at 9 widths × 12 routes, and 12 open-state audits (account menu, both consult tabs, each at 1440 and 390 in both themes). WCAG AA against each element's real rendered background, no horizontal overflow, no clipped text, no tap target under 24 px — plus the dock, its current item and the account menu on every signed-in route. |
-| `e2e` | The journey a clinician takes — sign in, capture a transcript line, save the visit, download the PDF, land on thank-you, find it in history — against the **built bundle** served by `vite preview` and a live API (ADR-030). |
-| `gate` | Nothing of its own: it is red unless the four jobs above are green. This is the single check to require in branch protection. |
+| `backend` | The pytest suite (296 cases) and the script checks: clinical direction, the published score tables against their sources, the 36-option medication catalogue and its 53 sourced rules, de-identification, the local stores, the login limiter, the FHIR bundle, the live medication screen, and the CI definition (below). |
+| `frontend` | `tsc -b`, the vitest suite (78 cases: extraction patterns, session/retry behaviour, PDF layout, microphone thresholds, the theme boot path and browser-chrome colour, navigation and palette ranking, the service worker's caching policy) and the production build. |
+| `ui-audit` | The built app, **signed in**, swept in **both themes**: contrast at 4 viewports × 12 routes × 2 palettes, layout at 11 widths (320–2560 px, both tablet orientations) × 12 routes, and 22 open-state audits (account menu, both consult tabs, More sheet, command palette, theme switch). Also WCAG 1.4.12 text-spacing overrides, 2.4.11 focus-obscured checks, and the manifest/icons/service-worker/offline-shell pass. |
+| `e2e` | The journey a clinician takes — sign in, adaptive navigation (rail, More sheet, Ctrl-K), capture a transcript line, save the visit, download the PDF, land on thank-you, find it in history — against the **built bundle** served by `vite preview` and a live API (ADR-030). |
+| `sources` | Every drug and rule cites a registered source and every registered source is cited (`scripts/verify_sources.py`, no network). |
+| `gate` | Nothing of its own: it is red unless the five jobs above are green. This is the single check to require in branch protection. |
 
 `.github/workflows/deploy-pages.yml` publishes the frontend to GitHub Pages; it
 builds the same bundle the `frontend` job builds, so a Pages deploy that
@@ -50,8 +51,8 @@ a page that renders the sign-in form is not the page it was asked for.
 
 ## What the audit covers beyond a first paint
 
-Three checks in the sweep exist because measuring one render of each route was
-not enough (ADR-029):
+These checks exist because measuring one render of each route was not enough
+(ADR-029):
 
 - **Both palettes.** Each contrast viewport and route is loaded once per theme
   with `pulseiq.theme` written before the document boots, and the *system*
@@ -60,16 +61,22 @@ not enough (ADR-029):
   effect; `themeChecks` and `themeIssues` record how many did. Deleting the
   stored write fails all 90 loads, which is how the check was proved to have
   teeth.
-- **The screens behind a click.** The account menu, the "Full consult" tab and
-  the "Consultations" list are opened at 1440 and 390 in both themes, proved to
-  have arrived (menu role; tab `selected`), then audited for contrast and
-  layout. A state that never opens fails the job as `stateIssues` — auditing the
-  page behind a panel that did not appear is the same blind spot as auditing
-  `/login` as the workspace.
-- **The shell.** Every signed-in route must render the dock with nine
-  destinations, the dock item that matches the route (by accessible name) and
-  the account menu. A page can render its own content and still not be the
-  workspace; `shellIssues` names what was missing.
+- **The screens behind a click.** The account menu, both consult tabs, the
+  More sheet (at 390 only — it does not exist above `lg`), the command palette
+  with a query typed, and the theme switch are opened, proved to have arrived,
+  then audited for contrast and layout. A state that never opens fails the job
+  as `stateIssues` — auditing the page behind a panel that did not appear is the
+  same blind spot as auditing `/login` as the workspace.
+- **The shell.** Every signed-in route must render the navigation with nine
+  destinations (counted from the list, not the rail's brand link), the item that
+  matches the route by accessible name, and the account menu. Visibility is
+  measured, not assumed: at `lg` and above all nine must be on screen and the
+  phone More control absent; below it exactly five plus a reachable More.
+- **Focus, spacing and the app.** Every control on three routes is focused in
+  turn to prove nothing lands entirely under a bar (2.4.11); the reader's
+  spacing overrides are applied and the clipping checks re-run (1.4.12); the
+  manifest, icons, active worker and an offline navigation are checked against
+  the built bundle.
 
 The audit found two real defects on its first run: the dock marked "Overview" as
 current on `/privacy`, `/terms` and `/thank-you` while `NavLink` dropped the
@@ -105,16 +112,28 @@ save and the WebSocket concept stream both run against one origin.
 
 - `scripts/ui-audit-report.json` — `sampledTotal` and `sampledByTheme`, every
   contrast violation (tagged with theme and, for a state, its name), every
-  layout issue (page overflow, clipped text, small target), plus `signedIn`,
-  `requireSignIn`, `themes`, `themeChecks`, `statesAudited`, `redirects`,
-  `themeIssues`, `shellIssues` and `stateIssues` so the artifact states what was
-  audited and what failed, not only that it did.
+  layout issue (page overflow, clipped text by width or height, small target),
+  every `focusIssues`, `textSpacingIssues` and `pwaIssues` entry, plus
+  `signedIn`, `requireSignIn`, `themes`, `themeChecks`, `statesAudited`,
+  `redirects`, `themeIssues`, `shellIssues` and `stateIssues` so the artifact
+  states what was audited and what failed, not only that it did.
 - `backend-audit.log` — the server's stdout. A red audit has two possible
   authors, the layout and the server the pages were reading from.
 
 The job is capped at `timeout-minutes: 25`: it installs a Python stack, builds
-the bundle, starts a server and walks 72 contrast loads, 108 layout loads and 12
-state loads.
+the bundle, starts a server and walks 96 contrast loads, 132 layout loads, 22
+state loads, six focus loads, 24 spacing loads and the PWA pass.
+
+## The CI definition is tested, not assumed
+
+`backend/test_ci_workflow.py` parses this workflow and asserts the parts a reader
+would otherwise have to verify by eye: the job set, that `gate` needs every job
+with `if: always()` and reads every result, that the audit job starts the API and
+waits for `/health`, that the journey points at the built bundle with
+`--base-url`, that every repository path and `npm run` target exists, that
+runners are pinned, and that timeouts are bounded. It proves the definition is
+what the docs claim; only a real run proves GitHub executes it, and that needs a
+push.
 
 ## Reproducing any job locally
 
