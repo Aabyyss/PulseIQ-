@@ -45,8 +45,12 @@ app runs under.
 - **Command palette** — Ctrl/⌘ K, ranked for the words clinicians actually type.
 - **Both palettes** — teal-on-graphite and violet-on-white, switched in the top
   bar, remembered, and synced to the browser chrome colour.
-- **Installable and offline-capable** — manifest, service worker, cached shell,
+- **Installable and offline-capable** — manifest with long-press shortcuts to
+  New consultation and History, service worker, cached shell, an offline notice,
   and no clinical response ever cached.
+- **Print handouts** — the patient timeline and visit records print on white
+  paper without navigation, top bar or footer; only elements marked for print
+  are hidden, so page titles and patient cards survive.
 - **Accounts and idle lock** — per-clinician workspace, sign-out after 15 idle
   minutes.
 
@@ -54,17 +58,19 @@ app runs under.
 
 ## 2. Next, in the order the evidence recommends
 
-Each item names the user problem, the cost, and how it would be verified. "Free"
-means no paid service; some items still cost engineering time, which is the real
-budget.
+Landed since this list was written: the manifest's long-press shortcuts, the
+print stylesheet (and the defect it exposed), the offline notice, and moving the
+PDF writer out of the initial chunk. What remains is below, in the order the
+value justifies the work. Each item names the user problem, the cost, and how it
+would be verified. "Free" means no paid service; some items still cost
+engineering time, which is the real budget.
 
 ### Small (a session or two each)
 
-1. **PWA shortcuts and share target.** Long-press the installed icon to get "New
-   consultation" and "History"; share a laboratory report straight into the
-   medication screen. *Manifest only (`shortcuts`, `share_target`), no new
-   dependency.* Verify: manifest keys present, shortcut URLs resolve, the share
-   POST lands on the right route.
+1. **Share target for a laboratory report.** Share a report from another app
+   straight into the medication screen; the manifest half of the shortcuts work
+   is already done. *Manifest `share_target` plus a POST route, no dependency.*
+   Verify: the share POST lands on the right route with the file intact.
 2. **Update-available prompt.** A waiting service worker currently activates on
    the next natural reload. A small "New version — reload" toast, driven by
    `registration.waiting` and `controllerchange`, closes the gap where a
@@ -73,39 +79,35 @@ budget.
 3. **Keyboard shortcut sheet.** `?` opens the list (Ctrl/Cmd K, arrows, Enter,
    Escape, skip link). *Free.* Verify: palette-style audit state and a unit test
    for the toggle logic.
-4. **Print stylesheet for the consult summary.** Patients' pages print today by
-   chance; a proper `@media print` rule set (no rail, no bar, no shadows, black
-   on white) makes the summary usable as a handout. *Free.* Verify: render to
-   PDF in Chromium and assert page count and text; print emulation in the audit.
-5. **Risk trend chart on the patient timeline.** A small SVG of the last N
+4. **Risk trend chart on the patient timeline.** A small SVG of the last N
    screenings, no chart library, keyboard-focusable points with text
    alternatives. *Free.* Verify: pure-function geometry tests + audit contrast.
-6. **Three-state theme.** Light / dark / follow system, with the existing boot
+5. **Three-state theme.** Light / dark / follow system, with the existing boot
    snippet learning the third value. *Free.* Verify: unit tests for the stored
    value and a state that toggles through all three.
-7. **Disabled-state audit.** The audit measures visible text; disabled controls
+6. **Disabled-state audit.** The audit measures visible text; disabled controls
    are exempt from WCAG contrast but not from being legible. Add an explicit
    contrast floor for disabled text so a greyed-out Save is still readable.
 
 ### Medium
 
-8. **Offline draft queue.** Capture works offline but saving does not; a visit
+7. **Offline draft queue.** Capture works offline but saving does not; a visit
    that cannot reach the API should be kept in IndexedDB, replayed on reconnect,
    and clearly marked "not yet filed". This is the highest-value reliability
    feature, and the service worker already proves the offline path.
    *Free; needs a durable local store and conflict rules.* Verify: fake-indexeddb
    unit tests, an E2E that saves with the API stopped and replays with it up, and
    a visible banner state in the audit.
-9. **Local search across history and notes.** A client-side index (patient name,
+8. **Local search across history and notes.** A client-side index (patient name,
    concept, date, medication) with the palette's ranking. No search service.
    *Free.* Verify: query-ranking unit tests and a journey step that finds a saved
    visit by concept.
-10. **FHIR import.** The app exports a bundle but cannot read one back, so a
+9. **FHIR import.** The app exports a bundle but cannot read one back, so a
     record from another system has to be retyped. A local, validating importer
     (patients, conditions, medications, observations) closes the loop.
     *Free.* Verify: round-trip property test (export → import → same facts) and a
     rejected-malformed-bundle test.
-11. **Encrypted local backup.** One file containing the workspace's records,
+10. **Encrypted local backup.** One file containing the workspace's records,
     encrypted with a passphrase (WebCrypto AES-GCM), restorable on another
     device. *Free; the hard part is the key-handling UX, not the crypto.*
     Verify: round-trip tests, wrong-passphrase failure, and a documented threat
@@ -113,18 +115,18 @@ budget.
 
 ### Larger
 
-12. **Full internationalisation of the interface.** Capture understands nine
+11. **Full internationalisation of the interface.** Capture understands nine
     languages; the chrome is English. Translation files plus a language switch,
     with the clinical strings reviewed per language rather than machine-
     translated. *Free; the review is the cost.* Verify: missing-key lint, a
     pseudo-locale layout sweep (long words are where the layout breaks), and the
     audit run once per locale.
-13. **Visual regression snapshots.** The audit proves contrast and layout
+12. **Visual regression snapshots.** The audit proves contrast and layout
     numerically; it cannot see a card that moved 4px and looks wrong. Playwright
     screenshots with a fixed viewport and font loading, diffed against committed
     baselines, would catch that. *Free; storage and maintenance are the cost.*
     Verify: a deliberate 4px change must fail the diff before it is trusted.
-14. **True-device verification.** A documented one-page procedure (Chrome remote
+13. **True-device verification.** A documented one-page procedure (Chrome remote
     debugging over USB, iOS Safari Web Inspector, Android home-screen install,
     split view on an iPad) that a second person can follow. *Free.* This is the
     only way to verify safe areas, the on-screen keyboard, and real orientation
@@ -136,7 +138,7 @@ budget.
 
 | Area | Today | Improvement |
 |---|---|---|
-| Bundle weight | One 805 kB chunk (gzip 252 kB); jsPDF and the 3D body map are imported eagerly | Route-level `import()` for the PDF writer, the 3D scene and the FHIR exporter; the initial chunk should not carry a PDF renderer |
+| Bundle weight | Entry chunk 446 kB (gzip 133 kB) after jsPDF moved on demand; the 3D scene still ships eagerly if it is ever wired in | Route-level `import()` for the 3D body map and the FHIR exporter, and a bundle-size budget in CI so the win cannot silently regress |
 | Live stream | Reconnects, but the UI says little when it drops | A visible "live concepts paused — retrying" state, with the transcript still captured locally |
 | Transcript | Lines are appended and can be cleared; no edit-in-place | Per-line edit and delete with undo, because dictation mishears names |
 | Medication catalogue | 36 options, curated | Grow toward common outpatient cardiology (SGLT2, MRA, loop diuretics, antianginals), every addition a directional test plus a source |

@@ -10,7 +10,8 @@
 | Chrome / Edge (Chromium) ≥ 90 | ✅ primary target | Web Speech API, WebSocket, all screens |
 | Firefox ≥ 90 | ⚠️ partial | Live copilot speech capture (Web Speech API) unavailable; typed text workflows work fully |
 | Safari ≥ 15 | ⚠️ partial | Web Speech limited; verify before relying on voice capture |
-| Mobile browsers | ✅ responsive | Tab bar under 900 px; screening/history fully usable |
+| Mobile browsers | ✅ responsive | Five-destination bar plus a More sheet below 1024 px; screening/history fully usable |
+| Installed app (standalone) | ✅ Chrome/Edge, iOS 16.4+ | Manifest + service worker; offline shell, no cached `/api` |
 
 The Web Speech API is Chromium-only in practice — the live copilot degrades
 gracefully elsewhere, but dictate-mode requires Chrome or Edge.
@@ -19,27 +20,37 @@ gracefully elsewhere, but dictate-mode requires Chrome or Edge.
 
 | Range | Layout |
 |---|---|
-| ≥ 1280 px | Full desktop grid; the dock spreads all nine destinations across the window |
-| 768–1279 px | Desktop, condensed panels; dock items stay labelled |
-| < 768 px | Single column, stacked result cards; the dock scrolls and centres the active item |
+| ≥ 1280 px (`xl`) | Rail + content column; the overview adds its aside column |
+| 1024–1279 px (`lg`) | Labelled rail with all nine destinations; no bottom bar |
+| 768–1023 px | Phone presentation: five destinations + More; panels condense |
+| < 768 px | Single column, stacked cards; five-destination bar, More sheet |
+| < 360 px | Same layout; 320 px is the audited floor (WCAG 1.4.10 reflow) |
 
-The shell is the same at every width — a header and a bottom dock (ADR-025) —
-so nothing is behind a drawer or a hamburger. Nine items fit a labelled row
-from 768 px up; below that roughly five are visible at a time and a swipe
-reveals the rest.
+The shell is one destination list in two presentations (ADR-032): a bottom bar
+with five destinations and a More sheet below `lg`, a labelled sticky rail at
+`lg` and above. Nothing is behind a hamburger or a drawer. Orientation does not
+change the layout rules — the available width does, which is why both tablet
+orientations are in the ladder.
 
-Reference viewports used by `scripts/ui-audit.cjs`: 375×667, 768×1024,
-1024×768, 1280×720, 1366×768, 1440×900, 1536×864, 1920×1080 and 2560×1440
-(layout), with the contrast pass at 390×844, 1366×768 and 1440×900 — signed in
-with a throwaway account when a backend is reachable (ADR-027). The audit
-enforces WCAG AA contrast, no horizontal overflow, no clipped text, and no tap
-target under 24 px (the controls are designed at 32–44 px; 24 px is the floor
-the check fails on). It also records where each page landed and fails when a
-route renders the sign-in page instead of itself, so a sweep can no longer pass
-by measuring `/login` nine times under nine names. CI runs it with
-`--require-sign-in`, which additionally fails when no backend answers at all
-(ADR-028); locally, without that flag, an unreachable backend still means the
-public pages are audited and the summary says `(signed out)`.
+Reference viewports used by `scripts/ui-audit.cjs`
+
+- layout (11): 320×640, 375×667, 844×390, 768×1024, 1024×768, 1280×720,
+  1366×768, 1440×900, 1536×864, 1920×1080, 2560×1440;
+- contrast (4): 390×844, 820×1180, 1366×768, 1440×900, each in both palettes;
+- states (2): 1440×900 and 390×844, both palettes — 22 audits;
+- focus (2): 1440×900 and 390×844, three routes;
+- spacing (2): 1440×900 and 390×844, twelve routes.
+
+Signed in with a throwaway account (ADR-027). The audit enforces WCAG AA
+contrast, 1.4.12 spacing overrides, 2.4.11 focus not obscured, no horizontal
+overflow, no clipped text (by width or height), and no tap target under 24 px
+(controls are designed at 32–44 px; 24 px is the floor the check fails on). It
+records where each page landed and fails when a route renders the sign-in page
+instead of itself. CI runs it with `--require-sign-in`, which additionally fails
+when no backend answers (ADR-028); locally, without that flag, an unreachable
+backend still means the public pages are audited and the summary says
+`(signed out)`. It also checks installability and that an offline navigation
+renders the cached shell (ADR-033).
 
 ## Hardware constraints
 
@@ -92,10 +103,12 @@ Ubuntu runners, pinned to `ubuntu-24.04`: Python 3.12 + Node 22; the full suite
 (backend tests, typecheck, unit tests, build, UI audit) is expected green there —
 the DLL policy above is Windows-specific and does not affect CI.
 
-Three jobs, and the third one is not just a browser check: `backend` runs the
-pytest suite and the script checks, `frontend` typechecks, unit-tests and
-builds, and `ui-audit` installs the runtime requirements, starts the API on
-`:8000` (the port `vite preview` forwards `/api` to), waits for `/health`, and
-only then runs the sweep signed in (ADR-028). It is bounded at 25 minutes and
-uploads `ui-audit-report.json` plus the server log on failure as well as
-success. Reproduction steps for all three are in [CI.md](CI.md).
+Six jobs. `backend` runs the pytest suite and the script checks (including the
+workflow-definition tests), `frontend` typechecks, unit-tests and builds,
+`ui-audit` installs the runtime requirements, starts the API on `:8000` (the
+port `vite preview` forwards `/api` to), waits for `/health`, then runs the
+sweep signed in (ADR-028), `e2e` builds, serves on `:4173` and walks the journey,
+`sources` checks the catalogue's citations offline, and `gate` requires all
+five. The browser jobs are bounded and upload their reports and server logs on
+success as well as failure. Reproduction steps are in [CI.md](CI.md); what each
+job proves, and what still needs a human, is in [VERIFICATION.md](VERIFICATION.md).

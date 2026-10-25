@@ -12,9 +12,9 @@ from a checklist in a pull request.
 | Check | Command | Proves | Cannot see |
 |---|---|---|---|
 | Backend suite | `python -m pytest backend -q` | Clinical direction, published scores against their sources, the 36-option catalogue and 53 rules, de-identification, stores, limiter, FHIR, the CI definition itself | Anything outside Python; model accuracy on real patients |
-| Frontend suite | `cd frontend && npm run test` | Extraction patterns, session/retry, PDF layout, theme path, palette ranking, service-worker policy | Rendering, real browser APIs |
+| Frontend suite | `cd frontend && npm run test` | Extraction patterns, session/retry, PDF layout, theme path, palette ranking, service-worker policy, offline notice | Rendering, real browser APIs |
 | Typecheck/lint/build | `npm run typecheck && npm run lint && npm run build` | Types, lint, the production bundle | Runtime behaviour |
-| UI audit | `node scripts/ui-audit.cjs --require-sign-in` | Contrast, layout, states, palettes, focus, spacing, installability, offline shell — in a real Chromium against the built bundle | Screen readers, real devices, visual taste |
+| UI audit | `node scripts/ui-audit.cjs --require-sign-in` | Contrast, layout, states, palettes, focus, spacing, print, installability, offline shell — in a real Chromium against the built bundle | Screen readers, real devices, visual taste |
 | E2E journey | `node scripts/e2e-save-visit.cjs --base-url …` | Sign-in → adaptive navigation → palette → capture → save → PDF → history against a live API | Other routes, other browsers |
 | Sources | `python scripts/verify_sources.py` | Every citation resolves to a registered, cited, https entry | Live URLs (that needs `--network`) |
 | CI definition | `pytest backend/test_ci_workflow.py` | Job graph, gate wiring, server boot order, pinned runners, paths and npm scripts that exist | That GitHub actually runs it |
@@ -94,6 +94,11 @@ hashed bundle, and `Vary: Origin` made the cache miss the assets it had just
 stored. Both are fixed; the worker's policy is unit-tested against fake caches,
 including "never intercept `/api`, `/ws` or a POST".
 
+The same pass now also requires the offline notice — with a working cached shell,
+an unreachable engine no longer looks like a failure until a save is attempted.
+And the manifest's long-press shortcuts are validated like the rest: each must
+name a route that answers 200.
+
 ### "Sizing and orientation"
 
 Widths are audited from **320 to 2560 px**, including tablet portrait
@@ -152,9 +157,9 @@ These are not gaps in effort; they are things automation cannot establish.
 6. **Realtime with more than one client.** The concept stream is tested by the
    journey for one client. Two accounts on one visit, reconnect after sleep, and
    a dropped socket mid-save are manual.
-7. **Performance on a low-end device.** The bundle is 805 kB (252 kB gzip) and
-   the 3D body map is eager; the improvement is listed in FEATURES.md, and the
-   measurement needs a real phone, not a desktop viewport.
+7. **Performance on a low-end device.** The entry chunk is 446 kB (133 kB gzip)
+   after the PDF writer was moved on demand; whether that is fast on a five-year-
+   old phone still needs the phone, not a desktop viewport.
 8. **Visual judgement.** Whether the feed, the rail and the palettes look good is
    a person's call. The audit can prove nothing is unreadable or broken; it
    cannot prove something is attractive.

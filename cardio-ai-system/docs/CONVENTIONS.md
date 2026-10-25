@@ -81,5 +81,18 @@
 
 `docs/ARCHITECTURE.md` (structure) · `docs/DATA_FLOW.md` (sequences) ·
 `docs/API_SPEC.md` (contract) · `docs/ADR.md` (decisions) ·
+`docs/DESIGN.md` (adaptive shell, visual language, WCAG map) ·
+`docs/FEATURES.md` (what exists, what is next, what not to build) ·
+`docs/VERIFICATION.md` (what the gate proves and what needs a person) ·
 `docs/MEDICATIONS.md` (catalogue and sources) · `docs/TECH_STACK.md` (versions) ·
-`docs/COMPATIBILITY.md` (limits) · `docs/SECURITY.md` (boundaries).
+`docs/COMPATIBILITY.md` (limits) · `docs/SECURITY.md` (boundaries) ·
+`docs/CI.md` (jobs, artifacts, reproduction).
+
+Two rules follow from the navigation and design work:
+
+- **A destination is added to `frontend/src/lib/navigation.ts`, nowhere else.**
+  The phone bar, the rail and the command palette all read it; a second list is
+  how the three drift apart.
+- **A layout decision that a reader could disagree with belongs in
+  `docs/DESIGN.md`, with the research it came from.** Classes are not an
+  argument.

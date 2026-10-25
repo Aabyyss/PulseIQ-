@@ -48,8 +48,10 @@ models/                      heart_model.pkl + metadata     (never hand-edit)
 data/heart.csv               training data                  (training only)
 frontend/src/pages/          route screens
 frontend/src/components/     app shell, body map, 3D heart, ui/ kit
-docs/                        ARCHITECTURE · DATA_FLOW · API_SPEC · ADR ·
+docs/                        ARCHITECTURE · DATA_FLOW · API_SPEC · ADR · DESIGN ·
+                             FEATURES · VERIFICATION · MEDICATIONS · CI ·
                              TECH_STACK · COMPATIBILITY · CONVENTIONS · SECURITY
+frontend/src/lib/navigation.ts  the one destination list (bar, rail, palette)
 ```
 
 ## Commands
@@ -61,7 +63,9 @@ docs/                        ARCHITECTURE · DATA_FLOW · API_SPEC · ADR ·
 cd frontend && npm run dev        # :5173
 cd frontend && npm run typecheck  # tsc --noEmit
 cd frontend && npm run build      # tsc -b && vite build
-cd frontend && npm run ui-audit   # contrast/layout sweep
+cd frontend && npm run ui-audit   # contrast/layout/states/PWA sweep (signed in)
+cd frontend && npm run e2e        # full journey against real servers
+cd .. && python scripts/verify_sources.py --network   # citations resolve
 make test / make run-backend ...  # Makefile shortcuts (WSL/Git-Bash+make)
 ```
 

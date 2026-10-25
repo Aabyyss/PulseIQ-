@@ -48,7 +48,8 @@ detected, which model inputs they produced, and what a clinician would reach for
 | 🕘 | **History & review** | Screenings, notes and consultations kept in the local database (newest 200), with band distribution and mean probability |
 | 📱 | **App shell on every device** | Five destinations plus More on a phone, a labelled rail from 1024px, one list behind both — with safe-area insets, 320–2560px audited, and both palettes |
 | ⌨️ | **Command palette** | Ctrl/⌘ K jumps to any workspace screen, ranked for the words clinicians actually type ("drugs", "records", "privacy") |
-| 📲 | **Installable, offline shell** | A manifest and service worker cache the shell and its hashed bundle; `/api` and `/ws` are never cached, so no patient data is stored by the worker |
+| 📲 | **Installable, offline shell** | A manifest (with long-press shortcuts) and service worker cache the shell and its hashed bundle; `/api` and `/ws` are never cached, and an offline bar says what is still possible |
+| 🖨️ | **Print-ready handouts** | Patient timeline and visit records print on white paper without the app chrome — the stylesheet hides what is marked, not every header and button |
 | 🤖 | **20 clinical agents** | Guidelines, uncertainty, causality, fairness, robustness, explainability — each an isolated, replaceable module |
 
 <div align="center">
@@ -175,7 +176,7 @@ cardio-ai-system/
 |---|---|---|
 | Backend pytest suite | CI · every push | 296 cases: clinical direction (symptom text → expected risk band), the published scores pinned row-by-row against their sources, the 36-option medication catalogue and its 53 interaction rules pinned to 12 citations, de-identification, the local stores, the login limiter, the FHIR bundle, the live medication screen, and the CI definition itself |
 | Backend script checks | CI · every push | The older password-free runners, including the end-to-end pipeline walk (symptom text → mapped features → prediction) — nonzero exit fails the job |
-| Frontend unit tests | CI · every push | `npm run test` (vitest + jsdom), 78 cases: extraction patterns, session and retry behaviour, page metadata, PDF pagination, theme and browser-chrome colour, navigation and palette ranking, and the service worker's caching policy |
+| Frontend unit tests | CI · every push | `npm run test` (vitest + jsdom), 82 cases: extraction patterns, session and retry behaviour, page metadata, PDF pagination, theme and browser-chrome colour, navigation and palette ranking, and the service worker's caching policy |
 | Frontend typecheck & build | CI · every push | `tsc -b` plus a production Vite build |
 | UI contrast & layout audit | CI · every push | 22 opened states (account menu, consult tab, history tab, More sheet, command palette, theme switch) plus 12 routes × 4 widths × 2 palettes of WCAG AA contrast; 11 widths (320–2560px, both tablet orientations) of overflow/clipping/tap-target checks; WCAG 1.4.12 spacing overrides; 2.4.11 focus obscuring; manifest/icons/worker/offline shell — signed in, any violation fails the run |
 | E2E journey | CI · every push | Playwright walks sign-in → adaptive navigation (rail, More sheet, Ctrl-K) → capture a line → save → PDF → thank-you → history against the **built bundle** served by `vite preview` and a live API, failing on any console error or failed API call |
