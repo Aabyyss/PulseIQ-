@@ -117,9 +117,9 @@ export function HistoryPage() {
     if (ok) setConsultations((prev) => prev.filter((item) => item.id !== id));
   }
 
-  function handleExportConsultation(visit: ConsultationRecord) {
+  async function handleExportConsultation(visit: ConsultationRecord) {
     if (!visit.report) return;
-    exportConsultationPdf(visit.report, {
+    await exportConsultationPdf(visit.report, {
       patientName: visit.patient_name,
       patientAge: visit.patient_age,
       patientGender: visit.patient_gender,

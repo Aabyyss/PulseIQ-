@@ -76,7 +76,7 @@ export async function finishConsultation(input: {
 
   let pdfExported = true;
   try {
-    exportConsultationPdf(report, {
+    await exportConsultationPdf(report, {
       patientName: input.meta.patientName,
       patientAge: input.meta.patientAge,
       patientGender: input.meta.patientGender,

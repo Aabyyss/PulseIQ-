@@ -32,7 +32,9 @@ const META = {
   chiefComplaint: "chest pain on exertion"
 };
 
-function text(doc: ReturnType<typeof buildConsultationPdf>): string {
+type Doc = Awaited<ReturnType<typeof buildConsultationPdf>>;
+
+function text(doc: Doc): string {
   return doc.output() as unknown as string;
 }
 
@@ -41,20 +43,20 @@ function occurrences(haystack: string, needle: string): number {
 }
 
 describe("buildConsultationPdf", () => {
-  it("keeps a short report on one page", () => {
-    const doc = buildConsultationPdf(report(1), META);
+  it("keeps a short report on one page", async () => {
+    const doc = await buildConsultationPdf(report(1), META);
     expect(doc.getNumberOfPages()).toBe(1);
     expect(text(doc)).toContain("Page 1 of 1");
   });
 
-  it("paginates a long report instead of drawing past the paper", () => {
-    const doc = buildConsultationPdf(report(12), META);
+  it("paginates a long report instead of drawing past the paper", async () => {
+    const doc = await buildConsultationPdf(report(12), META);
     expect(doc.getNumberOfPages()).toBeGreaterThan(1);
   });
 
-  it("numbers and foots every page, and keeps the last section", () => {
+  it("numbers and foots every page, and keeps the last section", async () => {
     const long = report(12);
-    const doc = buildConsultationPdf(long, META);
+    const doc = await buildConsultationPdf(long, META);
     const pages = doc.getNumberOfPages();
     const output = text(doc);
 
@@ -70,7 +72,7 @@ describe("buildConsultationPdf", () => {
     expect(output).toContain(`Red flag item ${long.red_flags.length}`);
   });
 
-  it("survives an empty report without dropping the header or the footer", () => {
+  it("survives an empty report without dropping the header or the footer", async () => {
     const empty: FinalReport = {
       title: "",
       summary: "",
@@ -80,7 +82,7 @@ describe("buildConsultationPdf", () => {
       follow_up_plan: [],
       red_flags: []
     };
-    const doc = buildConsultationPdf(empty);
+    const doc = await buildConsultationPdf(empty);
     expect(doc.getNumberOfPages()).toBe(1);
     const output = text(doc);
     expect(output).toContain("Consultation Report");

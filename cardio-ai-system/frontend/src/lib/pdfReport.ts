@@ -1,4 +1,4 @@
-import { jsPDF } from "jspdf";
+import type { jsPDF } from "jspdf";
 import type { FinalReport } from "@/lib/types";
 
 /**
@@ -98,9 +98,15 @@ export type PdfMeta = {
 /**
  * Build the report document. Separate from the download so the layout can be
  * asserted (page count, every page footed) without opening a browser download.
+ *
+ * Async because jsPDF is imported on demand: a PDF writer is never needed to
+ * read the workspace, and carrying it in the first payload delayed every screen
+ * that does not export anything. The type import above is erased at build time,
+ * so this module no longer pulls the library into the initial chunk.
  */
-export function buildConsultationPdf(report: FinalReport, meta?: PdfMeta): jsPDF {
-  const doc = new jsPDF({ unit: "mm", format: "a4" });
+export async function buildConsultationPdf(report: FinalReport, meta?: PdfMeta): Promise<jsPDF> {
+  const { jsPDF: JsPdf } = await import("jspdf");
+  const doc = new JsPdf({ unit: "mm", format: "a4" });
   drawHeader(doc, report.title);
 
   let y = CONTENT_TOP;
@@ -140,6 +146,7 @@ export function buildConsultationPdf(report: FinalReport, meta?: PdfMeta): jsPDF
   return doc;
 }
 
-export function exportConsultationPdf(report: FinalReport, meta?: PdfMeta) {
-  buildConsultationPdf(report, meta).save(`cardio-consult-report-${Date.now()}.pdf`);
+export async function exportConsultationPdf(report: FinalReport, meta?: PdfMeta) {
+  const doc = await buildConsultationPdf(report, meta);
+  doc.save(`cardio-consult-report-${Date.now()}.pdf`);
 }
