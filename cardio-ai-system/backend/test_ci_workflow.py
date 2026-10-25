@@ -61,7 +61,7 @@ def _uses(job: dict) -> list[str]:
 
 def test_every_job_exists_and_is_pinned(workflow: dict) -> None:
     jobs = _jobs(workflow)
-    assert set(jobs) == {"backend", "frontend", "ui-audit", "e2e", "gate"}
+    assert set(jobs) == {"backend", "frontend", "ui-audit", "e2e", "sources", "gate"}
     for name, job in jobs.items():
         assert job["runs-on"].startswith("ubuntu-"), f"{name} lost its pinned runner"
         assert not job["runs-on"].endswith("latest"), (
@@ -72,7 +72,7 @@ def test_every_job_exists_and_is_pinned(workflow: dict) -> None:
 
 def test_gate_requires_every_job_and_fails_on_a_skipped_one(workflow: dict) -> None:
     gate = _jobs(workflow)["gate"]
-    assert set(gate["needs"]) == {"backend", "frontend", "ui-audit", "e2e"}
+    assert set(gate["needs"]) == {"backend", "frontend", "ui-audit", "e2e", "sources"}
     assert gate.get("if") == "always()", (
         "without `if: always()` a failed job turns the gate into a skipped job, "
         "which branch protection reads as neutral rather than red"
@@ -80,7 +80,7 @@ def test_gate_requires_every_job_and_fails_on_a_skipped_one(workflow: dict) -> N
     # The gate must name each dependency's result, or a job could be added to
     # `needs` and never consulted.
     script = _run_text(gate)
-    for job in ("backend", "frontend", "ui-audit", "e2e"):
+    for job in ("backend", "frontend", "ui-audit", "e2e", "sources"):
         assert f"needs.{job}.result" in script, f"gate does not inspect {job}"
 
 
@@ -113,6 +113,16 @@ def test_e2e_job_builds_serves_and_points_the_journey_at_that_server(workflow: d
         "node scripts/e2e-save-visit.cjs --base-url http://127.0.0.1:4173" in run
     ), "without --base-url the journey starts its own servers and tests something else"
     assert "google-chrome" in run, "playwright-core needs a named browser binary"
+
+
+def test_sources_job_verifies_citations_without_needing_egress(workflow: dict) -> None:
+    job = _jobs(workflow)["sources"]
+    run = _run_text(job)
+    assert "scripts/verify_sources.py" in run
+    assert "--network" not in run, (
+        "a publisher blocking a runner would fail the gate for no clinical reason; "
+        "the live check is a local make target"
+    )
 
 
 def test_job_timeouts_are_bounded(workflow: dict) -> None:

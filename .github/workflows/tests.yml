@@ -298,18 +298,45 @@ jobs:
             cardio-ai-system/frontend/preview-e2e.log
           if-no-files-found: ignore
 
+  sources:
+    name: Catalogue sources
+    runs-on: ubuntu-24.04
+    # Cheap and network-free: every drug and every interaction rule must cite an
+    # id in SOURCES, and every registered source must be cited. The live URL
+    # check is `make verify-sources NETWORK=1` — it needs egress, and a publisher
+    # blocking a runner is not a reason to fail a push.
+    defaults:
+      run:
+        working-directory: cardio-ai-system
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: cardio-ai-system/requirements.txt
+
+      - name: Install backend dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Every citation resolves to a registered source
+        run: python scripts/verify_sources.py
+
   gate:
     name: Gate
     # One check to require in branch protection: it is red unless every job
     # above is green. `always()` makes a failed dependency a failure here rather
     # than a skipped job that looks benign in the checks list.
-    needs: [backend, frontend, ui-audit, e2e]
+    needs: [backend, frontend, ui-audit, e2e, sources]
     if: always()
     runs-on: ubuntu-24.04
     steps:
       - name: Every required job passed
         run: |
-          results="${{ needs.backend.result }} ${{ needs.frontend.result }} ${{ needs.ui-audit.result }} ${{ needs.e2e.result }}"
+          results="${{ needs.backend.result }} ${{ needs.frontend.result }} ${{ needs.ui-audit.result }} ${{ needs.e2e.result }} ${{ needs.sources.result }}"
           echo "job results: $results"
           for result in $results; do
             if [ "$result" != "success" ]; then
