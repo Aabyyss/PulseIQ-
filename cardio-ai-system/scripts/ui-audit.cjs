@@ -129,6 +129,8 @@ const LAYOUT_VIEWPORTS = [
   // WCAG 1.4.10 reflow: 320 CSS px is 1280 px at 400% zoom.
   { width: 320, height: 640, name: "320" },
   { width: 375, height: 667, name: "375" },
+  // Phone landscape: the bar and the sticky header compete for the short edge.
+  { width: 844, height: 390, name: "844x390" },
   { width: 768, height: 1024, name: "768" },
   { width: 1024, height: 768, name: "1024" },
   { width: 1280, height: 720, name: "1280" },
