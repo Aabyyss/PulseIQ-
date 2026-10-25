@@ -3,7 +3,16 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <meta name="theme-color" content="#12071F" />
+    <!-- The boot snippet rewrites this to the stored palette's colour; the
+         value here is the dark default it starts from. -->
+    <meta name="theme-color" content="#0B0C0F" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <!-- iOS opens a home-screen site in standalone mode from this manifest, but
+         the icon and status-bar treatment still come from the apple-* tags. -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="PulseIQ" />
+    <meta name="format-detection" content="telephone=no" />
     <script>
       (function(){try{var t=localStorage.getItem("pulseiq.theme");if(t!=="light"&&t!=="dark"){t=window.matchMedia&&window.matchMedia("(prefers-color-scheme: light)").matches?"light":"dark";}document.documentElement.classList.toggle("dark",t==="dark");}catch(e){document.documentElement.classList.add("dark");}})();
     </script>
