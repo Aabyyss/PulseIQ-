@@ -1524,3 +1524,59 @@ had to learn.
 22 state audits including the More sheet, E2E "Adaptive navigation" step,
 `navigation.test.ts` for the list and active rule. Documented in
 [DESIGN.md](DESIGN.md).
+
+---
+
+## ADR-033 · Installable app with an offline shell, and clinical data never cached
+
+**Context.** The app shipped icons for a home screen and a `viewport-fit=cover`
+meta tag, but no manifest and no service worker — so it could only ever be a tab,
+and a dropped connection meant a blank page. Chrome's install criteria need a
+manifest with a name, `start_url`, 192 and 512 icons and a standalone-ish
+`display`; iOS uses the manifest for standalone launch and the `apple-*` tags for
+icon and status bar.
+
+**Decision.** Ship `manifest.webmanifest` (`display: standalone`,
+`start_url: /`, dark canvas colours, the existing 192/512 icons — verified at
+their real pixel dimensions) and a service worker that:
+
+- precaches `/index.html`, the manifest, the icons, **and the hashed `/assets/`
+  files parsed out of the built HTML**;
+- serves navigations network-first with the cached shell as the fallback, and
+  hashed assets cache-first;
+- **never intercepts `/api` or `/ws`**, or any non-GET request;
+- registers only in production builds, after `load`, and never blocks the app if
+  registration fails.
+
+`theme-color` follows the stored palette (rewritten by `applyTheme` and by the
+boot snippet), so an installed app's status bar matches the page.
+
+**Why parse the HTML for assets.** A static precache list cannot name files whose
+names change every build. Caching only `index.html` produced an offline page that
+loaded its HTML and then failed its scripts — a blank screen that looks exactly
+like "the worker did not work" from the outside. Reading the built HTML closes
+that without a build-time manifest dependency.
+
+**Why `ignoreVary`.** Vite's preview server answers with `Vary: Origin`.
+Install-time `cache.addAll` sends no Origin; a module-script request does. A
+strict `cache.match` therefore missed the asset that had just been stored, and
+the offline shell was blank even with everything cached. `ignoreVary` is safe
+here because every stored URL is same-origin and content-hashed.
+
+**Rejected.** No service worker (tab-only, and no offline story); caching `/api`
+responses for speed (patient data on disk, and a stale consultation shown as
+current); a maskable 512 icon reusing the existing artwork (the artwork has no
+safe zone, so a maskable declaration would be a lie that crops badly); an
+install modal (an instruction to install is not worth a blocked screen); runtime
+`import()` of the worker (workers are not modules by default and must work before
+the bundle).
+
+**Consequences.** A new build needs no worker version bump unless the shell list
+changes; `activate` deletes every cache that is not the current version. The
+audit's PWA pass loads the built bundle, validates the manifest and icons, waits
+for an active worker, then turns the network off and requires `/history` to
+render — which is how both bugs above were found.
+
+**Verification.** `ui-audit.cjs` PWA pass; `serviceWorker.test.ts` (6 tests
+against fake caches, including "no `/api`, `/ws` or POST is intercepted" and the
+`ignoreVary` contract); `theme.test.ts` for the chrome colour.
