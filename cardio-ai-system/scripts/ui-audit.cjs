@@ -200,6 +200,21 @@ const STATES = [
   },
 ];
 
+/**
+ * WCAG 1.4.12: readers may override spacing to these values, and nothing may
+ * disappear. Applied as a stylesheet rather than by changing the design, so the
+ * sweep tests the same thing a browser extension would do to the running app.
+ */
+const TEXT_SPACING_CSS = `
+  * { line-height: 1.5 !important; letter-spacing: 0.12em !important; word-spacing: 0.16em !important; }
+  p { margin-bottom: 2em !important; }
+`;
+
+const TEXT_SPACING_VIEWPORTS = [
+  { width: 1440, height: 900, name: "1440" },
+  { width: 390, height: 844, name: "390" },
+];
+
 const AUDIT_EMAIL = process.env.PULSEIQ_AUDIT_EMAIL || "demo@cardio.local";
 const AUDIT_PASSWORD = process.env.PULSEIQ_AUDIT_PASSWORD || "DemoPass123";
 
@@ -354,6 +369,21 @@ function layoutAuditScript() {
     if (hasDirectText && el.scrollWidth > el.clientWidth + 1) {
       issues.push({
         kind: "clipped-text",
+        detail: `<${el.tagName.toLowerCase()}> "${(el.textContent || "").trim().slice(0, 40)}"`,
+      });
+    }
+    // A fixed-height box with hidden overflow can cut a line in half, which the
+    // width check above cannot see. Line clamping is deliberate truncation and
+    // is exempt for the same reason an ellipsis is.
+    const clamped = cs.webkitLineClamp && cs.webkitLineClamp !== "none";
+    if (
+      hasDirectText &&
+      !clamped &&
+      /hidden|clip/.test(cs.overflowY) &&
+      el.scrollHeight > el.clientHeight + 1
+    ) {
+      issues.push({
+        kind: "clipped-height",
         detail: `<${el.tagName.toLowerCase()}> "${(el.textContent || "").trim().slice(0, 40)}"`,
       });
     }
@@ -657,6 +687,27 @@ function waitFor(url, timeoutMs) {
       await page.close();
     }
 
+    // Text-spacing: the same layout pass with the reader's overrides applied.
+    // 1.4.12 is a requirement on the page, not on a stylesheet we control, so
+    // the sweep applies what a reader may apply and re-runs the clipping and
+    // overflow checks.
+    const textSpacingIssues = [];
+    for (const vp of TEXT_SPACING_VIEWPORTS) {
+      const page = await browser.newPage({ viewport: { width: vp.width, height: vp.height } });
+      await signIn(page, base, signedIn);
+      assertSession(page, vp.name, "text-spacing");
+      for (const route of ROUTES) {
+        await page.goto(base + route.path, { waitUntil: "networkidle", timeout: 30000 }).catch(() => {});
+        recordLanding(page, route, vp.name, "text-spacing");
+        await page.addStyleTag({ content: TEXT_SPACING_CSS });
+        await page.waitForTimeout(60);
+        for (const issue of await page.evaluate(`(${layoutAuditScript})()`)) {
+          textSpacingIssues.push({ viewport: vp.name, route: route.name, ...issue });
+        }
+      }
+      await page.close();
+    }
+
     // The states a route cannot show on first paint. Each one is opened and
     // proved — a tab that never switched, or a menu that never rendered, is
     // recorded as its own failure instead of auditing the page behind it.
@@ -730,6 +781,7 @@ function waitFor(url, timeoutMs) {
           statesAudited,
           violations,
           layoutIssues,
+          textSpacingIssues,
           redirects,
           themeIssues,
           shellIssues,
@@ -805,6 +857,17 @@ function waitFor(url, timeoutMs) {
       if (layoutIssues.length > 25) console.log(`  … and ${layoutIssues.length - 25} more (see ${REPORT})`);
     } else {
       console.log("✓ Layout: no overflow, clipping, or undersized targets");
+    }
+    if (textSpacingIssues.length) {
+      failed = true;
+      console.log(`\n✗ Text spacing (WCAG 1.4.12): ${textSpacingIssues.length} issue(s) with the reader's overrides applied`);
+      for (const i of textSpacingIssues.slice(0, 20)) {
+        console.log(`  [${i.viewport} ${i.route}] ${i.kind}: ${i.detail}`);
+      }
+    } else {
+      console.log(
+        `✓ Text spacing: ${TEXT_SPACING_VIEWPORTS.length * ROUTES.length} pages hold at 1.5 line-height, 0.12em letter-spacing and 0.16em word-spacing`
+      );
     }
 
     // A redirect seen while signed in means the session died mid-sweep; a
