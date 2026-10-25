@@ -18,6 +18,7 @@ import { useAuth } from "@/lib/authContext";
 import { IDLE_LOCK_MS, useIdleAutoLock } from "@/lib/idle-lock";
 import { PageViewTracker } from "@/lib/analytics";
 import { StorageNotice } from "@/components/app/storage-notice";
+import { ConnectionNotice } from "@/components/app/connection-notice";
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const { user, ready, signOut } = useAuth();
@@ -87,6 +88,9 @@ export default function App() {
   return (
     <>
       <PageViewTracker />
+      {/* Outside the shell: an offline launch lands on /login, which is not in
+          the shell, and that is the screen that most needs to say it. */}
+      <ConnectionNotice />
       <StorageNotice />
       <Routes>
       <Route path="/login" element={<LoginPage />} />

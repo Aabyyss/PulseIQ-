@@ -887,6 +887,21 @@ function waitFor(url, timeoutMs) {
             const status = await page.evaluate(async (src) => (await fetch(src)).status, icon.src);
             if (status !== 200) pwaIssues.push(`icon ${icon.src} answered ${status}`);
           }
+          // Long-press shortcuts are a manifest promise too: each must name a
+          // route the app actually serves, or the installed icon opens nothing.
+          for (const shortcut of m.shortcuts || []) {
+            if (!shortcut.name || !shortcut.url) {
+              pwaIssues.push("a manifest shortcut has no name or url");
+              continue;
+            }
+            const status = await page.evaluate(
+              async (url) => (await fetch(url, { redirect: "follow" })).status,
+              shortcut.url
+            );
+            if (status !== 200) {
+              pwaIssues.push(`shortcut ${shortcut.name} (${shortcut.url}) answered ${status}`);
+            }
+          }
         }
 
         const worker = await page.evaluate(async () => {
@@ -907,10 +922,16 @@ function waitFor(url, timeoutMs) {
         // the app rather than the browser's offline error.
         await context.setOffline(true);
         await page.goto(base + "/history", { waitUntil: "domcontentloaded", timeout: 15000 }).catch(() => {});
-        const offlineOk = await page
-          .evaluate(() => Boolean(document.querySelector("#root") && document.body.innerText.trim().length > 0))
-          .catch(() => false);
-        if (!offlineOk) pwaIssues.push("offline navigation did not render the cached shell");
+        const offlineState = await page
+          .evaluate(() => ({
+            rendered: Boolean(document.querySelector("#root") && document.body.innerText.trim().length > 0),
+            noticed: document.body.innerText.includes("Offline"),
+          }))
+          .catch(() => ({ rendered: false, noticed: false }));
+        if (!offlineState.rendered) pwaIssues.push("offline navigation did not render the cached shell");
+        // With the shell cached, a lost connection no longer looks like a
+        // failure; the notice is what stops a save from failing silently.
+        if (!offlineState.noticed) pwaIssues.push("the offline notice did not appear");
         await context.setOffline(false);
       } catch (error) {
         pwaIssues.push(`PWA pass failed: ${String(error.message || error).split("\n")[0]}`);
