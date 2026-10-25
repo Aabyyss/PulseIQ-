@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from "react";
-import { Activity, BookOpen, LogOut } from "lucide-react";
+import { Activity, BookOpen, LogOut, Search } from "lucide-react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { LogoMark, Wordmark } from "@/components/app/logo";
 import { ThemeToggle } from "@/components/app/theme-toggle";
 import { EngineStatus } from "@/components/app/engine-status";
 import { WorkspaceNav } from "@/components/app/workspace-nav";
+import { CommandPalette } from "@/components/app/command-palette";
 import { useAuth } from "@/lib/authContext";
 import { initialsOf } from "@/lib/authSession";
 import { activeItem } from "@/lib/navigation";
@@ -109,7 +110,7 @@ function AccountMenu() {
  * the bar is the page's own header — where you are, engine state, theme and the
  * account menu — and the logo is not drawn twice.
  */
-function Topbar({ title }: { title?: string }) {
+function Topbar({ title, onOpenPalette }: { title?: string; onOpenPalette: () => void }) {
   return (
     <header className="sticky top-0 z-30 flex h-14 items-center gap-3 border-b border-line bg-canvas/85 px-4 backdrop-blur-md sm:px-6 lg:px-8">
       <Link to="/" aria-label="PulseIQ overview" className="flex items-center gap-2.5 lg:hidden">
@@ -133,6 +134,22 @@ function Topbar({ title }: { title?: string }) {
       ) : null}
 
       <div className="ml-auto flex items-center gap-2">
+        {/* The palette's discoverable entry point. The shortcut alone would be
+            a feature only its author knows about. */}
+        <button
+          type="button"
+          onClick={onOpenPalette}
+          aria-label="Search destinations"
+          aria-keyshortcuts="Control+K Meta+K"
+          title="Jump to a destination (Ctrl K)"
+          className="flex h-9 items-center gap-2 rounded-lg border border-line bg-elev/70 px-2 text-xs text-muted transition-colors hover:bg-elev hover:text-fg sm:px-2.5"
+        >
+          <Search className="h-3.5 w-3.5" strokeWidth={1.75} />
+          <span className="hidden md:inline">Jump to…</span>
+          <kbd className="hidden rounded border border-line bg-inset px-1 py-0.5 font-mono text-[10px] text-faint md:inline">
+            Ctrl K
+          </kbd>
+        </button>
         <div className="hidden sm:block">
           <EngineStatus />
         </div>
@@ -190,6 +207,21 @@ function SiteFooter() {
 export function AppShell({ children }: { children: React.ReactNode }) {
   const { pathname } = useLocation();
   const active = activeItem(pathname);
+  const [paletteOpen, setPaletteOpen] = useState(false);
+
+  // Ctrl/⌘ K from anywhere. The listener is on the window because the shortcut
+  // has to work while focus is inside a form field, which is exactly when
+  // reaching for the mouse is most annoying.
+  useEffect(() => {
+    function onKeyDown(event: KeyboardEvent) {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        setPaletteOpen((open) => !open);
+      }
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
 
   return (
     <div className="flex min-h-dvh flex-col lg:flex-row">
@@ -200,7 +232,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <WorkspaceNav />
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <Topbar title={active?.label} />
+        <Topbar title={active?.label} onOpenPalette={() => setPaletteOpen(true)} />
         <main
           id="main"
           className="mx-auto w-full max-w-[1240px] flex-1 px-4 pb-8 pt-5 sm:px-6 lg:px-8 lg:pt-8 xl:max-w-[1320px] 2xl:max-w-[1440px]"
@@ -209,6 +241,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </main>
         <SiteFooter />
       </div>
+
+      <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
     </div>
   );
 }

@@ -181,6 +181,19 @@ const STATES = [
     },
   },
   {
+    // The palette is a modal with a text field, a listbox and live filtering —
+    // the densest surface in the app, and the one most likely to inherit an
+    // unchecked colour from a hover state.
+    name: "command-palette",
+    route: ROUTES.find((r) => r.name === "home"),
+    open: (page) => page.getByRole("button", { name: "Search destinations" }).click(),
+    witness: async (page) => {
+      await page.getByRole("dialog", { name: "Command palette" }).waitFor({ timeout: 5000 });
+      await page.getByRole("combobox", { name: "Search destinations" }).fill("med");
+      await page.getByRole("option").first().waitFor({ timeout: 5000 });
+    },
+  },
+  {
     // The switch, not the stored preference: this is the path a clinician
     // actually takes, and it proves the toggle flips the palette live.
     name: "theme-switch",
