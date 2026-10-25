@@ -46,6 +46,9 @@ detected, which model inputs they produced, and what a clinician would reach for
 | 🌍 | **Multilingual capture** | 9 capture languages — English, Urdu (script + Roman), Hindi, Arabic, Korean, French, Spanish, German, Mandarin — normalised to English for analysis |
 | 🖼️ | **Report reading** | Lab reports and scans parsed for key findings (needs a vision model) |
 | 🕘 | **History & review** | Screenings, notes and consultations kept in the local database (newest 200), with band distribution and mean probability |
+| 📱 | **App shell on every device** | Five destinations plus More on a phone, a labelled rail from 1024px, one list behind both — with safe-area insets, 320–2560px audited, and both palettes |
+| ⌨️ | **Command palette** | Ctrl/⌘ K jumps to any workspace screen, ranked for the words clinicians actually type ("drugs", "records", "privacy") |
+| 📲 | **Installable, offline shell** | A manifest and service worker cache the shell and its hashed bundle; `/api` and `/ws` are never cached, so no patient data is stored by the worker |
 | 🤖 | **20 clinical agents** | Guidelines, uncertainty, causality, fairness, robustness, explainability — each an isolated, replaceable module |
 
 <div align="center">
@@ -98,6 +101,13 @@ cd cardio-ai-system/frontend && npm install && npm run dev    # terminal 2
 ```
 </details>
 
+## 📲 Install it as an app
+
+With the app open, use the browser's **Install** action (Chrome/Edge: the install icon in the
+address bar; Safari on iOS: Share → *Add to Home Screen*). It launches standalone — no address
+bar — and the shell it caches opens offline. Clinical responses are never cached by the service
+worker: `/api` and `/ws` are excluded before any caching rule runs.
+
 ## 🧠 Model card
 
 Random Forest over the public heart dataset (1,025 rows · 13 features).
@@ -120,7 +130,8 @@ Random Forest over the public heart dataset (1,025 rows · 13 features).
 
 ```
 frontend  React 18 · Vite · TypeScript · Tailwind
-  ├── /               overview
+  ├── shell           one NAV list → phone bar + More sheet (< 1024px) · labelled rail (≥ 1024px)
+  ├── /               overview (feed; aside from 1280px)
   ├── /consultation   live capture  WS /ws/consultation · POST /diagnose
   │                                POST /medication-review · POST /lab-report
   ├── /medications    narrative + record → POST /medication-review
@@ -152,8 +163,9 @@ cardio-ai-system/
 ├── frontend/    React application (vitest for the non-React logic)
 ├── models/      trained model and metadata
 ├── data/        dataset
-├── docs/        design notes (ADR, API spec, data flow, security, CI, medication catalogue) · screenshots · walkthrough video
-├── scripts/     demo recording + video encode, screenshot capture, E2E journey, UI audit
+├── docs/        ADR, DESIGN (adaptive shell), FEATURES (roadmap), VERIFICATION (what the gate proves),
+│               API spec, data flow, security, CI, compatibility, medication catalogue · screenshots · video
+├── scripts/     E2E journey, UI audit (contrast/layout/states/PWA), source verifier, demo recording
 └── setup.ps1 · run-*.ps1 · Start-PulseIQ.cmd
 ```
 
@@ -161,12 +173,13 @@ cardio-ai-system/
 
 | Gate | Runs | What it proves |
 |---|---|---|
-| Backend pytest suite | CI · every push | 280 cases: clinical direction (symptom text → expected risk band), the published scores pinned row-by-row against their sources, the 36-option medication catalogue and its 53 interaction rules pinned to 12 citations, de-identification, the local stores, the login limiter, the FHIR bundle, the live medication screen |
+| Backend pytest suite | CI · every push | 296 cases: clinical direction (symptom text → expected risk band), the published scores pinned row-by-row against their sources, the 36-option medication catalogue and its 53 interaction rules pinned to 12 citations, de-identification, the local stores, the login limiter, the FHIR bundle, the live medication screen, and the CI definition itself |
 | Backend script checks | CI · every push | The older password-free runners, including the end-to-end pipeline walk (symptom text → mapped features → prediction) — nonzero exit fails the job |
-| Frontend unit tests | CI · every push | `npm run test` (vitest + jsdom): extraction patterns, session and retry behaviour, page metadata, PDF pagination |
+| Frontend unit tests | CI · every push | `npm run test` (vitest + jsdom), 78 cases: extraction patterns, session and retry behaviour, page metadata, PDF pagination, theme and browser-chrome colour, navigation and palette ranking, and the service worker's caching policy |
 | Frontend typecheck & build | CI · every push | `tsc -b` plus a production Vite build |
-| UI contrast & layout audit | CI · every push | WCAG AA contrast of every text node at 390/1366/1440 px in **both themes**, the account menu and both consult tabs opened and audited, and horizontal-overflow, clipped-text and tap-target sweeps of 12 routes × 9 widths (375–2560 px, the laptop panels included) — signed in, with the dock and account menu required on every route, and any violation fails the run |
-| E2E journey | CI · every push | Playwright walks sign-in → capture a line → save → PDF → thank-you → history against the **built bundle** served by `vite preview` and a live API, failing on any console error or failed API call |
+| UI contrast & layout audit | CI · every push | 22 opened states (account menu, consult tab, history tab, More sheet, command palette, theme switch) plus 12 routes × 4 widths × 2 palettes of WCAG AA contrast; 11 widths (320–2560px, both tablet orientations) of overflow/clipping/tap-target checks; WCAG 1.4.12 spacing overrides; 2.4.11 focus obscuring; manifest/icons/worker/offline shell — signed in, any violation fails the run |
+| E2E journey | CI · every push | Playwright walks sign-in → adaptive navigation (rail, More sheet, Ctrl-K) → capture a line → save → PDF → thank-you → history against the **built bundle** served by `vite preview` and a live API, failing on any console error or failed API call |
+| Catalogue sources | CI · every push | Every drug and rule cites a registered source and every source is cited; `make verify-sources NETWORK=1` additionally resolves the DOIs through Crossref |
 | Lint | local | `npm run lint` — zero errors, zero warnings without a `--max-warnings` guard |
 
 ## 🤝 Contributing
@@ -177,16 +190,18 @@ capture languages, and extending the agent registry.
 Before submitting, run the suites that CI runs:
 
 ```bash
-cd cardio-ai-system && make install-dev && python -m pytest backend -q   # 280 cases
+cd cardio-ai-system && make install-dev && python -m pytest backend -q   # 296 cases
 cd frontend && npm ci && npm run typecheck && npm run test && npm run lint && npm run build
 ```
 
 `npm run e2e` and `npm run ui-audit` (both need the servers up) cover the full journey and the
 UI gates; `make check` chains the tests, typecheck, lint and build.
 
-CI runs four gates on `ubuntu-24.04` and a `Gate` job that requires all of them
+CI runs five jobs on `ubuntu-24.04` and a `Gate` job that requires all of them
 ([docs/CI.md](cardio-ai-system/docs/CI.md)); require `Gate` in branch protection rather than
-remembering four checks. The `ui-audit` job installs the runtime requirements, starts the API on
+remembering five checks. [docs/VERIFICATION.md](cardio-ai-system/docs/VERIFICATION.md) states
+what each check proves and what still needs a person (hosted CI, real devices, other browsers,
+screen readers). The `ui-audit` job installs the runtime requirements, starts the API on
 the port the built app forwards `/api` to, waits for `/health`, and then sweeps the app **signed
 in** in both themes, failing if any route renders the sign-in page instead of itself, if a state
 it opens never arrives, or if the workspace shell is missing. The `e2e` job builds the bundle,
