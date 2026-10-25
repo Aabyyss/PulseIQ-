@@ -1580,3 +1580,43 @@ render — which is how both bugs above were found.
 **Verification.** `ui-audit.cjs` PWA pass; `serviceWorker.test.ts` (6 tests
 against fake caches, including "no `/api`, `/ws` or POST is intercepted" and the
 `ignoreVary` contract); `theme.test.ts` for the chrome colour.
+
+---
+
+## ADR-034 · A command palette with tiered ranking, built on a native dialog
+
+**Context.** Nine destinations fit the rail, but reaching the seventh still
+means finding it visually and moving the pointer to it, and the people who use
+this app most are typing a note when they want to change screen. A jump-to
+control is the conventional answer on a desktop app.
+
+**Decision.** Ctrl/⌘ K (and a visible "Jump to…" button) opens a palette that
+filters the same `NAV` list. Ranking lives in `lib/commands.ts` as a pure
+function with explicit tiers — exact label, label prefix, word prefix, keyword
+prefix, label substring, keyword substring — with every query token required to
+match somewhere and ties resolved by navigation order. Destinations carry the
+words a clinician uses for them: "drugs" finds the medication review, "records"
+finds history, "privacy" finds security.
+
+The overlay is a native `<dialog>` opened with `showModal()`, like the More
+sheet: focus containment, Escape, inert background and focus return are the
+browser's. The key listener is on the window, so the shortcut works while focus
+is inside a form field. The palette only navigates; it does not mutate data,
+which keeps the keyboard path free of irreversible actions.
+
+**Rejected.** A dependency (cmdk and friends) for a listbox over nine items; a
+single fuzzy score (it produces a ranking nobody can predict or test); sorting by
+list order alone ("med" would find the right screen by luck and "drugs" not at
+all); a modal built by hand (a focus trap that closes on the wrong Tab is the
+usual result); palette actions that save or delete (a keyboard slip should not
+file a visit).
+
+**Consequences.** Adding a destination to `NAV` adds it to the palette, but its
+keywords are a deliberate edit: the generic words that make search feel clever
+are also the ones that make unrelated screens compete. The audit opens the
+palette as a state with a query typed, in both palettes and both widths; the
+journey types "med" and presses Enter against the built bundle.
+
+**Verification.** `commands.test.ts` (6 cases, each a phrase a clinician would
+type), `ui-audit.cjs` state `command-palette`, E2E step in "Adaptive
+navigation".
