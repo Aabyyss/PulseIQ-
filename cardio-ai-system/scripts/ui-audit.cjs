@@ -228,6 +228,15 @@ const TEXT_SPACING_VIEWPORTS = [
   { width: 390, height: 844, name: "390" },
 ];
 
+// 2.4.11 is about the overlays this app actually has: a sticky top bar and a
+// fixed bottom bar. The three routes below carry the most focusable controls, so
+// they are where a bar that swallows a focused control would show up first.
+const FOCUS_VIEWPORTS = [
+  { width: 1440, height: 900, name: "1440" },
+  { width: 390, height: 844, name: "390" },
+];
+const FOCUS_ROUTES = ROUTES.filter((route) => ["home", "consultation", "medications"].includes(route.name));
+
 const AUDIT_EMAIL = process.env.PULSEIQ_AUDIT_EMAIL || "demo@cardio.local";
 const AUDIT_PASSWORD = process.env.PULSEIQ_AUDIT_PASSWORD || "DemoPass123";
 
@@ -355,6 +364,54 @@ function contrastAuditScript() {
     }
   }
   return { violations, sampled };
+}
+
+/**
+ * WCAG 2.2 SC 2.4.11 (Focus Not Obscured, AA): a focused control must not be
+ * *entirely* hidden by something the page put on top of it — a sticky header, a
+ * fixed bar, an open sheet. Partial obscuring is allowed at AA, so this samples
+ * five points across the control and fails only when none of them reaches it.
+ */
+function focusAuditScript() {
+  const issues = [];
+  const candidates = [...document.querySelectorAll(
+    'a[href], button, input, select, textarea, [tabindex]:not([tabindex="-1"])'
+  )].filter((el) => {
+    const cs = getComputedStyle(el);
+    if (cs.display === "none" || cs.visibility === "hidden" || el.disabled) return false;
+    const rect = el.getBoundingClientRect();
+    return rect.width >= 2 && rect.height >= 2;
+  });
+
+  for (const el of candidates.slice(0, 80)) {
+    el.focus({ preventScroll: false });
+    if (document.activeElement !== el) continue;
+    const rect = el.getBoundingClientRect();
+    if (rect.width < 2 || rect.height < 2) continue;
+    const points = [
+      [rect.left + rect.width / 2, rect.top + rect.height / 2],
+      [rect.left + 4, rect.top + 4],
+      [rect.right - 4, rect.top + 4],
+      [rect.left + 4, rect.bottom - 4],
+      [rect.right - 4, rect.bottom - 4],
+    ];
+    const visible = points.some(([x, y]) => {
+      if (x < 0 || y < 0 || x >= window.innerWidth || y >= window.innerHeight) return false;
+      const hit = document.elementFromPoint(x, y);
+      return Boolean(hit && (hit === el || el.contains(hit) || hit.contains(el)));
+    });
+    if (!visible) {
+      const at = document.elementFromPoint(
+        Math.min(Math.max(rect.left + rect.width / 2, 0), window.innerWidth - 1),
+        Math.min(Math.max(rect.top + rect.height / 2, 0), window.innerHeight - 1)
+      );
+      issues.push({
+        kind: "focus-obscured",
+        detail: `<${el.tagName.toLowerCase()}> "${(el.getAttribute("aria-label") || el.textContent || "").trim().slice(0, 40)}" is covered by <${(at && at.tagName.toLowerCase()) || "nothing"}>`,
+      });
+    }
+  }
+  return issues;
 }
 
 function layoutAuditScript() {
@@ -703,6 +760,26 @@ function waitFor(url, timeoutMs) {
       await page.close();
     }
 
+    // Focus: every control on three routes, focused in turn, must still be
+    // reachable under whatever is layered over the page.
+    const focusIssues = [];
+    for (const vp of FOCUS_VIEWPORTS) {
+      const page = await browser.newPage({ viewport: { width: vp.width, height: vp.height } });
+      await signIn(page, base, signedIn);
+      for (const route of FOCUS_ROUTES) {
+        await page.goto(base + route.path, { waitUntil: "networkidle", timeout: 30000 }).catch(() => {});
+        recordLanding(page, route, vp.name, "focus");
+        // Final state, not a frame mid-transition: the skip link slides into
+        // view on focus, and measuring it at 0ms reports a control that is
+        // visible a moment later.
+        await page.addStyleTag({ content: freeze });
+        for (const issue of await page.evaluate(`(${focusAuditScript})()`)) {
+          focusIssues.push({ viewport: vp.name, route: route.name, ...issue });
+        }
+      }
+      await page.close();
+    }
+
     // Text-spacing: the same layout pass with the reader's overrides applied.
     // 1.4.12 is a requirement on the page, not on a stylesheet we control, so
     // the sweep applies what a reader may apply and re-runs the clipping and
@@ -867,6 +944,7 @@ function waitFor(url, timeoutMs) {
           violations,
           layoutIssues,
           textSpacingIssues,
+          focusIssues,
           redirects,
           themeIssues,
           shellIssues,
@@ -949,6 +1027,17 @@ function waitFor(url, timeoutMs) {
       if (layoutIssues.length > 25) console.log(`  … and ${layoutIssues.length - 25} more (see ${REPORT})`);
     } else {
       console.log("✓ Layout: no overflow, clipping, or undersized targets");
+    }
+    if (focusIssues.length) {
+      failed = true;
+      console.log(`\n✗ Focus (WCAG 2.4.11): ${focusIssues.length} focused control(s) entirely obscured`);
+      for (const i of focusIssues.slice(0, 15)) {
+        console.log(`  [${i.viewport} ${i.route}] ${i.detail}`);
+      }
+    } else {
+      console.log(
+        `✓ Focus: every control stays visible when focused (${FOCUS_ROUTES.length} routes × ${FOCUS_VIEWPORTS.length} widths)`
+      );
     }
     if (textSpacingIssues.length) {
       failed = true;

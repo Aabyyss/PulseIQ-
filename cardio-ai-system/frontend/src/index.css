@@ -9,6 +9,17 @@
 
   html {
     -webkit-tap-highlight-color: transparent;
+    /* Keyboard focus and in-page anchors must not land under the sticky top bar
+       or the fixed phone bar. Without this, `scrollIntoView` on a control near
+       the end of a page parks it behind the bar (WCAG 2.4.11). */
+    scroll-padding-top: 4.5rem;
+    scroll-padding-bottom: 6rem;
+  }
+  @media (min-width: 1024px) {
+    html {
+      /* The rail replaces the bar at `lg`, so only the top bar remains. */
+      scroll-padding-bottom: 1rem;
+    }
   }
   html:not(.dark) {
     color-scheme: light;
