@@ -429,7 +429,10 @@ function shellAuditScript(expectedDock) {
   if (!nav) {
     missing.push("the workspace navigation");
   } else {
-    const items = [...nav.querySelectorAll("a[aria-label]")];
+    // The list holds the destinations; the rail's brand link is also named, and
+    // counting it would turn "nine destinations" into a check that always finds
+    // one extra.
+    const items = [...nav.querySelectorAll("ul a[aria-label]")];
     if (items.length < 9) missing.push(`navigation destinations (${items.length}/9)`);
     const current = nav.querySelector('[aria-current="page"]');
     if (expectedDock && !current) missing.push("the active destination");

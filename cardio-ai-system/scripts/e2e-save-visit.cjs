@@ -244,7 +244,51 @@ async function ensureAccount(baseUrl) {
     const token = await page.evaluate(() => localStorage.getItem("pulseiq_token"));
     assert(token && token.length > 0, `signed in, session persisted (POST /api/auth/login → 200)`);
 
-    /* ---------- 2. consultation capture ---------- */
+    /* ---------- 2. adaptive navigation ---------- */
+    step("Adaptive navigation");
+    const workspaceNav = page.locator('nav[aria-label="Workspace"]');
+    await workspaceNav.waitFor();
+    // The rail's brand is also a link with an accessible name; the list is the
+    // destination set, so counting the list is what proves the layout.
+    const visibleDestinations = () =>
+      page.locator('nav[aria-label="Workspace"] ul a[aria-label]:visible');
+    assert(
+      (await visibleDestinations().count()) === 9,
+      "1440px shows all nine destinations in the rail"
+    );
+    assert(
+      !(await page.getByRole("button", { name: "More destinations" }).isVisible().catch(() => false)),
+      "no More control where every destination fits"
+    );
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    assert(
+      (await visibleDestinations().count()) === 5,
+      "390px shows exactly five destinations plus More"
+    );
+    await page.getByRole("button", { name: "More destinations" }).click();
+    const sheet = page.getByRole("dialog", { name: "More destinations" });
+    await sheet.waitFor();
+    await sheet.getByRole("link", { name: "My notes" }).click();
+    await page.waitForURL("**/notes");
+    assert(
+      await page.getByRole("heading", { name: "My notes", level: 1 }).isVisible(),
+      "the sheet navigates to a destination the bar cannot hold"
+    );
+
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.keyboard.press("Control+k");
+    const palette = page.getByRole("dialog", { name: "Command palette" });
+    await palette.waitFor();
+    await page.getByRole("combobox", { name: "Search destinations" }).fill("med");
+    await page.keyboard.press("Enter");
+    await page.waitForURL("**/medications");
+    assert(
+      await page.getByRole("heading", { name: "Medication review", level: 1 }).isVisible(),
+      "Ctrl-K opens the palette and Enter lands on the medication review"
+    );
+
+    /* ---------- 3. consultation capture ---------- */
     step("Consultation capture");
     await page.goto(`${base}/consultation`, { waitUntil: "domcontentloaded" });
     const saveBtn = page.getByRole("button", { name: "Save visit & export PDF" });
@@ -297,7 +341,7 @@ async function ensureAccount(baseUrl) {
     );
     assert(consented, "consent checkbox ticked");
 
-    /* ---------- 3. save → report + store + PDF ---------- */
+    /* ---------- 4. save → report + store + PDF ---------- */
     step("Save visit");
     const downloadPromise = page
       .waitForEvent("download", { timeout: 150000 })
@@ -321,7 +365,7 @@ async function ensureAccount(baseUrl) {
     const visitsAfter = await countOf();
     assert(visitsAfter === visitsBefore + 1, `visit stored (count ${visitsBefore} → ${visitsAfter})`);
 
-    /* ---------- 4. thank-you page ---------- */
+    /* ---------- 5. thank-you page ---------- */
     step("Thank-you page");
     await page.waitForFunction(() => document.title === "Visit saved · PulseIQ", undefined, {
       timeout: 15000,
@@ -340,7 +384,7 @@ async function ensureAccount(baseUrl) {
     await page.getByRole("link", { name: "Review past visits" }).waitFor();
     pass("both CTAs present");
 
-    /* ---------- 5. history ---------- */
+    /* ---------- 6. history ---------- */
     step("History");
     await page.goto(`${base}/history`, { waitUntil: "domcontentloaded" });
     await page.getByRole("tab", { name: "Consultations" }).click();
