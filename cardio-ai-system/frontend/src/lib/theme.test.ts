@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { applyTheme, currentTheme, storedTheme, THEME_BOOT_SNIPPET } from "./theme";
+import { applyTheme, currentTheme, storedTheme, THEME_BOOT_SNIPPET, THEME_COLORS } from "./theme";
 
 /**
  * The theme controller is what the UI audit now depends on for its second
@@ -80,6 +80,20 @@ describe("boot snippet", () => {
     setSystemPrefersLight(true);
     run();
     expect(document.documentElement.classList.contains("dark")).toBe(false);
+  });
+
+  it("moves the browser chrome colour with the palette", () => {
+    document.head.querySelector('meta[name="theme-color"]')?.remove();
+    const meta = document.createElement("meta");
+    meta.setAttribute("name", "theme-color");
+    meta.setAttribute("content", THEME_COLORS.dark);
+    document.head.appendChild(meta);
+
+    applyTheme("light");
+    expect(meta.getAttribute("content")).toBe(THEME_COLORS.light);
+    applyTheme("dark");
+    expect(meta.getAttribute("content")).toBe(THEME_COLORS.dark);
+    meta.remove();
   });
 
   it("falls back to dark when storage throws", () => {
