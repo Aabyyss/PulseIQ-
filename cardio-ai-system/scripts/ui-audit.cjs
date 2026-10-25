@@ -5,18 +5,19 @@
  *
  * 1. Contrast: every visible text element's resolved foreground is compared
  *    against its real rendered background (nearest ancestor that paints one,
- *    alpha-composited) at 1440px and 390px, in **both themes**. Fails below
+ *    alpha-composited) at laptop, tablet and phone widths, in **both themes**. Fails below
  *    WCAG AA — 4.5:1 for body text, 3:1 for large text (24px+, or 19px+ bold).
  *    CSS animations are disabled first so entrance transitions are audited at
  *    final state. The theme is applied through the stored preference before
  *    the page boots, and the sweep asserts it took effect: an emulation that
  *    silently failed would audit the dark palette twice and call it light.
  *
- * 2. Layout: per route at phone, tablet, laptop and desktop widths (375 through
+ * 2. Layout: per route at phone, tablet, laptop and desktop widths (320 through
  *    2560 px) — horizontal page overflow, clipped text (scrollWidth >
- *    clientWidth), and tap targets under 24px. The desktop sizes are the ones
- *    a real machine reports (1366x768 and 1536x864 are the most common laptop
- *    panels), because a layout that only holds at 1440 is not responsive.
+ *    clientWidth), and tap targets under 24px. 320px is WCAG 1.4.10's reflow
+ *    width (1280px at 400% zoom), and the desktop sizes are the ones a real
+ *    machine reports (1366x768 and 1536x864 are the most common laptop panels),
+ *    because a layout that only holds at 1440 is not responsive.
  *
  * 3. States: the screens a route cannot show on first paint. The account menu,
  *    the "Full consult" tab and the "Consultations" history tab are opened at
@@ -118,10 +119,15 @@ const STATE_VIEWPORTS = [
 const CONTRAST_VIEWPORTS = [
   { width: 1440, height: 900, name: "1440" },
   { width: 1366, height: 768, name: "1366" },
+  // Tablet portrait: the width where the phone bar is still in charge and a
+  // 9-item row used to be squeezed rather than split.
+  { width: 820, height: 1180, name: "820" },
   { width: 390, height: 844, name: "390" },
 ];
 
 const LAYOUT_VIEWPORTS = [
+  // WCAG 1.4.10 reflow: 320 CSS px is 1280 px at 400% zoom.
+  { width: 320, height: 640, name: "320" },
   { width: 375, height: 667, name: "375" },
   { width: 768, height: 1024, name: "768" },
   { width: 1024, height: 768, name: "1024" },
@@ -159,6 +165,38 @@ const STATES = [
     open: (page) => page.getByRole("tab", { name: "Consultations" }).click(),
     witness: (page) =>
       page.getByRole("tab", { name: "Consultations", selected: true }).waitFor({ timeout: 5000 }),
+  },
+  {
+    // The sheet is the only way to reach four destinations on a phone. It is a
+    // modal, so it also exercises the contrast of the backdrop-darkened page.
+    name: "more-sheet",
+    route: ROUTES.find((r) => r.name === "home"),
+    viewports: ["390"],
+    open: (page) => page.getByRole("button", { name: "More destinations" }).click(),
+    witness: async (page) => {
+      const sheet = page.getByRole("dialog", { name: "More destinations" });
+      await sheet.waitFor({ timeout: 5000 });
+      const reached = await sheet.locator("a").count();
+      if (reached < 4) throw new Error(`the sheet reached only ${reached} destinations`);
+    },
+  },
+  {
+    // The switch, not the stored preference: this is the path a clinician
+    // actually takes, and it proves the toggle flips the palette live.
+    name: "theme-switch",
+    route: ROUTES.find((r) => r.name === "home"),
+    open: async (page) => {
+      const before = await page.evaluate(() => document.documentElement.classList.contains("dark"));
+      await page.getByRole("switch").click();
+      await page.waitForFunction(
+        (was) => document.documentElement.classList.contains("dark") !== was,
+        before,
+        { timeout: 5000 }
+      );
+    },
+    witness: async (page) => {
+      await page.getByRole("switch", { name: /Switch to (light|dark) mode/ }).waitFor({ timeout: 5000 });
+    },
   },
 ];
 
@@ -338,18 +376,43 @@ function layoutAuditScript() {
  */
 function shellAuditScript(expectedDock) {
   const missing = [];
-  const dock = document.querySelector('nav[aria-label="Workspace"]');
-  if (!dock) {
-    missing.push("the workspace dock");
+  const nav = document.querySelector('nav[aria-label="Workspace"]');
+  const visible = (el) => {
+    const cs = getComputedStyle(el);
+    if (cs.display === "none" || cs.visibility === "hidden") return false;
+    const rect = el.getBoundingClientRect();
+    return rect.width > 0 && rect.height > 0;
+  };
+  if (!nav) {
+    missing.push("the workspace navigation");
   } else {
-    const items = dock.querySelectorAll("a[aria-label]");
-    if (items.length < 9) missing.push(`dock items (${items.length}/9)`);
-    const current = dock.querySelector('[aria-current="page"]');
-    if (expectedDock && !current) missing.push("the active dock item");
+    const items = [...nav.querySelectorAll("a[aria-label]")];
+    if (items.length < 9) missing.push(`navigation destinations (${items.length}/9)`);
+    const current = nav.querySelector('[aria-current="page"]');
+    if (expectedDock && !current) missing.push("the active destination");
     else if (expectedDock && current.getAttribute("aria-label") !== expectedDock) {
       missing.push(
-        `the active dock item (${"\u201c"}${current.getAttribute("aria-label")}${"\u201d"} instead of ${"\u201c"}${expectedDock}${"\u201d"})`
+        `the active destination (${"\u201c"}${current.getAttribute("aria-label")}${"\u201d"} instead of ${"\u201c"}${expectedDock}${"\u201d"})`
       );
+    }
+    // The adaptive shell is two presentations of one list. Counting links in
+    // the DOM proves neither: hidden items count too. At `lg` every destination
+    // must be on screen and the overflow control gone; below it, exactly five
+    // destinations and a reachable More control.
+    const shown = items.filter(visible);
+    const more = [...nav.querySelectorAll("button[aria-label]")].find(
+      (el) => el.getAttribute("aria-label") === "More destinations"
+    );
+    if (window.innerWidth >= 1024) {
+      if (shown.length !== items.length) {
+        missing.push(`the rail (${shown.length}/${items.length} destinations visible at ${window.innerWidth}px)`);
+      }
+      if (more && visible(more)) missing.push("the rail drew the phone More control");
+    } else {
+      if (shown.length !== 5) {
+        missing.push(`a five-destination bar (${shown.length} visible at ${window.innerWidth}px)`);
+      }
+      if (!more || !visible(more)) missing.push("the More control that reaches the other destinations");
     }
   }
   if (!document.querySelector('[aria-label="Account menu"]')) missing.push("the account menu");
@@ -598,10 +661,19 @@ function waitFor(url, timeoutMs) {
     // proved — a tab that never switched, or a menu that never rendered, is
     // recorded as its own failure instead of auditing the page behind it.
     let statesAudited = 0;
+    // A state that only exists in one presentation (the phone More sheet) says
+    // which widths it is opened at; everything else is opened at both.
+    const expectedStates = STATES.reduce(
+      (count, state) => count + (state.viewports ? state.viewports.length : STATE_VIEWPORTS.length),
+      0
+    ) * THEMES.length;
     if (signedIn) {
       for (const theme of THEMES) {
         for (const state of STATES) {
-          for (const vp of STATE_VIEWPORTS) {
+          const viewports = STATE_VIEWPORTS.filter(
+            (vp) => !state.viewports || state.viewports.includes(vp.name)
+          );
+          for (const vp of viewports) {
             const page = await browser.newPage({ viewport: { width: vp.width, height: vp.height } });
             const where = `${state.name} @ ${vp.name}px ${theme}`;
             try {
@@ -678,7 +750,7 @@ function waitFor(url, timeoutMs) {
     );
     console.log(
       signedIn
-        ? `States:   ${statesAudited}/${STATES.length * STATE_VIEWPORTS.length * THEMES.length} open states audited`
+        ? `States:   ${statesAudited}/${expectedStates} open states audited`
         : "States:   skipped (signed out — the workspace is not reachable)"
     );
     console.log("");
@@ -702,7 +774,7 @@ function waitFor(url, timeoutMs) {
       }
       if (shellIssues.length > 5) console.log(`  … and ${shellIssues.length - 5} more (see ${REPORT})`);
     } else if (signedIn) {
-      console.log("✓ Shell: every signed-in route carried the dock, its active item and the account menu");
+      console.log("✓ Shell: every signed-in route carried the navigation, its active item and the account menu");
     }
     if (stateIssues.length) {
       failed = true;
