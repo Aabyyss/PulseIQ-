@@ -33,14 +33,24 @@ import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
 WORKFLOW_PATH = ROOT.parent / ".github" / "workflows" / "tests.yml"
+DRIFT_WORKFLOW_PATH = ROOT.parent / ".github" / "workflows" / "toolchain-drift.yml"
+
+
+def load(path: Path) -> dict:
+    assert path.is_file(), f"missing workflow at {path}"
+    # PyYAML resolves the bare `on:` key to the boolean True, so the trigger map
+    # has to be read back under either name.
+    return yaml.safe_load(path.read_text(encoding="utf-8"))
 
 
 @pytest.fixture(scope="module")
 def workflow() -> dict:
-    assert WORKFLOW_PATH.is_file(), f"missing workflow at {WORKFLOW_PATH}"
-    # PyYAML resolves the bare `on:` key to the boolean True, so the trigger map
-    # has to be read back under either name.
-    return yaml.safe_load(WORKFLOW_PATH.read_text(encoding="utf-8"))
+    return load(WORKFLOW_PATH)
+
+
+@pytest.fixture(scope="module")
+def drift_workflow() -> dict:
+    return load(DRIFT_WORKFLOW_PATH)
 
 
 def _jobs(workflow: dict) -> dict:
@@ -263,6 +273,43 @@ def test_backend_job_leaves_pytest_output_for_a_failed_run(workflow: dict) -> No
     ]
     assert uploads, "the pytest log is written but never uploaded"
     assert uploads[0].get("if") == "always()", "a failed run is the one that needs the log"
+
+
+def test_the_drift_job_is_weekly_and_never_gates_a_push(drift_workflow: dict) -> None:
+    """A new upstream release is not a defect in the commit that happens to be HEAD."""
+    triggers = drift_workflow.get("on", drift_workflow.get(True))
+    crons = [entry["cron"] for entry in triggers["schedule"]]
+    assert len(crons) == 1 and crons[0].startswith("0 "), crons
+    assert "workflow_dispatch" in triggers
+    assert "push" not in triggers and "pull_request" not in triggers, (
+        "drift on every push would gate a commit for a release it never touched"
+    )
+
+
+def test_the_drift_job_installs_the_floors_and_reports_against_the_lock(
+    drift_workflow: dict,
+) -> None:
+    job = drift_workflow["jobs"]["drift"]
+    run = _run_text(job)
+
+    installs = [line for line in run.splitlines() if "pip install -r requirements-dev.txt" in line]
+    assert installs, "the drift job must install the released floors"
+    assert all("-c requirements.lock.txt" not in line for line in installs), (
+        "installing with the lock would compare the pin with itself"
+    )
+
+    assert "scripts/toolchain.py --check" in run
+    assert "scripts/toolchain.py --freeze" in run
+    assert "set -o pipefail" in run and "tee pytest-floors.log" in run
+
+    uploads = [
+        step
+        for step in _steps(job)
+        if "resolved-requirements.txt" in str(step.get("with", {}).get("path", ""))
+    ]
+    assert uploads and uploads[0].get("if") == "always()", (
+        "the resolved block is the re-lock input and must upload even when the suite fails"
+    )
 
 
 def test_backend_job_runs_pytest_and_the_script_checks(workflow: dict) -> None:

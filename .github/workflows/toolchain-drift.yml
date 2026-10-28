@@ -1,0 +1,82 @@
+name: Toolchain drift
+
+# Weekly, not on push. This job asks a question about the *published* world: what
+# do the floors in requirements*.txt resolve to today, and does that still match
+# `requirements.lock.txt`? A new pandas or pytest release is information, not a
+# defect in whichever commit happens to be HEAD, so it must not gate a push — but
+# it should be visible before it arrives inside a green-looking change.
+#
+# Red here means one of two things, and the job summary says which:
+#   * the floors resolve a different toolchain than the pin (drift), or
+#   * the suite fails on the floors (the upstream breakage the pin is hiding).
+# Neither is fixed by relaxing the pin; docs/CI.md has the deliberate path.
+
+on:
+  schedule:
+    - cron: "0 6 * * 1" # Mondays, 06:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  drift:
+    name: Floors vs pinned toolchain
+    runs-on: ubuntu-24.04
+    # Installs a full Python stack and runs the suite: bounded like the other
+    # jobs that do real I/O rather than inheriting the six-hour default.
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: cardio-ai-system
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: cardio-ai-system/requirements.txt
+
+      # No `-c requirements.lock.txt` here, and that is the whole point: this
+      # step is what a laptop and a future runner get, unpinned.
+      - name: Install from the floors, without the lock
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+
+      # The same model the gate installs, so the suite below is the suite the
+      # gate runs rather than its dictionary fallback.
+      - name: Install the spaCy model
+        run: |
+          pip install https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl \
+            || echo "::warning::spaCy model unavailable; the suite runs on the dictionary fallback"
+
+      # A drift report is more useful next to the answer "and the tests still
+      # pass", or "and they do not". `pipefail` keeps pytest's exit status.
+      - name: Run the suite on the floors
+        run: |
+          set -o pipefail
+          python -m pytest backend -q 2>&1 | tee pytest-floors.log
+
+      # `if: always()` because this is the report that makes a failed suite
+      # above diagnosable: a version bump is the usual cause.
+      - name: Compare with the lock
+        if: always()
+        run: python scripts/toolchain.py --check
+
+      - name: Resolved toolchain
+        if: always()
+        run: python scripts/toolchain.py --freeze > resolved-requirements.txt
+
+      # The artifact is the re-lock input: paste this block under the lock's
+      # header once the run above is understood, per docs/CI.md.
+      - name: Upload the resolved toolchain
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: toolchain-drift
+          path: |
+            cardio-ai-system/resolved-requirements.txt
+            cardio-ai-system/pytest-floors.log
+          if-no-files-found: ignore
