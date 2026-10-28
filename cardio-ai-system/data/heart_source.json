@@ -1,0 +1,59 @@
+{
+  "name": "UCI Heart Disease (Cleveland processed)",
+  "repository": "UCI Machine Learning Repository, dataset 45",
+  "url": "https://archive.ics.uci.edu/dataset/45/heart+disease",
+  "download": "https://archive.ics.uci.edu/static/public/45/heart+disease.zip",
+  "doi": "10.24432/C52P4X",
+  "licence": "CC BY 4.0",
+  "licence_url": "https://creativecommons.org/licenses/by/4.0/",
+  "citation": "Janosi, A., Steinbrunn, W., Pfisterer, M., Detrano, R. (1988). Heart Disease. UCI Machine Learning Repository. https://doi.org/10.24432/C52P4X",
+  "patients_attribution": "Cleveland Clinic Foundation; data collected by Robert Detrano, M.D., Ph.D.",
+  "retrieved": "2026-10-28",
+  "archive_sha256": "b17cd273da9ce1caa4710fce80227ea454d4dbf9fcbc8e6a9121672751563adc",
+  "member": "processed.cleveland.data",
+  "member_sha256": "a74b7efa387bc9d108d7d0115d831fe9b414b29ae7124f331b622b4efa0427c8",
+  "output": "data/heart.csv",
+  "columns": [
+    "age",
+    "sex",
+    "cp",
+    "trestbps",
+    "chol",
+    "fbs",
+    "restecg",
+    "thalach",
+    "exang",
+    "oldpeak",
+    "slope",
+    "ca",
+    "thal",
+    "target"
+  ],
+  "transformations": [
+    "dropped 6 records with a missing value (ca x4, thal x2) instead of imputing them",
+    "renamed the 13 predictor columns to the names the model uses",
+    "binarised num (0-4 angiographic severity): target = 1 if num > 0 else 0",
+    "exact duplicate feature vectors: none in this export"
+  ],
+  "target_encoding": "1 = disease, 0 = no disease (num > 0), verified from feature means",
+  "source_rows": 303,
+  "dropped_incomplete_rows": 6,
+  "rows": 297,
+  "disease": 137,
+  "healthy": 160,
+  "unique_rows": 297,
+  "direction_check": {
+    "thalach": {
+      "disease": 139.11,
+      "healthy": 158.58
+    },
+    "oldpeak": {
+      "disease": 1.59,
+      "healthy": 0.6
+    },
+    "ca": {
+      "disease": 1.15,
+      "healthy": 0.28
+    }
+  }
+}

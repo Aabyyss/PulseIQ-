@@ -1,30 +1,39 @@
 # Data sources — what can legally be added
 
-> Written 2026-10-28, after the duplicate-row correction (ADR-035). Licences
-> were read from the primary source pages listed below, not from mirrors. This
-> file records decisions, not data: no third-party dataset is vendored here,
-> because a public repository that copies a dataset must be able to name the
-> licence it is redistributing under, and this one currently cannot.
+> Written 2026-10-28, after the duplicate-row correction (ADR-035) and the
+> dataset replacement (ADR-037). Licences were read from the primary source
+> pages listed below, not from mirrors. Every dataset in this file was assessed
+> for whether it can be redistributed in a public repository — more than half
+> of them cannot, whatever their research value.
 
 ## The data in use
 
 | | |
 |---|---|
-| File | `data/heart.csv` |
-| Provenance | The widely circulated Kaggle `heart.csv` (`johnsmith88`), an inflated copy of the UCI Cleveland cohort |
-| Rows | 1,025 — **302 distinct feature vectors**, 723 exact duplicates |
-| Licence | **Not verifiable.** The Kaggle page does not expose licence metadata, so this file is not redistributable under a licence this project can name |
-| Outcome | Angiographic heart disease, label inverted in the file (target 1 = healthy) |
+| File | `data/heart.csv`, built by `scripts/import_uci_heart.py` |
+| Provenance | **UCI Heart Disease, Cleveland processed** (dataset 45) |
+| Licence | **CC BY 4.0** — redistribution and commercial use with attribution |
+| Citation | Janosi, Steinbrunn, Pfisterer, Detrano (1988), doi:10.24432/C52P4X |
+| Attribution | [`data/ATTRIBUTION.md`](../data/ATTRIBUTION.md), shipped with the data |
+| Rows | 303 source records; **297** after dropping 6 with a missing `ca`/`thal`; no duplicate vectors |
+| Outcome | Angiographic disease: `target = 1` when `num > 0` |
+| Integrity | Archive and member SHA-256 pinned in the importer; CSV SHA-256 recorded in `heart_model_meta.json` |
 
-That last row is the honest position: the dataset is in the repo as it was
-supplied, and the project should not claim more than that. Anyone publishing
-this repository should replace it with the UCI original (below) and a citation.
+This replaced the widely circulated Kaggle `heart.csv`, which was a derivative
+of the same Cleveland cohort: 1,025 rows of which only 302 were distinct, an
+inverted target, and no licence metadata this project could verify. Its
+duplicate rows are what produced the withdrawn ROC-AUC of 1.000.
+
+If the dataset is ever swapped again, `backend/test_feature_encoding.py` fails
+when the codebook changes (it asserts the categorical domains against the file),
+and `backend/test_train_model.py` fails if the attribution, source fields or
+split rule disappear.
 
 ## Candidates, and what each can actually support
 
 | Source | Licence / access | Size | Fits the 13 features? | Verdict |
 |---|---|---|---|---|
-| [UCI Heart Disease](https://archive.ics.uci.edu/dataset/45/heart+disease) | **CC BY 4.0** — redistribution and commercial use with attribution; no DUA, IRB or fee | 303 Cleveland; repository also has Hungarian (294), Switzerland (123), VA Long Beach (200), ~920 records across sites | **Yes — all 13**, `num` binarised to presence/absence | **The correct replacement for the Kaggle copy.** Cleveland is the same 303 patients already in `heart.csv`, so it fixes provenance, not sample size. The other sites are genuinely different cohorts but are small and have missing fields (`ca`, `thal`) |
+| [UCI Heart Disease](https://archive.ics.uci.edu/dataset/45/heart+disease) | **CC BY 4.0** — redistribution and commercial use with attribution; no DUA, IRB or fee | 303 Cleveland; repository also has Hungarian (294), Switzerland (123), VA Long Beach (200), ~920 records across sites | **Yes — all 13**, `num` binarised to presence/absence | **In use (Cleveland).** The other sites are genuinely different cohorts but small and missing `ca`/`thal`; they would need per-site reporting and explicit missingness handling |
 | [UCI Statlog (Heart)](https://archive.ics.uci.edu/dataset/145/statlog+heart) | **CC BY 4.0** | 270 | Yes, after renaming (`chest-pain`, `rest-bp`, `serum-chol`, …) | **Do not pool with Cleveland.** It is the same patients in a different encoding; adding it would recreate the duplicate leak in a subtler form |
 | [Z-Alizadeh Sani](https://archive.ics.uci.edu/dataset/412/z+alizadeh+sani) | **CC BY 4.0** | 303 patients | No — 54 features, different definitions | Useful only for a separate experiment, not this model's feature vector |
 | [PTB-XL](https://physionet.org/content/ptb-xl/1.0.3/) | **CC BY 4.0** | 21,799 ECG records / 18,869 patients | No — ECG waveforms and metadata, not these 13 tabular features | A different task (ECG classification). Legally clean, methodologically irrelevant here |
@@ -36,10 +45,9 @@ this repository should replace it with the UCI original (below) and a citation.
 
 ## What would actually improve the model
 
-1. **Provenance first, rows second.** Replace the Kaggle file with the UCI
-   Cleveland original, add its citation and licence to the README, and keep the
-   de-duplication (the original has duplicates of its own). This changes
-   nothing about the metrics and everything about whether the repo is defensible.
+1. **Provenance — done (ADR-037).** The data is now the UCI Cleveland original
+   with its licence, citation, hashes and modifications shipped alongside it.
+   Sample size is honestly 297 patients, not 1,025 rows.
 2. **Then the other three UCI sites** (Hungarian, Switzerland, VA Long Beach),
    mapped to the same schema with explicit missing-value handling — `ca` and
    `thal` are absent for Long Beach and Switzerland. That is the only *free,
@@ -48,6 +56,6 @@ this repository should replace it with the UCI original (below) and a citation.
 3. **Not** Statlog (same patients), not NHANES (different outcome), not PTB-XL
    (different task), not the access-controlled cohorts (cannot be redistributed).
 
-Any of those is a research decision with a measurable cost, so it is not taken
-here. The current card states 302 distinct patients, which is the real sample
+Adding the other sites is a research decision with a measurable cost, so it is
+not taken here. The card states 297 distinct patients, which is the real sample
 size, and the calibration block shows the probability is usable on that sample.

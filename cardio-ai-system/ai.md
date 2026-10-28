@@ -21,9 +21,11 @@ agents under agents/. Model artifact under models/.
    api_server.py never import agents directly. Risk banding thresholds
    (>0.75 High / >0.45 Medium) exist only in orchestrator.risk_from_probability.
 4. No agent imports another agent.
-5. heart.csv labels are inverted upstream; train_model.py flips and asserts.
-   Never remove that assertion. heart.csv also contains 723 duplicate rows of
-   1,025: de-duplicate before splitting (load_dataset), or the holdout leaks.
+5. heart.csv is built from the UCI Cleveland original (CC BY 4.0) by
+   scripts/import_uci_heart.py; attribution ships in data/ATTRIBUTION.md.
+   train_model.py asserts label polarity and de-duplicates before splitting.
+   Never remove those assertions. Feature values must stay in the UCI codebook
+   (cp 1-4, thal 3/6/7, slope 1-3), or the model sees values it never learned.
 6. No server-side persistence of patient data. Frontend history in
    localStorage, capped at 20 entries.
 7. Domain errors: HTTP 200 + {"error": "..."} per docs/API_SPEC.md.

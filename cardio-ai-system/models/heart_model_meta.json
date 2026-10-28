@@ -1,16 +1,34 @@
 {
   "name": "PulseIQ heart-disease screening model",
   "algorithm": "RandomForestClassifier(n_estimators=300, random_state=42)",
-  "trained_at": "2026-10-28 22:43:49",
+  "trained_at": "2026-10-28 23:04:45",
   "sklearn_version": "1.9.1",
-  "dataset": "data/heart.csv (public heart dataset)",
-  "dataset_rows": 1025,
-  "dataset_unique_rows": 302,
-  "dataset_duplicate_rows": 723,
+  "dataset": "UCI Heart Disease (Cleveland processed)",
+  "dataset_rows": 297,
+  "dataset_unique_rows": 297,
+  "dataset_duplicate_rows": 0,
+  "dataset_sha256": "683747d5152c63822765348970d88f57911ee557817bdaf8e7eed77f1dec81a6",
+  "dataset_source": {
+    "name": "UCI Heart Disease (Cleveland processed)",
+    "url": "https://archive.ics.uci.edu/dataset/45/heart+disease",
+    "doi": "10.24432/C52P4X",
+    "licence": "CC BY 4.0",
+    "licence_url": "https://creativecommons.org/licenses/by/4.0/",
+    "citation": "Janosi, A., Steinbrunn, W., Pfisterer, M., Detrano, R. (1988). Heart Disease. UCI Machine Learning Repository. https://doi.org/10.24432/C52P4X",
+    "retrieved": "2026-10-28",
+    "member_sha256": "a74b7efa387bc9d108d7d0115d831fe9b414b29ae7124f331b622b4efa0427c8",
+    "dropped_incomplete_rows": 6,
+    "transformations": [
+      "dropped 6 records with a missing value (ca x4, thal x2) instead of imputing them",
+      "renamed the 13 predictor columns to the names the model uses",
+      "binarised num (0-4 angiographic severity): target = 1 if num > 0 else 0",
+      "exact duplicate feature vectors: none in this export"
+    ]
+  },
   "split": "Exact duplicate rows removed before splitting (drop_duplicates), then a single stratified 80/20 train/test split (random_state=42) on the distinct feature vectors. Metrics are on that held-out split; a 10-fold stratified CV is reported alongside for stability. Duplicates are never shared between train and test.",
-  "n_train": 241,
-  "n_test": 61,
-  "target_encoding": "1 = disease, 0 = healthy (source labels were inverted and flipped)",
+  "n_train": 237,
+  "n_test": 60,
+  "target_encoding": "1 = disease, 0 = no disease (num > 0), verified from feature means",
   "features": [
     "age",
     "sex",
@@ -27,95 +45,95 @@
     "thal"
   ],
   "metrics": {
-    "accuracy": 0.836,
-    "precision": 0.8,
-    "recall": 0.857,
-    "f1": 0.828,
-    "roc_auc": 0.884,
-    "cv_accuracy": 0.838,
-    "cv_accuracy_std": 0.073,
-    "cv_roc_auc": 0.909,
-    "cv_roc_auc_std": 0.024
+    "accuracy": 0.867,
+    "precision": 0.885,
+    "recall": 0.821,
+    "f1": 0.852,
+    "roc_auc": 0.943,
+    "cv_accuracy": 0.825,
+    "cv_accuracy_std": 0.069,
+    "cv_roc_auc": 0.906,
+    "cv_roc_auc_std": 0.057
   },
   "calibration": {
     "out_of_fold": {
-      "n": 302,
+      "n": 297,
       "bins": 10,
-      "brier": 0.125,
-      "ece": 0.064,
-      "base_rate": 0.457,
-      "mean_predicted": 0.455
+      "brier": 0.129,
+      "ece": 0.046,
+      "base_rate": 0.461,
+      "mean_predicted": 0.462
     },
     "holdout": {
-      "n": 61,
+      "n": 60,
       "bins": 10,
-      "brier": 0.137,
-      "ece": 0.096,
-      "base_rate": 0.459,
-      "mean_predicted": 0.49
+      "brier": 0.105,
+      "ece": 0.108,
+      "base_rate": 0.467,
+      "mean_predicted": 0.433
     },
     "reliability": [
       {
         "bin": "0.0-0.1",
-        "count": 46,
-        "mean_predicted": 0.044,
-        "observed_rate": 0.043
+        "count": 47,
+        "mean_predicted": 0.045,
+        "observed_rate": 0.021
       },
       {
         "bin": "0.1-0.2",
-        "count": 40,
-        "mean_predicted": 0.146,
-        "observed_rate": 0.05
+        "count": 31,
+        "mean_predicted": 0.142,
+        "observed_rate": 0.065
       },
       {
         "bin": "0.2-0.3",
-        "count": 39,
-        "mean_predicted": 0.242,
-        "observed_rate": 0.256
+        "count": 45,
+        "mean_predicted": 0.249,
+        "observed_rate": 0.289
       },
       {
         "bin": "0.3-0.4",
-        "count": 24,
-        "mean_predicted": 0.353,
-        "observed_rate": 0.417
+        "count": 25,
+        "mean_predicted": 0.345,
+        "observed_rate": 0.28
       },
       {
         "bin": "0.4-0.5",
-        "count": 26,
-        "mean_predicted": 0.444,
-        "observed_rate": 0.231
+        "count": 19,
+        "mean_predicted": 0.45,
+        "observed_rate": 0.368
       },
       {
         "bin": "0.5-0.6",
-        "count": 24,
-        "mean_predicted": 0.564,
-        "observed_rate": 0.625
+        "count": 20,
+        "mean_predicted": 0.56,
+        "observed_rate": 0.6
       },
       {
         "bin": "0.6-0.7",
-        "count": 15,
-        "mean_predicted": 0.646,
-        "observed_rate": 0.8
+        "count": 22,
+        "mean_predicted": 0.651,
+        "observed_rate": 0.636
       },
       {
         "bin": "0.7-0.8",
-        "count": 16,
-        "mean_predicted": 0.744,
-        "observed_rate": 0.75
+        "count": 19,
+        "mean_predicted": 0.739,
+        "observed_rate": 0.842
       },
       {
         "bin": "0.8-0.9",
-        "count": 29,
-        "mean_predicted": 0.846,
-        "observed_rate": 0.931
+        "count": 27,
+        "mean_predicted": 0.855,
+        "observed_rate": 0.926
       },
       {
         "bin": "0.9-1.0",
-        "count": 43,
-        "mean_predicted": 0.944,
-        "observed_rate": 0.977
+        "count": 42,
+        "mean_predicted": 0.946,
+        "observed_rate": 0.952
       }
     ]
   },
-  "metrics_note": "Metrics come from distinct rows only. Earlier revisions reported ROC-AUC and recall of 1.000 because 723 of 1,025 rows were exact duplicates split across train and test; that figure is withdrawn, not reproduced here. Calibration (Brier, ECE) is measured on out-of-fold predictions, one per distinct patient."
+  "metrics_note": "Metrics come from distinct rows only. Earlier revisions trained on a Kaggle copy that had 723 duplicate rows in 1,025 and an inverted target, and reported ROC-AUC and recall of 1.000; that figure is withdrawn, not reproduced here. This run uses the UCI Cleveland original (CC BY 4.0) with 6 incomplete records dropped. Calibration (Brier, ECE) is measured on out-of-fold predictions, one per distinct patient."
 }

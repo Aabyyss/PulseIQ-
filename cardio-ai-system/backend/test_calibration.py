@@ -22,7 +22,7 @@ from backend.calibration import (  # noqa: E402
     format_reliability_table,
     reliability_bins,
 )
-from backend.train_model import META_PATH  # noqa: E402
+from backend.train_model import META_PATH, load_dataset  # noqa: E402
 
 
 def test_perfect_predictions_score_zero():
@@ -107,7 +107,7 @@ def test_the_recorded_model_publishes_its_calibration():
     out_of_fold = calibration["out_of_fold"]
 
     # One out-of-fold prediction per distinct patient — the deduplicated count.
-    assert out_of_fold["n"] == meta["dataset_unique_rows"] == 302
+    assert out_of_fold["n"] == meta["dataset_unique_rows"] == len(load_dataset()[1])
     assert 0.0 <= out_of_fold["brier"] < 0.25, "no better than always predicting 0.5"
     assert 0.0 <= out_of_fold["ece"] <= 1.0
     assert 0.0 <= out_of_fold["base_rate"] <= 1.0

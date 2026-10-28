@@ -1,27 +1,29 @@
 """Train the PulseIQ heart-disease screening model.
 
-Two defects live in the public `heart.csv` that this project trains on, and both
-are handled here rather than in prose:
+The data is the UCI Heart Disease (Cleveland) original, CC BY 4.0, rebuilt by
+`scripts/import_uci_heart.py` from a checksum-pinned download; provenance and
+attribution are in `data/heart_source.json` and `data/ATTRIBUTION.md`. It
+replaced a widely circulated Kaggle copy that had two defects worth remembering
+because both are now guarded against:
 
-1. **Inverted target** (fixed 2026-09): in the raw file `target=1` rows are the
-   HEALTHY group and `target=0` rows are the DISEASE group, verifiable from
-   feature means (target=1 rows have higher exercise capacity, less ST
-   depression, fewer blocked vessels). The label is flipped so class 1 = disease
-   everywhere in PulseIQ.
+1. **Duplicate rows** — the Kaggle copy had 1,025 rows and only 302 distinct
+   feature vectors. Splitting it before de-duplicating leaked test profiles into
+   training and produced ROC-AUC 1.000. De-duplication now happens before the
+   split, and the split is asserted disjoint.
 
-2. **Duplicate rows** (fixed 2026-10): the file has 1,025 rows but only 302
-   distinct feature vectors — 723 rows are exact copies. Splitting before
-   de-duplicating leaks test rows into training: the same patient profile lands
-   in both halves, the model memorises it, and the holdout reports ROC-AUC 1.000
-   and recall 1.000. That number was real arithmetic and worthless evidence.
-   The data is de-duplicated *before* the split, so no feature vector appears on
-   both sides, and the metadata records the split rule next to the metrics.
+2. **Label polarity** — that copy also inverted the target. The UCI original is
+   the right way round (target 1 = disease), so nothing is flipped now; instead
+   the data itself is checked against three clinical expectations (diseased
+   patients have lower max heart rate, higher ST depression, more major vessels
+   affected). A file whose labels were reversed would fail that check rather
+   than quietly train backwards.
 
-Both guards are asserted at the end of training, so a future edit that
+Both guards run before any metric is computed, so a future edit that
 reintroduces either defect fails loudly instead of shipping a better-looking
 number.
 """
 
+import hashlib
 import json
 import pickle
 import sys
@@ -50,6 +52,7 @@ from sklearn.model_selection import (
 from backend.calibration import calibration_summary, format_reliability_table
 
 DATA_PATH = ROOT / "data" / "heart.csv"
+SOURCE_PATH = ROOT / "data" / "heart_source.json"
 MODEL_PATH = ROOT / "models" / "heart_model.pkl"
 META_PATH = ROOT / "models" / "heart_model_meta.json"
 
@@ -80,14 +83,50 @@ def load_dataset(path: Path = DATA_PATH) -> tuple[pd.DataFrame, pd.DataFrame]:
 
 
 def labels(frame: pd.DataFrame) -> pd.Series:
-    """1 = disease. The source file has the polarity reversed (see module docstring)."""
-    return 1 - frame["target"]
+    """1 = disease, as encoded by the importer from UCI `num > 0`."""
+    return frame["target"].astype(int)
+
+
+def validate_polarity(frame: pd.DataFrame) -> dict:
+    """Raise unless the labels point the way cardiology says they should.
+
+    These three directions hold in the Cleveland data and would all reverse if
+    the label were inverted: disease carries a lower peak heart rate, deeper ST
+    depression and more major vessels affected. Means, so a handful of odd
+    records cannot flip the conclusion.
+    """
+    disease = frame[labels(frame) == 1]
+    healthy = frame[labels(frame) == 0]
+    if disease.empty or healthy.empty:
+        raise ValueError("both classes must be present to verify label polarity")
+
+    observed = {
+        name: {
+            "disease": float(disease[name].mean()),
+            "healthy": float(healthy[name].mean()),
+        }
+        for name in ("thalach", "oldpeak", "ca")
+    }
+    if not observed["thalach"]["disease"] < observed["thalach"]["healthy"]:
+        raise ValueError("label polarity: disease group has the higher max heart rate")
+    if not observed["oldpeak"]["disease"] > observed["oldpeak"]["healthy"]:
+        raise ValueError("label polarity: disease group has the lower ST depression")
+    if not observed["ca"]["disease"] > observed["ca"]["healthy"]:
+        raise ValueError("label polarity: disease group has fewer major vessels affected")
+    return observed
+
+
+def load_provenance(path: Path = SOURCE_PATH) -> dict:
+    """The importer's record of where the data came from and how it was changed."""
+    if not path.exists():
+        return {}
+    return json.loads(path.read_text(encoding="utf-8"))
 
 
 def split_dataset(
     frame: pd.DataFrame, test_size: float = TEST_SIZE, random_state: int = RANDOM_STATE
 ):
-    """Split *distinct* rows into train/test, stratified on the flipped label."""
+    """Split *distinct* rows into train/test, stratified on the label."""
     y = labels(frame)
     X = frame.drop("target", axis=1)
     return train_test_split(X, y, test_size=test_size, random_state=random_state, stratify=y)
@@ -99,10 +138,18 @@ def _tuple_rows(frame: pd.DataFrame) -> set[tuple]:
 
 def main() -> None:
     raw, data = load_dataset()
+    provenance = load_provenance()
 
     duplicates = len(raw) - len(data)
     print(f"Rows         : {len(raw)} shipped, {len(data)} distinct ({duplicates} exact duplicates dropped)")
     assert not data.duplicated().any(), "duplicate feature vectors survived de-duplication"
+
+    polarity = validate_polarity(data)
+    print(
+        "Polarity     : thalach "
+        f"{polarity['thalach']['disease']:.0f} vs {polarity['thalach']['healthy']:.0f}, "
+        f"oldpeak {polarity['oldpeak']['disease']:.1f} vs {polarity['oldpeak']['healthy']:.1f}"
+    )
 
     X_train, X_test, y_train, y_test = split_dataset(data)
 
@@ -158,14 +205,31 @@ def main() -> None:
     assert oof["brier"] < 0.25, f"Brier {oof['brier']:.3f} is no better than predicting 0.5"
 
     # --- Regression guard: textbook profiles must classify correctly ------------
+    # The earlier single "disease-like" profile had normal thal (3) and
+    # non-anginal pain (cp 3), so it was mixed-signal; the leaky model scored it
+    # 0.89 and the honest one 0.55. These two are unambiguous: one exertional
+    # angina with a reversible defect, one asymptomatic with three affected
+    # vessels. Both are clinically coherent, and neither is tuned to the model.
     feature_names = list(X_train.columns)
-    disease_like = [[62, 1, 3, 145, 260, 1, 2, 120, 1, 2.5, 1, 2, 3]]
-    healthy_like = [[45, 0, 0, 120, 200, 0, 0, 172, 0, 0.0, 2, 0, 1]]
-    p_dis = model.predict_proba(pd.DataFrame(disease_like, columns=feature_names))[0][1]
-    p_hea = model.predict_proba(pd.DataFrame(healthy_like, columns=feature_names))[0][1]
-    print(f"Sanity       : disease-like P(disease)={p_dis:.2f} | healthy-like P(disease)={p_hea:.2f}")
-    assert p_dis > 0.7, "DISEASE-like profile must score high - label flip regression!"
-    assert p_hea < 0.3, "HEALTHY-like profile must score low - label flip regression!"
+    disease_profiles = {
+        "typical angina": [68, 1, 1, 150, 250, 1, 2, 110, 1, 2.8, 2, 2, 7],
+        "asymptomatic, 3 vessels": [67, 1, 4, 160, 286, 0, 2, 108, 1, 1.5, 2, 3, 3],
+    }
+    probs = {
+        label: float(model.predict_proba(pd.DataFrame([row], columns=feature_names))[0][1])
+        for label, row in disease_profiles.items()
+    }
+    p_hea = model.predict_proba(
+        pd.DataFrame([[45, 0, 0, 120, 200, 0, 0, 172, 0, 0.0, 2, 0, 1]], columns=feature_names)
+    )[0][1]
+    print(
+        "Sanity       : "
+        + " | ".join(f"{label} P(disease)={value:.2f}" for label, value in probs.items())
+        + f" | healthy-like P(disease)={p_hea:.2f}"
+    )
+    for label, value in probs.items():
+        assert value > 0.7, f"{label} must score high - label polarity regression!"
+    assert p_hea < 0.3, "HEALTHY-like profile must score low - label polarity regression!"
 
     # --- Persist model + metadata ----------------------------------------------
     with open(MODEL_PATH, "wb") as f:
@@ -176,14 +240,29 @@ def main() -> None:
         "algorithm": "RandomForestClassifier(n_estimators=300, random_state=42)",
         "trained_at": time.strftime("%Y-%m-%d %H:%M:%S"),
         "sklearn_version": __import__("sklearn").__version__,
-        "dataset": "data/heart.csv (public heart dataset)",
+        "dataset": provenance.get("name", "data/heart.csv"),
         "dataset_rows": len(raw),
         "dataset_unique_rows": len(data),
         "dataset_duplicate_rows": duplicates,
+        "dataset_sha256": hashlib.sha256(DATA_PATH.read_bytes()).hexdigest(),
+        "dataset_source": {
+            "name": provenance.get("name"),
+            "url": provenance.get("url"),
+            "doi": provenance.get("doi"),
+            "licence": provenance.get("licence", "unverified"),
+            "licence_url": provenance.get("licence_url"),
+            "citation": provenance.get("citation"),
+            "retrieved": provenance.get("retrieved"),
+            "member_sha256": provenance.get("member_sha256"),
+            "dropped_incomplete_rows": provenance.get("dropped_incomplete_rows"),
+            "transformations": provenance.get("transformations", []),
+        },
         "split": _SPLIT_RULE,
         "n_train": len(X_train),
         "n_test": len(X_test),
-        "target_encoding": "1 = disease, 0 = healthy (source labels were inverted and flipped)",
+        "target_encoding": provenance.get(
+            "target_encoding", "1 = disease, 0 = no disease"
+        ),
         "features": list(X_train.columns),
         "metrics": {key: round(value, 3) for key, value in holdout.items()},
         "calibration": {
@@ -208,10 +287,12 @@ def main() -> None:
             ],
         },
         "metrics_note": (
-            "Metrics come from distinct rows only. Earlier revisions reported ROC-AUC and "
-            "recall of 1.000 because 723 of 1,025 rows were exact duplicates split across "
-            "train and test; that figure is withdrawn, not reproduced here. Calibration "
-            "(Brier, ECE) is measured on out-of-fold predictions, one per distinct patient."
+            "Metrics come from distinct rows only. Earlier revisions trained on a Kaggle copy "
+            "that had 723 duplicate rows in 1,025 and an inverted target, and reported ROC-AUC "
+            "and recall of 1.000; that figure is withdrawn, not reproduced here. This run uses "
+            "the UCI Cleveland original (CC BY 4.0) with 6 incomplete records dropped. "
+            "Calibration (Brier, ECE) is measured on out-of-fold predictions, one per distinct "
+            "patient."
         ),
     }
     with open(META_PATH, "w", encoding="utf-8") as f:

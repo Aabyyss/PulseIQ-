@@ -87,7 +87,7 @@ the signed-in user's history before the response is returned.
 {
   "text": "…",
   "symptoms": ["chest pain"],
-  "features": { "age": 52, "sex": 1, "cp": 2, "trestbps": 140, "chol": 240, "fbs": 0, "restecg": 0, "thalach": 150, "exang": 0, "oldpeak": 1.5, "slope": 2, "ca": 0, "thal": 2 },
+  "features": { "age": 52, "sex": 1, "cp": 3, "trestbps": 140, "chol": 240, "fbs": 0, "restecg": 0, "thalach": 150, "exang": 0, "oldpeak": 1.5, "slope": 2, "ca": 0, "thal": 3 },
   "prediction": 1,
   "probability": 0.83,
   "risk_level": "High|Medium|Low",

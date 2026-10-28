@@ -24,16 +24,23 @@ def features_for(symptoms):
     return dict(zip(FEATURE_NAMES, map_symptoms_to_features(symptoms)))
 
 
+# Encodings are the UCI codebook (cp 1-4, thal 3/6/7, slope 1-3), not the
+# shifted Kaggle copy's (cp 0-3, thal 1-3). backend/test_feature_encoding.py
+# enforces the full domain; these cases pin the individual shifts.
 CASES = [
-    ([], lambda f: f["cp"] == 3 and f["thalach"] == 165,
-     "baseline stays asymptomatic with good capacity"),
-    (["chest pain"], lambda f: f["cp"] == 0 and f["exang"] == 1 and f["oldpeak"] >= 1.8,
-     "chest pain maps to the typical-angina cluster"),
-    (["cough"], lambda f: f["cp"] == 3 and f["thalach"] <= 145,
+    ([], lambda f: f["cp"] == 4 and f["thalach"] == 165 and f["thal"] == 3,
+     "baseline stays asymptomatic (cp=4) with a normal scan and good capacity"),
+    (["chest pain"], lambda f: f["cp"] == 1 and f["exang"] == 1 and f["oldpeak"] >= 1.8
+     and f["thal"] == 7 and f["slope"] == 2,
+     "chest pain maps to typical angina with a reversible defect"),
+    (["chest pain", "sweating", "radiating pain"],
+     lambda f: f["slope"] == 3 and f["thalach"] <= 110 and f["ca"] >= 2,
+     "pain with diaphoresis and radiation escalates the ischaemic profile"),
+    (["cough"], lambda f: f["cp"] == 4 and f["thalach"] <= 145,
      "isolated cough shifts mildly and keeps chest features clean"),
     (["sweating"], lambda f: f["trestbps"] >= 140 and f["oldpeak"] >= 1.2,
      "sweating shifts toward the ischemic profile"),
-    (["nausea"], lambda f: f["age"] >= 54 and f["cp"] == 3,
+    (["nausea"], lambda f: f["age"] >= 54 and f["cp"] == 4,
      "nausea alone adjusts the atypical profile without chest features"),
     (["leg swelling"], lambda f: f["thalach"] <= 125 and f["oldpeak"] >= 1.6 and f["ca"] >= 2,
      "leg edema shifts toward congestion/vessel involvement"),

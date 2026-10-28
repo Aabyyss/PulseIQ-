@@ -2,23 +2,35 @@ def map_symptoms_to_features(symptoms):
     """
     Maps detected symptom labels to clinical model features.
 
-    Calibrated empirically against the retrained model (see train_model.py):
-    - No symptoms        -> P(disease) ~0.05-0.13 (Low)
-    - Chest pain cluster -> P(disease) ~0.98     (High)
-    - SOB + fatigue      -> P(disease) ~0.45     (Medium)
+    Encodings follow the UCI source's own codebook (`heart-disease.names`),
+    which is what the model is trained on:
 
-    Encoding note (learned from this dataset): cp=0 is "typical angina" and is
-    disease-leaning; cp=3 is "asymptomatic". The baseline therefore starts at
-    cp=3 and a reported chest-pain cluster moves it to 0 with the classic
-    angina feature pattern (exertional, ST depression, vessel involvement).
+    - `cp`: 1 typical angina, 2 atypical angina, 3 non-anginal pain,
+      4 asymptomatic. Baseline is 4; a chest-pain cluster moves it to 1.
+    - `slope`: 1 upsloping (normal), 2 flat, 3 downsloping.
+    - `thal`: 3 normal, 6 fixed defect, 7 reversible defect.
+    - `restecg`: 0 normal, 1 ST-T abnormality, 2 left ventricular hypertrophy.
 
-    The model was retrained with 1 = disease (source labels were inverted),
-    so these feature shifts correctly raise P(disease).
+    These are constraints, not preferences: the previous version emitted
+    `cp=0` and `thal=1..2`, values that do not exist in the UCI encoding (they
+    came from the shifted Kaggle copy). The model read them as absent evidence
+    and 'crushing chest pain' scored Low. `test_feature_encoding.py` keeps every
+    emitted value inside the codebook's domain.
+
+    Shifts are then calibrated against the trained model:
+    - No symptoms               -> Low band
+    - Stable chest pain         -> Medium band
+    - Chest pain + autonomic or radiation signs -> High band
+    - SOB + fatigue             -> High band on the current model
+
+    Those bands are asserted in `test_feature_encoding.py`; the model's
+    probability scale is measured in `train_model.py`, so a retrain that moves
+    a canonical presentation out of its band fails there rather than shipping.
     """
     features = {
         "age": 50,
         "sex": 1,
-        "cp": 3,          # asymptomatic - no chest symptoms reported
+        "cp": 4,          # asymptomatic - no chest symptoms reported
         "trestbps": 125,
         "chol": 200,
         "fbs": 0,
@@ -26,9 +38,9 @@ def map_symptoms_to_features(symptoms):
         "thalach": 165,   # good exercise capacity
         "exang": 0,       # no exercise-induced angina
         "oldpeak": 0.0,   # no ST depression
-        "slope": 2,
+        "slope": 1,       # upsloping = normal
         "ca": 0,          # no blocked vessels seen
-        "thal": 1,        # normal scan result
+        "thal": 3,        # normal scan result
     }
 
     s = set(symptoms)
@@ -38,15 +50,15 @@ def map_symptoms_to_features(symptoms):
         features.update(
             {
                 "age": 55,
-                "cp": 0,          # typical angina (disease-leaning in this encoding)
+                "cp": 1,          # typical angina
                 "trestbps": 138,
                 "chol": 230,
                 "thalach": 135,   # reduced exercise capacity
                 "exang": 1,       # exertional component
                 "oldpeak": 1.8,   # ST depression
-                "slope": 1,
+                "slope": 2,       # flat ST segment
                 "ca": 1,          # one vessel involved
-                "thal": 2,
+                "thal": 7,        # reversible defect
             }
         )
 
@@ -57,7 +69,7 @@ def map_symptoms_to_features(symptoms):
         features["thalach"] = min(features["thalach"], 118)
         features["oldpeak"] = max(features["oldpeak"], 2.2)
         features["ca"] = max(features["ca"], 2)
-        features["thal"] = max(features["thal"], 3)
+        features["thal"] = max(features["thal"], 6)  # fixed defect
 
     if "dizziness" in s:
         features["trestbps"] = max(features["trestbps"], 148)
@@ -95,7 +107,7 @@ def map_symptoms_to_features(symptoms):
         features["thalach"] = min(features["thalach"], 125)
         features["oldpeak"] = max(features["oldpeak"], 1.6)
         features["ca"] = max(features["ca"], 2)
-        features["thal"] = max(features["thal"], 3)
+        features["thal"] = max(features["thal"], 6)  # fixed defect
 
     if "cough" in s:
         # Nocturnal cough flags pulmonary congestion; mild feature shift
@@ -104,5 +116,19 @@ def map_symptoms_to_features(symptoms):
 
     if "exercise pain" in s:
         features["exang"] = 1
+
+    if "chest pain" in s and s & {"sweating", "radiating pain", "nausea"}:
+        # Pain plus diaphoresis, radiation or nausea is the acute-coronary
+        # picture, not stable single-symptom angina: more ischaemia, worse
+        # exercise tolerance, a downsloping segment. Deliberately keyed on
+        # signs that are documented in the presentation, not on model output.
+        features["age"] = max(features["age"], 58)
+        features["trestbps"] = max(features["trestbps"], 150)
+        features["thalach"] = min(features["thalach"], 110)
+        features["oldpeak"] = max(features["oldpeak"], 2.5)
+        features["slope"] = 3        # downsloping ST segment
+        features["ca"] = max(features["ca"], 2)
+        features["thal"] = 7         # reversible defect
+        features["restecg"] = 1      # ST-T abnormality
 
     return list(features.values())

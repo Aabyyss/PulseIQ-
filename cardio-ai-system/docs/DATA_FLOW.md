@@ -16,8 +16,9 @@ Narrative text  "chest pain going to my left arm since morning, sweating"
    │   → ["chest pain", "shortness of breath", …]
    ▼
 [2] feature_mapper_agent.map_symptoms_to_features
-   │   concept → empirical feature tiers → all 13 inputs with explicit ranges
-   │   → {age:52, sex:1, cp:2, trestbps:140, chol:240, …}
+   │   concept → empirical feature tiers → all 13 inputs, values kept in the
+   │   UCI codebook (cp 1-4, thal 3/6/7, slope 1-3)
+   │   → {age:52, sex:1, cp:3, trestbps:140, chol:240, …}
    ▼
 [3] prediction_agent.predict_heart_disease
    │   joblib → RandomForest(300) → predict + predict_proba
@@ -220,9 +221,11 @@ server is contacted (ADR-019).
 Screening:  React state ──► localStorage (max 20) ──► /history charts
 Workflow:   page state (unstructured "session") ──► POST /final-report
             ──► jsPDF client-side ──► user's Downloads
-Model:      data/heart.csv (1,025 rows, 302 distinct) ──► train_model.py
-            de-duplicate ──► 80/20 stratified split ──► models/heart_model.pkl
-            + heart_model_meta.json (label direction, split rule, metrics)
+Model:      UCI Cleveland (CC BY 4.0) ──► scripts/import_uci_heart.py
+            (checksum-pinned) ──► data/heart.csv (297 patients, distinct)
+            ──► train_model.py: de-duplicate → polarity check → 80/20 split
+            ──► models/heart_model.pkl + heart_model_meta.json
+            (source, licence, split rule, metrics, calibration)
 ```
 
 No identifiers, narratives, or transcripts ever persist server-side; the

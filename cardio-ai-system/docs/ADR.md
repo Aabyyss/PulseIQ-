@@ -19,14 +19,15 @@ usable feature importances for the explainability agent. No serving infra:
 the model is a pickle loaded once at import.
 
 > The accuracy, F1 and ROC-AUC quoted above were measured on a leaked split
-> and are **superseded by ADR-035**. The algorithm choice stands; the numbers
-> do not.
+> and are **superseded by ADR-035**, then measured again on different data in
+> ADR-037. The algorithm choice stands; the numbers do not.
 
 **Consequences:** Model and sklearn version are coupled (see
 `heart_model_meta.json`); retrain after any sklearn major upgrade.
 
 ## ADR-002 · The inverted-target fix is enforced in code, not docs
-**Status:** Accepted (2026-09-16)
+**Status:** Superseded by ADR-037 (2026-10-28) — the inverted file is gone; the
+polarity check it introduced is kept and now runs against the label means.
 
 The widely circulated `heart.csv` ships with `target=1` meaning *healthy* —
 a genuine defect that silently inverts every downstream score. PulseIQ flips
@@ -1656,7 +1657,9 @@ clean card).
 
 **Consequences.** The dataset is now openly described as 302 unique patients,
 which is the real sample size and bounds how much any downstream claim can
-rest on it. `test_train_model.py` fails if the loader stops de-duplicating, if
+rest on it. (That file has since been replaced with the UCI original, 297
+patients — ADR-037; the loader keeps de-duplicating because any import may
+contain duplicates.) `test_train_model.py` fails if the loader stops de-duplicating, if
 the split leaks, if the metadata stops stating the rule, or if the file's
 duplicates disappear (which would mean the fixture, not the fix, changed). It
 also reproduces the leak on the raw file, so the guard is shown to detect the
@@ -1695,3 +1698,58 @@ model card can defend the band thresholds instead of asserting them. The
 reliability table is a snapshot of one training run; retraining rewrites it,
 and `test_calibration.py` fails if it is missing, if the bin counts stop summing
 to the distinct-row count, or if the Brier score crosses the no-skill line.
+
+## ADR-037 · Train on the UCI original, with its licence shipped beside it
+**Status:** Accepted (2026-10-28) · supersedes ADR-002; narrows ADR-035
+
+The data was the widely circulated Kaggle `heart.csv`, a derivative of the UCI
+Cleveland cohort with 723 duplicate rows inside 1,025, an inverted target, and
+no licence metadata that could be verified. ADR-035 fixed the split and the
+numbers; it did not fix the more basic problem that a public repository was
+distributing a file whose terms it could not name. A reviewer checking either
+the metrics or the licence would have found a hole.
+
+**Decision.** Build `data/heart.csv` from the UCI original with
+`scripts/import_uci_heart.py`: download the official archive, verify the
+archive and member SHA-256 against pinned values, drop the 6 records with a
+missing `ca`/`thal` (rather than impute the two strongest predictors), rename
+the 13 features, and binarise `num` so `target = 1` means disease. Ship
+`data/ATTRIBUTION.md` (CC BY 4.0, citation, DOI, every modification) and
+`data/heart_source.json` (URL, retrieval date, hashes, transformations); copy
+the licence and source into `heart_model_meta.json` next to the metrics.
+
+**Consequences.**
+
+1. **Sample size is honest.** 303 source records, 297 usable, all distinct — the
+   card no longer implies 1,025 patients.
+2. **The label flip is gone.** The original is the right way round, so `labels()`
+   returns `target` unchanged. The protection ADR-002 introduced is kept in a
+   stronger form: `validate_polarity()` checks three clinical directions from
+   the data's own means and raises on an inverted file.
+3. **The codebook is part of the model's interface.** Replacing the data changed
+   the categorical encodings (`cp` 1–4, `thal` 3/6/7, `slope` 1–3) while
+   `feature_mapper_agent.py` still emitted the Kaggle copy's shifted values
+   (`cp=0`, `thal=2`). The forest had learned nothing about those values, and a
+   test caught the result: "crushing chest pain with sweating and left-arm pain"
+   banded **Low**. The mapper now follows the source codebook and escalates the
+   acute-coronary cluster (pain plus diaphoresis/radiation/nausea), which restores
+   the expected High band. `test_feature_encoding.py` asserts every emitted value
+   is one the dataset contains, across all single symptoms and combinations.
+
+**Measured on the new data.** Holdout accuracy 0.867, precision 0.885, recall
+0.821, F1 0.852, ROC-AUC 0.943; 10-fold CV 0.825 ± 0.069 accuracy and
+0.906 ± 0.057 ROC-AUC; Brier 0.129, ECE 0.046. Higher than the deduplicated
+Kaggle copy (0.884), but the holdouts differ (60 vs 61 rows), so that is an
+indicative comparison rather than a controlled one.
+
+**Rejected.** Keeping the Kaggle file and only citing UCI (the redistributed
+bytes are still the Kaggle derivative); imputing `ca`/`thal` to keep 303 rows
+(inventing the strongest predictors); pooling Statlog (the same patients — the
+leak ADR-035 exists to prevent); shipping the UCI data without attribution text
+(CC BY 4.0 requires it, and a test now fails if it is deleted).
+
+**Follow-through.** `python scripts/import_uci_heart.py` is the only supported way
+to rebuild the dataset; it refuses a payload that does not match the pinned
+hashes. The importer and the training script both verify label polarity, so an
+inverted file cannot be imported or trained on. The E2E and UI suites are
+unaffected — they never depended on the metric values.

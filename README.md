@@ -111,48 +111,54 @@ worker: `/api` and `/ws` are excluded before any caching rule runs.
 
 ## 🧠 Model card
 
-Random Forest over the public heart dataset — 13 features, **1,025 rows shipped but only 302
-distinct**: 723 rows are exact duplicates of another row.
+Random Forest over the **UCI Heart Disease (Cleveland)** dataset — 13 features, **297 patients**
+(303 source records, 6 dropped for a missing `ca`/`thal`). The data is distributed under
+[CC BY 4.0](https://creativecommons.org/licenses/by/4.0/); attribution, citation and every
+modification are in [data/ATTRIBUTION.md](cardio-ai-system/data/ATTRIBUTION.md).
 
-> **How the split is made.** Exact duplicate rows are removed *before* the split
-> (`load_dataset()` in `train_model.py`), then the 302 distinct feature vectors are split 80/20,
-> stratified on the label, `random_state=42` — 241 train / 61 test. A profile therefore cannot
-> appear on both sides: the loader asserts it during training and `test_train_model.py` asserts
-> it on every run.
+> **How the split is made.** `load_dataset()` removes exact duplicate rows *before* the split
+> (this export has none — the guard stays because the previous file had 723), then the 297
+> distinct feature vectors are split 80/20, stratified on the label, `random_state=42` —
+> 237 train / 60 test. No profile can appear on both sides: training asserts it and
+> `test_train_model.py` re-asserts it on every run.
 
-| Metric | Holdout (61 rows) |
+| Metric | Holdout (60 rows) |
 |---|---|
-| Accuracy | 0.836 |
-| Precision | 0.800 |
-| Recall | 0.857 |
-| F1 | 0.828 |
-| ROC-AUC | 0.884 |
-| Brier score | 0.125 |
-| Calibration error (ECE) | 0.064 |
-| 10-fold CV | 0.838 ± 0.073 accuracy · 0.909 ± 0.024 ROC-AUC |
+| Accuracy | 0.867 |
+| Precision | 0.885 |
+| Recall | 0.821 |
+| F1 | 0.852 |
+| ROC-AUC | 0.943 |
+| Brier score | 0.129 |
+| Calibration error (ECE) | 0.046 |
+| 10-fold CV | 0.825 ± 0.069 accuracy · 0.906 ± 0.057 ROC-AUC |
 
 > **Is the probability real?** ROC-AUC only says the ordering is right, and the app displays
 > the number and bands it at 0.45 / 0.75 — so the value has to mean something. On out-of-fold
-> predictions (one per distinct patient, n = 302) the Brier score is 0.125 against 0.25 for
-> always saying 0.5, and ECE is 0.064 over ten bins. Mean predicted probability 0.455 vs
-> observed disease rate 0.457. The full reliability table is in `heart_model_meta.json`, and
+> predictions (one per distinct patient, n = 297) the Brier score is 0.129 against 0.25 for
+> always saying 0.5, and ECE is 0.046 over ten bins. Mean predicted probability 0.462 vs an
+> observed disease rate of 0.461. The full reliability table is in `heart_model_meta.json`, and
 > `test_calibration.py` pins the arithmetic including an overconfident model that scores worse.
 
-> **Why this card used to say 1.000.** An earlier split ran before de-duplication, so the same
-> patient profiles sat in both training and test and the forest only had to memorise them:
-> recall and ROC-AUC both read 1.000. That figure is withdrawn — the table above is what the
-> model generalises to on rows it has never seen.
+> **Why this card used to say 1.000.** The repository previously trained on the widely
+> circulated Kaggle copy of the same cohort: 1,025 rows of which only 302 were distinct, with
+> the target column inverted. Splitting before de-duplicating put identical patients in train
+> and test, so recall and ROC-AUC both read 1.000. That copy was replaced with the UCI original
+> (ADR-037) and the figure is withdrawn — the table above is what the model generalises to.
 
-> **⚠️ Inverted-target note.** The widely circulated `heart.csv` ships with `target=1` meaning
-> *healthy*. PulseIQ flips the label at training time, and the training script asserts that
-> textbook disease and healthy profiles score in the expected direction — so this real defect> in the source data can never silently return.
+> **Label and code encoding.** `target = 1` when UCI `num > 0` (any angiographic disease).
+> Categorical values follow the source codebook — `cp` 1–4, `thal` 3/6/7, `slope` 1–3 — and
+> training asserts the polarity from feature means (disease carries a lower peak heart rate,
+> deeper ST depression, more affected vessels). `test_feature_encoding.py` keeps the symptom
+> mapper inside that codebook, because emitting values the dataset never contains is how a
+> classic "crushing chest pain" presentation once scored Low.
 
-> **Better data?** The 302 distinct rows are the Cleveland cohort, and the file appears to be a
-> duplicate-inflated copy of it. Same-schema, openly licensed sources exist (UCI Heart Disease
-> multi-site and Statlog, both CC BY 4.0) but they add existing Cleveland patients rather than
-> new ones; genuinely different data is either a different prediction task (PTB-XL ECG) or
-> access-controlled (MIMIC-IV, UK Biobank, Framingham). The licence review and what each source
-> can honestly support are in [docs/DATA_SOURCES.md](cardio-ai-system/docs/DATA_SOURCES.md).
+> **Better data?** Provenance is now licensed and attributable, and the sample size is honest:
+> 297 patients, not 1,025 rows. Same-schema sources exist (UCI multi-site and Statlog, both
+> CC BY 4.0) but Statlog is these same patients and the other sites are small with missing
+> `ca`/`thal`; genuinely different data is either a different prediction task (PTB-XL ECG) or
+> access-controlled (MIMIC-IV, UK Biobank, Framingham). The licence review is in
+> [docs/DATA_SOURCES.md](cardio-ai-system/docs/DATA_SOURCES.md).
 
 ## 🏗️ Architecture
 
@@ -189,8 +195,8 @@ cardio-ai-system/
 ├── backend/     FastAPI server, training script, pytest suite
 ├── agents/      20 rule-grounded clinical modules
 ├── frontend/    React application (vitest for the non-React logic)
-├── models/      trained model and metadata
-├── data/        dataset
+├── models/      trained model and metadata (source, licence, metrics, calibration)
+├── data/        dataset — UCI Cleveland, CC BY 4.0, with ATTRIBUTION.md and hashes
 ├── docs/        ADR, DESIGN (adaptive shell), FEATURES (roadmap), VERIFICATION (what the gate proves),
 │               API spec, data flow, security, CI, compatibility, data sources (licences),
 │               medication catalogue · screenshots · video
