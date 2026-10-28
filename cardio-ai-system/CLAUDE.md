@@ -30,6 +30,10 @@ required. Rules-driven 18-agent pipeline + optional LLM tier.
 6. **Target labels are flipped at training time.** `heart.csv` ships
    inverted (target=1 = healthy). `train_model.py` flips and asserts
    directionality — never "fix" this away.
+   **De-duplicate before splitting.** The file has 1,025 rows but 302 distinct
+   feature vectors; splitting the raw rows leaks test profiles into training
+   and produces ROC-AUC 1.000. Split only `load_dataset()`'s output, never the
+   raw frame, and never drop the no-overlap assertion.
 7. **Privacy:** no patient identifiers in new persistence. Frontend history
    stays in localStorage (max 20). No server-side storage without a new ADR.
 

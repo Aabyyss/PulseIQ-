@@ -111,21 +111,33 @@ worker: `/api` and `/ws` are excluded before any caching rule runs.
 
 ## 🧠 Model card
 
-Random Forest over the public heart dataset (1,025 rows · 13 features).
+Random Forest over the public heart dataset — 13 features, **1,025 rows shipped but only 302
+distinct**: 723 rows are exact duplicates of another row.
+
+> **How the split is made.** Exact duplicate rows are removed *before* the split
+> (`load_dataset()` in `train_model.py`), then the 302 distinct feature vectors are split 80/20,
+> stratified on the label, `random_state=42` — 241 train / 61 test. A profile therefore cannot
+> appear on both sides: the loader asserts it during training and `test_train_model.py` asserts
+> it on every run.
+
+| Metric | Holdout (61 rows) |
+|---|---|
+| Accuracy | 0.836 |
+| Precision | 0.800 |
+| Recall | 0.857 |
+| F1 | 0.828 |
+| ROC-AUC | 0.884 |
+| 10-fold CV | 0.838 ± 0.073 accuracy · 0.909 ± 0.024 ROC-AUC |
+
+> **Why this card used to say 1.000.** An earlier split ran before de-duplication, so the same
+> patient profiles sat in both training and test and the forest only had to memorise them:
+> recall and ROC-AUC both read 1.000. That figure is withdrawn — the table above is what the
+> model generalises to on rows it has never seen.
 
 > **⚠️ Inverted-target note.** The widely circulated `heart.csv` ships with `target=1` meaning
 > *healthy*. PulseIQ flips the label at training time, and the training script asserts that
 > textbook disease and healthy profiles score in the expected direction — so this real defect
 > in the source data can never silently return.
-
-| Metric | Value |
-|---|---|
-| Accuracy | 0.971 |
-| Precision | 0.943 |
-| Recall | 1.000 |
-| F1 | 0.971 |
-| ROC-AUC | 1.000 |
-| 5-fold CV | 0.98 – 1.00 |
 
 ## 🏗️ Architecture
 

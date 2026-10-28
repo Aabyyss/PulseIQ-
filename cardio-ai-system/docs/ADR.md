@@ -18,6 +18,10 @@ accuracy 0.971, F1 0.971, ROC-AUC 1.0 in stratified 5-fold CV, and RF gives
 usable feature importances for the explainability agent. No serving infra:
 the model is a pickle loaded once at import.
 
+> The accuracy, F1 and ROC-AUC quoted above were measured on a leaked split
+> and are **superseded by ADR-035**. The algorithm choice stands; the numbers
+> do not.
+
 **Consequences:** Model and sklearn version are coupled (see
 `heart_model_meta.json`); retrain after any sklearn major upgrade.
 
@@ -1620,3 +1624,40 @@ journey types "med" and presses Enter against the built bundle.
 **Verification.** `commands.test.ts` (6 cases, each a phrase a clinician would
 type), `ui-audit.cjs` state `command-palette`, E2E step in "Adaptive
 navigation".
+
+## ADR-035 · De-duplicate before splitting, and report the number that survives
+**Status:** Accepted (2026-10-28) · supersedes the metrics in ADR-001
+
+The model card advertised ROC-AUC 1.000 and recall 1.000 on "1,025 rows".
+The arithmetic was right and the evidence was worthless: `heart.csv` contains
+1,025 rows but only 302 distinct feature vectors — 723 rows are exact copies of
+another row. `train_model.py` split before de-duplicating, so identical profiles
+landed in both training and holdout, and a 300-tree forest that had already seen
+the test rows reported a perfect score. A reviewer reads 1.000 as a bug, not a
+result, and they are right to.
+
+**Decision.** `load_dataset()` returns the file's distinct rows and everything
+downstream splits only those: 302 vectors, 80/20 stratified, `random_state=42`
+(241 train / 61 test). Training asserts that the two sides share no feature
+vector before any metric is computed, and the metadata records the rule next to
+the numbers (`split`, `dataset_rows`, `dataset_unique_rows`,
+`n_train`/`n_test`, `metrics_note`).
+
+**Honest metrics.** Holdout accuracy 0.836, precision 0.800, recall 0.857, F1
+0.828, ROC-AUC 0.884; 10-fold CV 0.838 ± 0.073 accuracy and 0.909 ± 0.024
+ROC-AUC. Lower, and defensible: on distinct rows this is a 13-feature model
+over 302 patients, not a perfect classifier.
+
+**Rejected.** Keeping the perfect numbers and adding a disclaimer (a caveat
+beside a 1.000 score still reads as a 1.000 score); reporting only cross-
+validation on the full duplicate-laden file (the same profiles are in every
+fold); quietly deleting the old claim (the correction is more credible than a
+clean card).
+
+**Consequences.** The dataset is now openly described as 302 unique patients,
+which is the real sample size and bounds how much any downstream claim can
+rest on it. `test_train_model.py` fails if the loader stops de-duplicating, if
+the split leaks, if the metadata stops stating the rule, or if the file's
+duplicates disappear (which would mean the fixture, not the fix, changed). It
+also reproduces the leak on the raw file, so the guard is shown to detect the
+bug it exists for. Retraining is still `python backend/train_model.py`.

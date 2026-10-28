@@ -22,7 +22,8 @@ agents under agents/. Model artifact under models/.
    (>0.75 High / >0.45 Medium) exist only in orchestrator.risk_from_probability.
 4. No agent imports another agent.
 5. heart.csv labels are inverted upstream; train_model.py flips and asserts.
-   Never remove that assertion.
+   Never remove that assertion. heart.csv also contains 723 duplicate rows of
+   1,025: de-duplicate before splitting (load_dataset), or the holdout leaks.
 6. No server-side persistence of patient data. Frontend history in
    localStorage, capped at 20 entries.
 7. Domain errors: HTTP 200 + {"error": "..."} per docs/API_SPEC.md.

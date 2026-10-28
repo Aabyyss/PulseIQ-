@@ -1,9 +1,15 @@
 {
   "name": "PulseIQ heart-disease screening model",
   "algorithm": "RandomForestClassifier(n_estimators=300, random_state=42)",
-  "trained_at": "2026-09-16 17:58:39",
+  "trained_at": "2026-10-28 22:30:43",
   "sklearn_version": "1.9.1",
-  "dataset": "data/heart.csv (public heart dataset, 1025 rows)",
+  "dataset": "data/heart.csv (public heart dataset)",
+  "dataset_rows": 1025,
+  "dataset_unique_rows": 302,
+  "dataset_duplicate_rows": 723,
+  "split": "Exact duplicate rows removed before splitting (drop_duplicates), then a single stratified 80/20 train/test split (random_state=42) on the distinct feature vectors. Metrics are on that held-out split; a 10-fold stratified CV is reported alongside for stability. Duplicates are never shared between train and test.",
+  "n_train": 241,
+  "n_test": 61,
   "target_encoding": "1 = disease, 0 = healthy (source labels were inverted and flipped)",
   "features": [
     "age",
@@ -21,10 +27,15 @@
     "thal"
   ],
   "metrics": {
-    "accuracy": 0.971,
-    "precision": 0.943,
-    "recall": 1.0,
-    "f1": 0.971,
-    "roc_auc": 1.0
-  }
+    "accuracy": 0.836,
+    "precision": 0.8,
+    "recall": 0.857,
+    "f1": 0.828,
+    "roc_auc": 0.884,
+    "cv_accuracy": 0.838,
+    "cv_accuracy_std": 0.073,
+    "cv_roc_auc": 0.909,
+    "cv_roc_auc_std": 0.024
+  },
+  "metrics_note": "Metrics come from distinct rows only. Earlier revisions reported ROC-AUC and recall of 1.000 because 723 of 1,025 rows were exact duplicates split across train and test; that figure is withdrawn, not reproduced here."
 }

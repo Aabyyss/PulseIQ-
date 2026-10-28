@@ -220,8 +220,9 @@ server is contacted (ADR-019).
 Screening:  React state ──► localStorage (max 20) ──► /history charts
 Workflow:   page state (unstructured "session") ──► POST /final-report
             ──► jsPDF client-side ──► user's Downloads
-Model:      data/heart.csv ──► train_model.py ──► models/heart_model.pkl
-            + heart_model_meta.json (asserts label direction)
+Model:      data/heart.csv (1,025 rows, 302 distinct) ──► train_model.py
+            de-duplicate ──► 80/20 stratified split ──► models/heart_model.pkl
+            + heart_model_meta.json (label direction, split rule, metrics)
 ```
 
 No identifiers, narratives, or transcripts ever persist server-side; the
