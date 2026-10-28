@@ -92,10 +92,20 @@ def drift(locked: dict[str, str], current: dict[str, tuple[str, str]]) -> list[d
 
 
 def freeze_block(current: dict[str, tuple[str, str]] | None = None) -> str:
-    """The lock's package lines, sorted case-insensitively, one per line."""
+    """The lock's package lines, PEP 503 names, sorted, one per line.
+
+    Names are normalised (`Jinja2` -> `jinja2`, `pydantic_core` ->
+    `pydantic-core`) so the emitted block is byte-comparable with the committed
+    file: a re-lock diff then shows version changes and nothing else. pip treats
+    these names as equivalent, and the constraints file is not read by anything
+    that cares about the shipped casing.
+    """
     current = installed() if current is None else current
-    lines = [f"{name}=={version}" for name, version in current.values()]
-    return "\n".join(sorted(lines, key=str.lower))
+    # Sorted by name, not by rendered line: `-` sorts before `=`, so sorting the
+    # lines would place `pydantic-core` above `pydantic`, which reads as a mistake
+    # in every diff.
+    pairs = sorted((normalise(name), version) for name, version in current.values())
+    return "\n".join(f"{name}=={version}" for name, version in pairs)
 
 
 def render_drift(rows: list[dict]) -> str:

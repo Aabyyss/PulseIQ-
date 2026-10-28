@@ -8,7 +8,7 @@ move on purpose, not overnight.
 
 | Job | Proves |
 |---|---|
-| `backend` | The pytest suite (600 cases) and the script checks: clinical direction, the published score tables against their sources, the 36-option medication catalogue and its 53 sourced rules, de-identification, the local stores, the login limiter, the FHIR bundle, the live medication screen, and the CI definition (below). |
+| `backend` | The pytest suite (601 cases) and the script checks: clinical direction, the published score tables against their sources, the 36-option medication catalogue and its 53 sourced rules, de-identification, the local stores, the login limiter, the FHIR bundle, the live medication screen, and the CI definition (below). |
 | `frontend` | `tsc -b`, the vitest suite (82 cases: extraction patterns, session/retry behaviour, PDF layout, microphone thresholds, the theme boot path and browser-chrome colour, navigation and palette ranking, the service worker's caching policy) and the production build. |
 | `ui-audit` | The built app, **signed in**, swept in **both themes**: contrast at 4 viewports × 12 routes × 2 palettes, layout at 11 widths (320–2560 px, both tablet orientations) × 12 routes, and 22 open-state audits (account menu, both consult tabs, More sheet, command palette, theme switch). Also WCAG 1.4.12 text-spacing overrides, 2.4.11 focus-obscured checks, and the manifest/icons/service-worker/offline-shell pass. |
 | `e2e` | The journey a clinician takes — sign in, adaptive navigation (rail, More sheet, Ctrl-K), capture a transcript line, save the visit, download the PDF, land on thank-you, find it in history — against the **built bundle** served by `vite preview` and a live API (ADR-030). |
@@ -67,7 +67,8 @@ in a clean environment:
    ```
 
 3. **Emit the block.** `python scripts/toolchain.py --freeze` prints sorted
-`name==version` lines. Replace the package lines in `requirements.lock.txt`,
+`name==version` lines, PEP 503 names (lower case, hyphens) — the same form the
+file is already in, so a re-lock diff is versions and nothing else. Replace the package lines in `requirements.lock.txt`,
 and update the provenance comment at the top (run number, commit, date, Python
 version) — that header is the only record of where the pins came from. The
 weekly job's `toolchain-drift` artifact already contains this exact block, so

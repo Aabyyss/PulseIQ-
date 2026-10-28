@@ -57,15 +57,28 @@ def test_a_bumped_added_and_dropped_package_are_each_named():
     assert "numpy" not in rows, "an unchanged package must not appear at all"
 
 
-def test_the_freeze_block_is_sorted_case_insensitively_and_exact():
+def test_the_freeze_block_normalises_names_and_is_sorted():
     current = {
         "websockets": ("websockets", "17.3"),
-        "MarkupSafe": ("MarkupSafe", "3.0.4"),
+        "markupsafe": ("MarkupSafe", "3.0.4"),
         "anyio": ("anyio", "4.15.1"),
+        "pydantic-core": ("pydantic_core", "2.50.1"),
     }
     assert toolchain.freeze_block(current) == (
-        "anyio==4.15.1\nMarkupSafe==3.0.4\nwebsockets==17.3"
+        "anyio==4.15.1\nmarkupsafe==3.0.4\npydantic-core==2.50.1\nwebsockets==17.3"
     )
+
+
+def test_the_committed_lock_is_already_in_that_form():
+    """A re-lock diff must show versions, not re-cased names in a new order."""
+    locked = toolchain.read_lock(toolchain.LOCK)
+    committed = [
+        line.strip()
+        for line in toolchain.LOCK.read_text(encoding="utf-8").splitlines()
+        if "==" in line and not line.strip().startswith("#")
+    ]
+    emitted = toolchain.freeze_block({name: (name, v) for name, v in locked.items()}).splitlines()
+    assert committed == emitted
 
 
 def test_the_workflow_installed_packages_are_never_pinned_or_reported():
