@@ -8,7 +8,7 @@ move on purpose, not overnight.
 
 | Job | Proves |
 |---|---|
-| `backend` | The pytest suite (592 cases) and the script checks: clinical direction, the published score tables against their sources, the 36-option medication catalogue and its 53 sourced rules, de-identification, the local stores, the login limiter, the FHIR bundle, the live medication screen, and the CI definition (below). |
+| `backend` | The pytest suite (600 cases) and the script checks: clinical direction, the published score tables against their sources, the 36-option medication catalogue and its 53 sourced rules, de-identification, the local stores, the login limiter, the FHIR bundle, the live medication screen, and the CI definition (below). |
 | `frontend` | `tsc -b`, the vitest suite (82 cases: extraction patterns, session/retry behaviour, PDF layout, microphone thresholds, the theme boot path and browser-chrome colour, navigation and palette ranking, the service worker's caching policy) and the production build. |
 | `ui-audit` | The built app, **signed in**, swept in **both themes**: contrast at 4 viewports × 12 routes × 2 palettes, layout at 11 widths (320–2560 px, both tablet orientations) × 12 routes, and 22 open-state audits (account menu, both consult tabs, More sheet, command palette, theme switch). Also WCAG 1.4.12 text-spacing overrides, 2.4.11 focus-obscured checks, and the manifest/icons/service-worker/offline-shell pass. |
 | `e2e` | The journey a clinician takes — sign in, adaptive navigation (rail, More sheet, Ctrl-K), capture a transcript line, save the visit, download the PDF, land on thank-you, find it in history — against the **built bundle** served by `vite preview` and a live API (ADR-030). |
@@ -19,6 +19,12 @@ move on purpose, not overnight.
 `.github/workflows/deploy-pages.yml` publishes the frontend to GitHub Pages; it
 builds the same bundle the `frontend` job builds, so a Pages deploy that
 succeeds while `frontend` is red means the two have drifted.
+
+`.github/workflows/toolchain-drift.yml` is the one workflow that is not part of
+the gate: it runs weekly and asks whether the released floors have moved past
+the pinned toolchain. It is described under [the weekly drift
+check](#the-weekly-drift-check) and deliberately does not run on push.
+
 
 ## The toolchain is pinned, not floated
 
@@ -43,6 +49,80 @@ Moving the toolchain is now an edit to that file, deliberately, rather than a
 side effect of pushing on a different day. `backend/test_declared_dependencies.py`
 keeps it honest: every direct requirement must appear in it, every line must be an
 exact pin, and no package may be pinned twice.
+
+### Moving it deliberately
+
+The pin is not meant to be permanent; it is meant to move in a commit a reviewer
+can read. The rule is that the move is proved, not assumed.
+
+1. **Read the drift first.** The [weekly check](#the-weekly-drift-check) names
+every distribution whose released version differs, with both versions. No drift
+and no other reason means there is nothing to do.
+2. **Resolve the floors in the gate's image** — Python 3.12 on ubuntu-24.04,
+in a clean environment:
+
+   ```bash
+   python -m venv .venv && . .venv/bin/activate
+   pip install -r requirements-dev.txt        # no -c: the floors are the input
+   ```
+
+3. **Emit the block.** `python scripts/toolchain.py --freeze` prints sorted
+`name==version` lines. Replace the package lines in `requirements.lock.txt`,
+and update the provenance comment at the top (run number, commit, date, Python
+version) — that header is the only record of where the pins came from. The
+weekly job's `toolchain-drift` artifact already contains this exact block, so
+the common path is a download rather than a reproduction.
+4. **Prove the pin.** `python scripts/toolchain.py --check` must exit 0 and say
+the environment matches. A non-zero exit here means the paste is incomplete or
+the environment has an extra package.
+5. **Prove the suite.** `python -m pytest backend -q` and the eight backend
+script checks, both exactly as the `backend` job runs them. If a pinned wheel
+changed, run the audit and journey locally too (`docs/CI.md` above) — they are
+the only checks that load the app in a browser.
+6. **Look at the model card if `scikit-learn` moved.** The metadata records
+`sklearn_version` next to the pickle, so a moved library means the artifact was
+trained on a different one. Retrain (`python backend/train_model.py`) and review
+the metric diff instead of shipping a version label that no longer describes
+what is in the file.
+7. **Push, then read the gate.** The pins only exist once a runner installs from
+them; the backend job's log shows `pip install -r requirements-dev.txt -c
+requirements.lock.txt` and the versions that followed.
+
+Nothing else needs editing. `backend/test_declared_dependencies.py` fails if a
+direct requirement has no pin, if a lock line is not an exact `==`, or if a
+package is pinned twice, so a half-finished move fails on a laptop instead of on
+the runner.
+
+### The weekly drift check
+
+`.github/workflows/toolchain-drift.yml` runs on Mondays at 06:00 UTC, and on
+demand through `workflow_dispatch`. It installs **without** the lock — that is
+the point — installs the same spaCy model the gate uses, runs the backend suite,
+then compares the environment with the pins:
+
+```bash
+pip install -r requirements-dev.txt                          # the floors
+python -m pytest backend -q                                  # do they still pass?
+python scripts/toolchain.py --check                          # where do they differ?
+python scripts/toolchain.py --freeze > resolved-requirements.txt
+```
+
+Red means one of two things, and the job summary separates them:
+
+- **Drift.** One row per added, removed or bumped distribution, with the locked
+  and installed versions and which kind of change it is.
+- **The suite fails on the floors.** The upstream breakage the pin is currently
+  hiding — the case that would otherwise arrive inside an unrelated push once
+  someone relaxes a floor.
+
+It never runs on push, so it cannot fail a commit for a release that commit did
+not touch, and it is not required by `gate`. The `toolchain-drift` artifact
+carries `resolved-requirements.txt` (the block to paste) and `pytest-floors.log`,
+so the runbook above starts from a download.
+
+`pip` and `en-core-web-sm` are excluded from the comparison by
+`scripts/toolchain.py`: the workflow upgrades the installer and fetches the model
+by URL, so neither belongs in a lock that describes third-party pins.
 
 ## What the dataset job needs
 
@@ -183,16 +263,19 @@ state loads, six focus loads, 24 spacing loads and the PWA pass.
 
 ## The CI definition is tested, not assumed
 
-`backend/test_ci_workflow.py` parses this workflow and asserts the parts a reader
-would otherwise have to verify by eye: the job set, that `gate` needs every job
+`backend/test_ci_workflow.py` parses this workflow — and the drift workflow —
+and asserts the parts a reader would otherwise have to verify by eye: the job
+set, that `gate` needs every job
 with `if: always()` and reads every result, that the audit job starts the API and
 waits for `/health`, that the journey points at the built bundle with
 `--base-url`, that every repository path and `npm run` target exists, that
 runners are pinned, that every `pip install -r` is constrained by
 `requirements.lock.txt`, that the pytest step tees its output with `pipefail` and
-that the log is uploaded with `if: always()`, and that timeouts are bounded. It
-proves the definition is what the docs claim; only a real run proves GitHub
-executes it, and that needs a push.
+that the log is uploaded with `if: always()`, and that timeouts are bounded. For
+the drift workflow it asserts the weekly cron, the absence of `push`/
+`pull_request` triggers, an install line *without* the lock, and the `--check`
+and `--freeze` steps. It proves the definitions are what the docs claim; only a
+real run proves GitHub executes them, and that needs a push (or a dispatch).
 
 ## Reproducing any job locally
 
