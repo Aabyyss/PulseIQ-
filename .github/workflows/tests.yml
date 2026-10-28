@@ -58,10 +58,13 @@ jobs:
           cache: pip
           cache-dependency-path: cardio-ai-system/requirements.txt
 
+      # `-c requirements.lock.txt` pins the closure run #33 resolved, so a new
+      # release cannot change the suite between two identical commits. The floors
+      # in requirements*.txt still describe what the app needs.
       - name: Install backend dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements-dev.txt
+          pip install -r requirements-dev.txt -c requirements.lock.txt
 
       - name: Install spaCy model (best effort)
         run: |
@@ -73,8 +76,22 @@ jobs:
       # the stores, the limiter, the FHIR bundle, the live medication screen),
       # and running it here is the only way a regression in one of those areas
       # is caught before merge.
+      # `tee` leaves the failure on disk for the artifact below; `pipefail` keeps
+      # pytest's exit status, which a bare pipe would quietly replace with tee's.
       - name: Run pytest suite
-        run: python -m pytest backend -q
+        run: |
+          set -o pipefail
+          python -m pytest backend -q 2>&1 | tee pytest-backend.log
+
+      # A red run is read from this artifact when the hosted log is not
+      # reachable. `if: always()` so the failing run is the one that uploads it.
+      - name: Upload pytest output
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: backend-pytest-log
+          path: cardio-ai-system/pytest-backend.log
+          if-no-files-found: ignore
 
       - name: Run backend script checks
         run: |
@@ -144,7 +161,7 @@ jobs:
         working-directory: cardio-ai-system
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
+          pip install -r requirements.txt -c requirements.lock.txt
 
       - name: Install frontend dependencies
         working-directory: cardio-ai-system/frontend
@@ -224,7 +241,7 @@ jobs:
         working-directory: cardio-ai-system
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
+          pip install -r requirements.txt -c requirements.lock.txt
 
       - name: Install frontend dependencies
         working-directory: cardio-ai-system/frontend
@@ -323,7 +340,7 @@ jobs:
       - name: Install backend dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
+          pip install -r requirements.txt -c requirements.lock.txt
 
       - name: Every citation resolves to a registered source
         run: python scripts/verify_sources.py

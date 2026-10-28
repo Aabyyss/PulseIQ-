@@ -8,7 +8,7 @@ move on purpose, not overnight.
 
 | Job | Proves |
 |---|---|
-| `backend` | The pytest suite (566 cases) and the script checks: clinical direction, the published score tables against their sources, the 36-option medication catalogue and its 53 sourced rules, de-identification, the local stores, the login limiter, the FHIR bundle, the live medication screen, and the CI definition (below). |
+| `backend` | The pytest suite (592 cases) and the script checks: clinical direction, the published score tables against their sources, the 36-option medication catalogue and its 53 sourced rules, de-identification, the local stores, the login limiter, the FHIR bundle, the live medication screen, and the CI definition (below). |
 | `frontend` | `tsc -b`, the vitest suite (82 cases: extraction patterns, session/retry behaviour, PDF layout, microphone thresholds, the theme boot path and browser-chrome colour, navigation and palette ranking, the service worker's caching policy) and the production build. |
 | `ui-audit` | The built app, **signed in**, swept in **both themes**: contrast at 4 viewports × 12 routes × 2 palettes, layout at 11 widths (320–2560 px, both tablet orientations) × 12 routes, and 22 open-state audits (account menu, both consult tabs, More sheet, command palette, theme switch). Also WCAG 1.4.12 text-spacing overrides, 2.4.11 focus-obscured checks, and the manifest/icons/service-worker/offline-shell pass. |
 | `e2e` | The journey a clinician takes — sign in, adaptive navigation (rail, More sheet, Ctrl-K), capture a transcript line, save the visit, download the PDF, land on thank-you, find it in history — against the **built bundle** served by `vite preview` and a live API (ADR-030). |
@@ -19,6 +19,30 @@ move on purpose, not overnight.
 `.github/workflows/deploy-pages.yml` publishes the frontend to GitHub Pages; it
 builds the same bundle the `frontend` job builds, so a Pages deploy that
 succeeds while `frontend` is red means the two have drifted.
+
+## The toolchain is pinned, not floated
+
+`requirements.txt` and `requirements-dev.txt` state floors (`>=`) because that is
+what the app needs. A runner installs more than floors: on 2026-10-28 it resolved
+`pandas 3.1.0`, `scikit-learn 1.9.1`, `pytest 9.2.0` and 69 other distributions,
+and a release published the next morning would have replaced any of them without
+a commit. Two identical pushes could then disagree, which is the one thing a gate
+cannot afford.
+
+`requirements.lock.txt` is that resolved closure — every package the green run
+installed, pinned with `==`, with the run and commit it came from in the header.
+Every install step passes it as constraints:
+
+```bash
+pip install -r requirements-dev.txt -c requirements.lock.txt
+```
+
+Constraints pin what is being installed and install nothing themselves, so the
+Linux-only wheels (`uvloop`, `httptools`) stay harmless on a Windows checkout.
+Moving the toolchain is now an edit to that file, deliberately, rather than a
+side effect of pushing on a different day. `backend/test_declared_dependencies.py`
+keeps it honest: every direct requirement must appear in it, every line must be an
+exact pin, and no package may be pinned twice.
 
 ## What the dataset job needs
 
@@ -134,6 +158,13 @@ save and the WebSocket concept stream both run against one origin.
 
 ## Artifacts
 
+`backend-pytest-log` is uploaded by the `backend` job whether it passes or fails
+and contains `pytest-backend.log` — the suite's full output, written through
+`tee` with `set -o pipefail` so the pipe cannot turn a failure into its own exit
+0. That artifact exists because the run that exposed the CRLF fingerprint
+(2026-10-28) failed with a log the API would not serve without repository admin
+rights; the failure had to be reconstructed from a checkout instead of read.
+
 `ui-audit-report` is uploaded whether the job passes or fails and contains:
 
 - `scripts/ui-audit-report.json` — `sampledTotal` and `sampledByTheme`, every
@@ -157,15 +188,19 @@ would otherwise have to verify by eye: the job set, that `gate` needs every job
 with `if: always()` and reads every result, that the audit job starts the API and
 waits for `/health`, that the journey points at the built bundle with
 `--base-url`, that every repository path and `npm run` target exists, that
-runners are pinned, and that timeouts are bounded. It proves the definition is
-what the docs claim; only a real run proves GitHub executes it, and that needs a
-push.
+runners are pinned, that every `pip install -r` is constrained by
+`requirements.lock.txt`, that the pytest step tees its output with `pipefail` and
+that the log is uploaded with `if: always()`, and that timeouts are bounded. It
+proves the definition is what the docs claim; only a real run proves GitHub
+executes it, and that needs a push.
 
 ## Reproducing any job locally
 
 ```bash
 # backend + frontend, the same commands CI runs
 cd cardio-ai-system
+# Optional but exact: resolve the versions the green run used.
+pip install -r requirements-dev.txt -c requirements.lock.txt
 python -m uvicorn backend.api_server:app --host 127.0.0.1 --port 8000 &   # leave running
 python -m pytest backend -q
 cd frontend && npm ci && npm run typecheck && npm run test && npm run lint && npm run build

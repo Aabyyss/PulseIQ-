@@ -234,6 +234,37 @@ def test_working_directories_exist_and_npm_scripts_are_real(workflow: dict) -> N
                     )
 
 
+def test_every_install_is_constrained_by_the_lock(workflow: dict) -> None:
+    """A `pip install -r` without `-c` floats, and two identical commits differ."""
+    installs = 0
+    for name, job in _jobs(workflow).items():
+        for line in _run_text(job).splitlines():
+            if "pip install" in line and "-r " in line:
+                installs += 1
+                assert "-c requirements.lock.txt" in line, (
+                    f"{name} installs without the lock: {line.strip()}"
+                )
+    assert installs >= 4, f"only {installs} constrained installs found — check the regex"
+
+
+def test_backend_job_leaves_pytest_output_for_a_failed_run(workflow: dict) -> None:
+    """A red run must produce a readable log even when the hosted log is closed."""
+    job = _jobs(workflow)["backend"]
+    run = _run_text(job)
+    assert "set -o pipefail" in run, (
+        "piping pytest through tee without pipefail turns a failure into tee's exit 0"
+    )
+    assert "tee pytest-backend.log" in run
+
+    uploads = [
+        step
+        for step in _steps(job)
+        if "pytest-backend.log" in str(step.get("with", {}).get("path", ""))
+    ]
+    assert uploads, "the pytest log is written but never uploaded"
+    assert uploads[0].get("if") == "always()", "a failed run is the one that needs the log"
+
+
 def test_backend_job_runs_pytest_and_the_script_checks(workflow: dict) -> None:
     run = _run_text(_jobs(workflow)["backend"])
     assert "python -m pytest backend -q" in run

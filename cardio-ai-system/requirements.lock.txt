@@ -1,0 +1,90 @@
+# The exact Python toolchain the green Test suite run resolved.
+#
+# Source: workflow run #33 (commit 3c2620a, 2026-10-28), the "Install backend
+# dependencies" step of the Backend pipeline job — Python 3.12.15 on
+# ubuntu-24.04. Every entry is what `pip install -r requirements-dev.txt`
+# actually installed that day, not what the floors allow, because the floors
+# (`>=`) let a new release change the suite's behaviour between two identical
+# commits. `pytest 9.2.0` vs `9.1.x` or `pandas 3.1.0` vs `3.0.x` is not a pin.
+#
+# Used as constraints, not as a requirements file:
+#
+#     pip install -r requirements-dev.txt -c requirements.lock.txt
+#
+# Constraints only pin what is being installed, so Linux-only wheels (uvloop,
+# httptools) stay harmless on a Windows or macOS checkout. To move the toolchain,
+# install on a runner, read the versions, and edit this file deliberately.
+#
+# The spaCy model is pinned by URL in the workflow (en_core_web_sm-3.8.0); spacy
+# itself is pinned here to the 3.8.x that loads it.
+
+MarkupSafe==3.0.4
+PyYAML==6.0.3
+annotated-doc==0.0.5
+annotated-types==0.8.0
+anyio==4.15.1
+blis==1.3.4
+catalogue==2.0.10
+certifi==2026.10.23
+charset-normalizer==3.5.2
+click==8.5.0
+cloudpathlib==0.26.0
+cloudpickle==3.1.2
+confection==1.3.4
+cymem==2.0.16
+fastapi==0.162.0
+h11==0.16.0
+httpcore==1.0.9
+httptools==0.9.0
+httpx==0.28.1
+idna==3.20
+imageio-ffmpeg==0.7.0
+iniconfig==2.3.1
+jinja2==3.1.6
+joblib==1.6.0
+markdown-it-py==4.2.0
+mdurl==0.1.2
+murmurhash==1.0.16
+narwhals==2.28.0
+numpy==2.5.4
+opentelemetry-api==1.45.1
+packaging==26.3
+pandas==3.1.0
+pluggy==1.7.0
+preshed==3.0.15
+pydantic==2.14.1
+pydantic-core==2.50.1
+pygments==2.21.0
+pytest==9.2.0
+python-dateutil==3.0.0
+python-dotenv==1.2.4
+requests==2.34.2
+rich==15.0.0
+scikit-learn==1.9.1
+scipy==1.18.1
+setuptools==84.2.1
+shap==0.54.1
+shellingham==1.5.4
+six==1.17.0
+slicer==0.0.8
+smart-open==9.0.0
+spacy==3.8.18
+spacy-legacy==3.0.12
+spacy-loggers==1.0.5
+srsly==2.5.5
+starlette==1.10.0
+thinc==8.3.14
+threadpoolctl==3.7.0
+tqdm==4.70.1
+typer==0.27.3
+typing-extensions==4.16.0
+typing-inspection==0.4.4
+tzdata==2026.6
+urllib3==2.8.0
+uvicorn==0.54.0
+uvloop==0.23.0
+wasabi==1.1.3
+watchfiles==1.3.0
+weasel==1.0.1
+websockets==17.3
+wrapt==2.5.1

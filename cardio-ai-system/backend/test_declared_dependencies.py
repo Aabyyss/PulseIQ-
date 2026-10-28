@@ -27,6 +27,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 REQUIREMENTS = (ROOT / "requirements.txt", ROOT / "requirements-dev.txt")
+LOCK = ROOT / "requirements.lock.txt"
 SCANNED = ("backend", "agents", "scripts")
 
 # Import name -> distribution name, where they differ. Anything absent is assumed
@@ -110,6 +111,48 @@ def undeclared_packages(root: Path, requirements: tuple[Path, ...]) -> list[str]
                     f"(distribution {distribution!r}), which no requirements file declares"
                 )
     return problems
+
+
+def locked_versions(path: Path = LOCK) -> dict[str, str]:
+    """The exact version each distribution is pinned to, by normalised name."""
+    versions: dict[str, str] = {}
+    for line in path.read_text(encoding="utf-8").splitlines():
+        line = line.split("#", 1)[0].strip()
+        if not line:
+            continue
+        name, _, version = line.partition("==")
+        versions[normalise(name)] = version.strip()
+    return versions
+
+
+def test_the_lock_pins_every_line_exactly() -> None:
+    """A floor or a range would be the thing the lock exists to remove."""
+    loose = []
+    for line in LOCK.read_text(encoding="utf-8").splitlines():
+        entry = line.split("#", 1)[0].strip()
+        if entry and not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*==[^=<>!,\s]+", entry):
+            loose.append(entry)
+    assert not loose, "requirements.lock.txt must use `name==version`: " + ", ".join(loose)
+
+
+def test_every_declared_dependency_is_pinned_in_the_lock() -> None:
+    """A new direct dependency without a lock entry would float on the runner."""
+    locked = locked_versions()
+    missing = sorted(declared_packages() - set(locked))
+    assert not missing, (
+        "these direct requirements have no exact pin in requirements.lock.txt: "
+        + ", ".join(missing)
+    )
+
+
+def test_the_lock_does_not_pin_the_same_package_twice() -> None:
+    names = [
+        normalise(line.split("#", 1)[0].split("==")[0])
+        for line in LOCK.read_text(encoding="utf-8").splitlines()
+        if "==" in line
+    ]
+    duplicates = sorted({name for name in names if names.count(name) > 1})
+    assert not duplicates, f"pinned twice: {duplicates}"
 
 
 def test_every_third_party_import_is_declared() -> None:
