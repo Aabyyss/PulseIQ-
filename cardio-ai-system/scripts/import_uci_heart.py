@@ -23,6 +23,12 @@ Re-run with::
 
     python scripts/import_uci_heart.py
 
+In CI the archive is cached under its pinned hash and passed with
+``--archive``, so a run with a warm cache touches no network at all: the file
+is read from disk, still verified against the member SHA-256 below, and the
+dataset is rebuilt in memory. A cache miss downloads once and writes the
+archive back to that path for the next run.
+
 Only the Python standard library is used, so this works offline after the
 download and adds no dependency. The archive and the member file are both
 checksum-pinned; a mismatch stops the import instead of training on a payload
@@ -100,6 +106,29 @@ def fetch_archive(url: str = ARCHIVE_URL) -> bytes:
     digest = _sha256(payload)
     if digest != ARCHIVE_SHA256:
         print(f"  WARNING: archive hash changed ({digest}); verifying the member file instead")
+    return payload
+
+
+def load_archive(path: Path | None = None) -> bytes:
+    """Use a local copy when one exists, otherwise download and store it there.
+
+    `path` is the CI cache location. A hit means no network call; a miss
+    downloads and writes the archive so the next run is a hit. The bytes are
+    only a transport: `extract_member` verifies the pinned member SHA-256, so a
+    tampered or truncated cache fails exactly like a tampered download.
+    """
+    if path is not None and path.exists():
+        payload = path.read_bytes()
+        digest = _sha256(payload)
+        state = "matches the pinned hash" if digest == ARCHIVE_SHA256 else f"hash {digest} differs"
+        print(f"Using cached archive {path} ({state}; member is verified next)")
+        return payload
+
+    payload = fetch_archive()
+    if path is not None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(payload)
+        print(f"Stored the archive at {path} for the next run")
     return payload
 
 
@@ -276,9 +305,9 @@ def check_provenance(summary: dict, path: Path = PROVENANCE) -> list[str]:
     return problems
 
 
-def check() -> int:
-    """Rebuild in memory and compare with what is committed. Writes nothing."""
-    archive = fetch_archive()
+def check(archive_path: Path | None = None) -> int:
+    """Rebuild in memory and compare with what is committed. Writes nothing else."""
+    archive = load_archive(archive_path)
     rows, summary = convert(extract_member(archive))
     problems = (
         compare_rows(read_committed(), rows)
@@ -328,14 +357,22 @@ def main(argv: list[str] | None = None) -> int:
         "--check",
         action="store_true",
         help="rebuild in memory and compare with data/heart.csv, its provenance and its "
-        "attribution; write nothing and exit non-zero on drift",
+        "attribution; write nothing (except the archive cache) and exit non-zero on drift",
+    )
+    parser.add_argument(
+        "--archive",
+        type=Path,
+        default=None,
+        metavar="PATH",
+        help="use this local copy of the UCI zip if it exists, otherwise download and "
+        "store it there; CI points this at its cache",
     )
     args = parser.parse_args(argv)
 
     if args.check:
-        return check()
+        return check(args.archive)
 
-    archive = fetch_archive()
+    archive = load_archive(args.archive)
     payload = extract_member(archive)
     rows, summary = convert(payload)
     write_dataset(rows)

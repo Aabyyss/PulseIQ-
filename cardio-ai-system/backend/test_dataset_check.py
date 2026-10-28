@@ -140,8 +140,55 @@ def test_provenance_drift_is_detected(tmp_path):
     assert any("provenance rows" in problem for problem in problems)
 
 
+def test_a_cached_archive_is_used_without_touching_the_network(monkeypatch, tmp_path):
+    cached = tmp_path / "uci-heart-disease.zip"
+    cached.write_bytes(b"cached-archive-bytes")
+
+    def fail(*args, **kwargs):
+        raise AssertionError("the cache hit must not download")
+
+    monkeypatch.setattr(importer, "fetch_archive", fail)
+    assert importer.load_archive(cached) == b"cached-archive-bytes"
+
+
+def test_a_cache_miss_downloads_once_and_stores_the_archive(monkeypatch, tmp_path):
+    target = tmp_path / "cache" / "uci-heart-disease.zip"
+    calls = []
+
+    def fake_fetch(url=importer.ARCHIVE_URL):
+        calls.append(url)
+        return b"fresh-download"
+
+    monkeypatch.setattr(importer, "fetch_archive", fake_fetch)
+    assert importer.load_archive(target) == b"fresh-download"
+    assert calls == [importer.ARCHIVE_URL]
+    assert target.read_bytes() == b"fresh-download"
+
+    # Second run: no download, and the same bytes come back.
+    monkeypatch.setattr(
+        importer, "fetch_archive", lambda *a, **k: pytest.fail("second run downloaded again")
+    )
+    assert importer.load_archive(target) == b"fresh-download"
+
+
+def test_without_an_archive_path_every_run_downloads(monkeypatch):
+    calls = []
+    monkeypatch.setattr(importer, "fetch_archive", lambda *a, **k: calls.append(1) or b"zip")
+    assert importer.load_archive(None) == b"zip"
+    assert importer.load_archive(None) == b"zip"
+    assert len(calls) == 2
+
+
 def test_check_flag_dispatches_to_the_comparison(monkeypatch):
     calls = []
-    monkeypatch.setattr(importer, "check", lambda: calls.append(True) or 7)
+    monkeypatch.setattr(importer, "check", lambda path=None: calls.append(path) or 7)
     assert importer.main(["--check"]) == 7
-    assert calls == [True]
+    assert calls == [None]
+
+
+def test_check_flag_passes_the_archive_path_through(monkeypatch, tmp_path):
+    archive = tmp_path / "uci.zip"
+    calls = []
+    monkeypatch.setattr(importer, "check", lambda path=None: calls.append(path) or 0)
+    assert importer.main(["--check", "--archive", str(archive)]) == 0
+    assert calls == [archive]
