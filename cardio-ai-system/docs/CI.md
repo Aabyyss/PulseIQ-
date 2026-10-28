@@ -24,9 +24,9 @@ succeeds while `frontend` is red means the two have drifted.
 
 `requirements.txt` and `requirements-dev.txt` state floors (`>=`) because that is
 what the app needs. A runner installs more than floors: on 2026-10-28 it resolved
-`pandas 3.1.0`, `scikit-learn 1.9.1`, `pytest 9.2.0` and 69 other distributions,
-and a release published the next morning would have replaced any of them without
-a commit. Two identical pushes could then disagree, which is the one thing a gate
+`pandas 3.1.0`, `scikit-learn 1.9.1`, `pytest 9.2.0` and 67 other distributions —
+70 in all — and a release published the next morning would have replaced any of
+them without a commit. Two identical pushes could then disagree, which is the one thing a gate
 cannot afford.
 
 `requirements.lock.txt` is that resolved closure — every package the green run
