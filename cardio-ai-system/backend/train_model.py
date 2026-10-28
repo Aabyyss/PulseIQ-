@@ -61,6 +61,20 @@ RANDOM_STATE = 42
 CV_FOLDS = 10
 CALIBRATION_BINS = 10
 
+
+def dataset_fingerprint(path: Path = DATA_PATH) -> str:
+    """SHA-256 of the dataset's bytes, with line endings normalised to LF.
+
+    `heart.csv` is written by the importer with csv's CRLF terminator, committed
+    with LF, and checked out according to the platform's `core.autocrlf`. Hashing
+    raw bytes made the model card's fingerprint depend on the machine that
+    trained it: recorded on Windows it read 683747d5…, while the Linux CI
+    checkout hashed the committed LF bytes (73911fff…) and failed the card's own
+    assertion. Line endings are transport, not data, so they are normalised out.
+    """
+    payload = path.read_bytes().replace(b"\r\n", b"\n")
+    return hashlib.sha256(payload).hexdigest()
+
 _SPLIT_RULE = (
     "Exact duplicate rows removed before splitting (drop_duplicates), then a single "
     f"stratified {int((1 - TEST_SIZE) * 100)}/{int(TEST_SIZE * 100)} train/test split "
@@ -244,7 +258,7 @@ def main() -> None:
         "dataset_rows": len(raw),
         "dataset_unique_rows": len(data),
         "dataset_duplicate_rows": duplicates,
-        "dataset_sha256": hashlib.sha256(DATA_PATH.read_bytes()).hexdigest(),
+        "dataset_sha256": dataset_fingerprint(),
         "dataset_source": {
             "name": provenance.get("name"),
             "url": provenance.get("url"),

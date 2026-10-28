@@ -13,7 +13,6 @@ true, so the flattering number cannot return by accident:
 * the metadata and attribution record source, licence, hashes and the split rule.
 """
 
-import hashlib
 import json
 import pickle
 import sys
@@ -31,6 +30,7 @@ from backend.train_model import (  # noqa: E402
     MODEL_PATH,
     SOURCE_PATH,
     TEST_SIZE,
+    dataset_fingerprint,
     labels,
     load_dataset,
     load_provenance,
@@ -129,7 +129,7 @@ def test_metadata_states_source_licence_split_and_counts(raw_and_unique, provena
     assert meta["n_train"] + meta["n_test"] == len(unique)
 
     # The CSV is fingerprinted, so a swapped file is visible next to the metrics.
-    assert meta["dataset_sha256"] == hashlib.sha256(DATA_PATH.read_bytes()).hexdigest()
+    assert meta["dataset_sha256"] == dataset_fingerprint()
 
     source = meta["dataset_source"]
     assert source["licence"] == "CC BY 4.0"
@@ -142,6 +142,23 @@ def test_metadata_states_source_licence_split_and_counts(raw_and_unique, provena
     # A reviewer must be able to read how the split was made without the script.
     rule = meta["split"].lower()
     assert "duplicate" in rule and "split" in rule and "never shared" in rule
+
+
+def test_the_fingerprint_ignores_line_endings(tmp_path):
+    """The 2026-10-28 CI failure: Windows hashed CRLF, the runner checked out LF.
+
+    The card's fingerprint was recorded from a working tree that `core.autocrlf`
+    had expanded, so the Linux job compared it with the committed LF bytes and
+    went red on a file nobody had changed. Either form must fingerprint the same.
+    """
+    lf = DATA_PATH.read_bytes().replace(b"\r\n", b"\n")
+    crlf = lf.replace(b"\n", b"\r\n")
+    (tmp_path / "lf.csv").write_bytes(lf)
+    (tmp_path / "crlf.csv").write_bytes(crlf)
+
+    assert dataset_fingerprint(tmp_path / "lf.csv") == dataset_fingerprint(
+        tmp_path / "crlf.csv"
+    )
 
 
 def test_provenance_file_matches_the_dataset(raw_and_unique, provenance):

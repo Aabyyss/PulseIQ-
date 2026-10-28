@@ -1,0 +1,4 @@
+# Datasets check out identically on every platform. `heart.csv` is fingerprinted
+# into the model card, and a Windows checkout (core.autocrlf) otherwise hands the
+# tests CRLF bytes where the committed blob — and the Linux CI job — has LF.
+*.csv text eol=lf
