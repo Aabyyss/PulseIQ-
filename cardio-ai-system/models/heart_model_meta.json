@@ -1,7 +1,7 @@
 {
   "name": "PulseIQ heart-disease screening model",
   "algorithm": "RandomForestClassifier(n_estimators=300, random_state=42)",
-  "trained_at": "2026-10-28 22:30:43",
+  "trained_at": "2026-10-28 22:43:49",
   "sklearn_version": "1.9.1",
   "dataset": "data/heart.csv (public heart dataset)",
   "dataset_rows": 1025,
@@ -37,5 +37,85 @@
     "cv_roc_auc": 0.909,
     "cv_roc_auc_std": 0.024
   },
-  "metrics_note": "Metrics come from distinct rows only. Earlier revisions reported ROC-AUC and recall of 1.000 because 723 of 1,025 rows were exact duplicates split across train and test; that figure is withdrawn, not reproduced here."
+  "calibration": {
+    "out_of_fold": {
+      "n": 302,
+      "bins": 10,
+      "brier": 0.125,
+      "ece": 0.064,
+      "base_rate": 0.457,
+      "mean_predicted": 0.455
+    },
+    "holdout": {
+      "n": 61,
+      "bins": 10,
+      "brier": 0.137,
+      "ece": 0.096,
+      "base_rate": 0.459,
+      "mean_predicted": 0.49
+    },
+    "reliability": [
+      {
+        "bin": "0.0-0.1",
+        "count": 46,
+        "mean_predicted": 0.044,
+        "observed_rate": 0.043
+      },
+      {
+        "bin": "0.1-0.2",
+        "count": 40,
+        "mean_predicted": 0.146,
+        "observed_rate": 0.05
+      },
+      {
+        "bin": "0.2-0.3",
+        "count": 39,
+        "mean_predicted": 0.242,
+        "observed_rate": 0.256
+      },
+      {
+        "bin": "0.3-0.4",
+        "count": 24,
+        "mean_predicted": 0.353,
+        "observed_rate": 0.417
+      },
+      {
+        "bin": "0.4-0.5",
+        "count": 26,
+        "mean_predicted": 0.444,
+        "observed_rate": 0.231
+      },
+      {
+        "bin": "0.5-0.6",
+        "count": 24,
+        "mean_predicted": 0.564,
+        "observed_rate": 0.625
+      },
+      {
+        "bin": "0.6-0.7",
+        "count": 15,
+        "mean_predicted": 0.646,
+        "observed_rate": 0.8
+      },
+      {
+        "bin": "0.7-0.8",
+        "count": 16,
+        "mean_predicted": 0.744,
+        "observed_rate": 0.75
+      },
+      {
+        "bin": "0.8-0.9",
+        "count": 29,
+        "mean_predicted": 0.846,
+        "observed_rate": 0.931
+      },
+      {
+        "bin": "0.9-1.0",
+        "count": 43,
+        "mean_predicted": 0.944,
+        "observed_rate": 0.977
+      }
+    ]
+  },
+  "metrics_note": "Metrics come from distinct rows only. Earlier revisions reported ROC-AUC and recall of 1.000 because 723 of 1,025 rows were exact duplicates split across train and test; that figure is withdrawn, not reproduced here. Calibration (Brier, ECE) is measured on out-of-fold predictions, one per distinct patient."
 }

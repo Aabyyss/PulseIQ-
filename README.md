@@ -127,7 +127,16 @@ distinct**: 723 rows are exact duplicates of another row.
 | Recall | 0.857 |
 | F1 | 0.828 |
 | ROC-AUC | 0.884 |
+| Brier score | 0.125 |
+| Calibration error (ECE) | 0.064 |
 | 10-fold CV | 0.838 ± 0.073 accuracy · 0.909 ± 0.024 ROC-AUC |
+
+> **Is the probability real?** ROC-AUC only says the ordering is right, and the app displays
+> the number and bands it at 0.45 / 0.75 — so the value has to mean something. On out-of-fold
+> predictions (one per distinct patient, n = 302) the Brier score is 0.125 against 0.25 for
+> always saying 0.5, and ECE is 0.064 over ten bins. Mean predicted probability 0.455 vs
+> observed disease rate 0.457. The full reliability table is in `heart_model_meta.json`, and
+> `test_calibration.py` pins the arithmetic including an overconfident model that scores worse.
 
 > **Why this card used to say 1.000.** An earlier split ran before de-duplication, so the same
 > patient profiles sat in both training and test and the forest only had to memorise them:
@@ -136,8 +145,14 @@ distinct**: 723 rows are exact duplicates of another row.
 
 > **⚠️ Inverted-target note.** The widely circulated `heart.csv` ships with `target=1` meaning
 > *healthy*. PulseIQ flips the label at training time, and the training script asserts that
-> textbook disease and healthy profiles score in the expected direction — so this real defect
-> in the source data can never silently return.
+> textbook disease and healthy profiles score in the expected direction — so this real defect> in the source data can never silently return.
+
+> **Better data?** The 302 distinct rows are the Cleveland cohort, and the file appears to be a
+> duplicate-inflated copy of it. Same-schema, openly licensed sources exist (UCI Heart Disease
+> multi-site and Statlog, both CC BY 4.0) but they add existing Cleveland patients rather than
+> new ones; genuinely different data is either a different prediction task (PTB-XL ECG) or
+> access-controlled (MIMIC-IV, UK Biobank, Framingham). The licence review and what each source
+> can honestly support are in [docs/DATA_SOURCES.md](cardio-ai-system/docs/DATA_SOURCES.md).
 
 ## 🏗️ Architecture
 
@@ -177,7 +192,8 @@ cardio-ai-system/
 ├── models/      trained model and metadata
 ├── data/        dataset
 ├── docs/        ADR, DESIGN (adaptive shell), FEATURES (roadmap), VERIFICATION (what the gate proves),
-│               API spec, data flow, security, CI, compatibility, medication catalogue · screenshots · video
+│               API spec, data flow, security, CI, compatibility, data sources (licences),
+│               medication catalogue · screenshots · video
 ├── scripts/     E2E journey, UI audit (contrast/layout/states/PWA), source verifier, demo recording
 └── setup.ps1 · run-*.ps1 · Start-PulseIQ.cmd
 ```

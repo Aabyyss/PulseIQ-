@@ -1661,3 +1661,37 @@ the split leaks, if the metadata stops stating the rule, or if the file's
 duplicates disappear (which would mean the fixture, not the fix, changed). It
 also reproduces the leak on the raw file, so the guard is shown to detect the
 bug it exists for. Retraining is still `python backend/train_model.py`.
+
+## ADR-036 · Publish calibration, because the app bands a probability
+**Status:** Accepted (2026-10-28)
+
+ROC-AUC 0.884 says the model orders patients correctly. It says nothing about
+the number the app prints and turns into Low/Medium/High at 0.45 and 0.75: a
+model can rank well and still say 0.9 for patients who are disease-free half
+the time, and that error moves someone across a band. Ranking metrics alone
+were therefore an incomplete claim about a value the UI displays.
+
+**Decision.** Every training run computes Brier score and expected calibration
+error on **out-of-fold** predictions — one per distinct patient, made by a model
+that never saw that patient — plus a ten-bin reliability table published in
+`heart_model_meta.json`. The arithmetic lives in `backend/calibration.py` as
+pure functions, tested against hand-computed cases. Training asserts the Brier
+score is below 0.25, the score of always predicting 0.5, so a model with no
+skill on the probability scale cannot be recorded as if it had some.
+
+**Measured.** Brier 0.125, ECE 0.064 over 10 bins, mean predicted 0.455 against
+an observed base rate of 0.457 (n = 302). The 0.4–0.5 bin overpredicts by 0.21
+on 26 patients and the 0.6–0.7 bin underpredicts by 0.15 on 15; both are
+published in the reliability table rather than smoothed away.
+
+**Rejected.** Platt/isotonic rescaling (with 302 patients it would fit the
+validation split it is scored on, and add a dependency to solve a 0.064
+gap that does not need solving); reporting calibration on the 61-row holdout
+only (too few points for ten bins — kept as a secondary figure instead);
+quotes like "well calibrated" with no number (unfalsifiable).
+
+**Consequences.** "Probability" in the UI now has a measured meaning, and the
+model card can defend the band thresholds instead of asserting them. The
+reliability table is a snapshot of one training run; retraining rewrites it,
+and `test_calibration.py` fails if it is missing, if the bin counts stop summing
+to the distinct-row count, or if the Brier score crosses the no-skill line.
