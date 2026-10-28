@@ -29,6 +29,34 @@ when the codebook changes (it asserts the categorical domains against the file),
 and `backend/test_train_model.py` fails if the attribution, source fields or
 split rule disappear.
 
+## The other three cohorts
+
+`data/heart_sites.csv` holds every record from all four sites in the same
+repository (same CC BY 4.0 licence, same citation): 920 rows, with missing
+values preserved as empty cells and the source's own zero placeholders left
+untouched. It is **not** training data. Cleveland has the only usable sample;
+the others are external validation, and their missingness is the finding:
+
+| Site | Rows | Complete | Disease | Missing `ca` | Missing `thal` | Missing `slope` |
+|---|---|---|---|---|---|---|
+| Cleveland | 303 | 297 | 46% | 4 | 2 | 0 |
+| Hungarian | 294 | 1 | 36% | 291 | 266 | 190 |
+| Switzerland | 123 | 0 | 93% | 118 | 52 | 17 |
+| VA Long Beach | 200 | 1 | 74% | 198 | 166 | 102 |
+
+Switzerland also stores an unmeasured cholesterol as `0` in all 123 records, and
+VA in 49; the evaluator treats `chol = 0` (and `trestbps = 0`) as missing rather
+than as measurements, because a cholesterol of zero is not a finding.
+
+Because complete-case evaluation would report one Hungarian row and no Swiss
+rows, `backend/site_evaluation.py` scores each site two ways: all rows with
+missing features filled from the **Cleveland training split**, and the subset
+needing at most two fills. Metrics, prevalences and missing counts are in
+`models/site_evaluation.json` and on the README model card. The result is a
+ranking that transfers moderately (AUC 0.73–0.87) and a probability that does
+not (Brier 0.28–0.29 at the VA/Swiss prevalences) — which is why no site is
+pooled into training and no threshold is transplanted.
+
 ## Candidates, and what each can actually support
 
 | Source | Licence / access | Size | Fits the 13 features? | Verdict |

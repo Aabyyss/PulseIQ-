@@ -1753,3 +1753,49 @@ to rebuild the dataset; it refuses a payload that does not match the pinned
 hashes. The importer and the training script both verify label polarity, so an
 inverted file cannot be imported or trained on. The E2E and UI suites are
 unaffected — they never depended on the metric values.
+
+## ADR-038 · Import all four UCI sites, train on Cleveland, validate externally
+**Status:** Accepted (2026-10-28)
+
+ADR-037 put the Cleveland cohort on a licensed footing. The same UCI repository
+ships three more cohorts with the same 13 fields, which looks like a way to grow
+the sample. It is not: they arrive with almost no complete records. Hungarian has
+**1** complete record (291 of 294 lack `ca`, 266 lack `thal`), Switzerland has
+**none** (all 123 also encode an unmeasured cholesterol as 0), and VA Long Beach
+has **1**. Pooling them would mean inventing most of the strongest predictors or
+silently teaching the model site-specific artefacts.
+
+**Decision.** Import all four sites into `data/heart_sites.csv` with missing
+values preserved (no imputation in the data file), keep the model trained on
+Cleveland alone, and report each external site twice in
+`models/site_evaluation.json`: all rows filled from the **Cleveland training
+split**'s medians/modes, and the subset needing at most two fills. Every block
+publishes its prevalence, complete-row count and per-field missingness, and the
+README table pairs the AUC with those conditions.
+
+**Measured.** Hungarian AUC 0.873 (all) / 0.824 (≤2 filled, n=112); Switzerland
+0.733 / 0.702 (n=43); VA 0.729 / 0.726 (n=79); Cleveland holdout 0.943. Brier
+rises from 0.105 internally to 0.153–0.293 externally, and Swiss recall is 0.43
+at a 93% prevalence with a mean prediction of 0.48.
+
+**What that means.** The *ranking* transfers moderately and the low-imputation
+subset does not change the picture, so the result is not an artefact of filling
+values. The *probability* does not transfer: thresholds calibrated on Cleveland
+(0.45/0.75) cannot be reused on these populations without local recalibration.
+That is a finding about the model's portability, not a defect to hide by
+retraining on the test sites.
+
+**Rejected.** Pooling the sites (mostly-imputed rows would dominate, and the
+model would learn the imputation); complete-case evaluation (one Hungarian and
+no Swiss rows — a metric over n=1 is not a result); training separate models per
+site (too few complete rows, and it would stop being an external check);
+dropping Switzerland (it is the most informative failure: near-100% prevalence
+is exactly where a transplanted threshold breaks).
+
+**Consequences.** `python scripts/import_uci_heart.py --sites` rebuilds the
+export, and `--check` compares it like the Cleveland file, so the missingness
+counts are part of the provenance gate. `python -m backend.site_evaluation`
+regenerates the report; `test_site_evaluation.py` fails if the counts, the
+imputation source, the holdout/external separation or the metric bounds drift.
+The missingness is now a documented property of the data, not a surprise for the
+next person who tries to reuse it.
