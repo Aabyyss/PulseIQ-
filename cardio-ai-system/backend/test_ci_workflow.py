@@ -149,7 +149,34 @@ def test_dataset_job_rebuilds_and_fails_on_drift(workflow: dict) -> None:
     # Standard library only: a pip install here would be a dependency the check
     # does not need, and one more thing that can fail for the wrong reason.
     assert "pip install" not in run
-    assert not _uses(job) or all("setup-python" in action or "checkout" in action for action in _uses(job))
+    allowed = ("checkout", "setup-python", "cache")
+    assert all(any(name in action for name in allowed) for action in _uses(job)), _uses(job)
+
+
+def test_dataset_job_uses_a_cache_keyed_on_the_pinned_archive(workflow: dict) -> None:
+    """A publisher outage must not fail the gate when the archive is cached."""
+    job = _jobs(workflow)["dataset"]
+    caches = [
+        step
+        for step in _steps(job)
+        if str(step.get("uses", "")).startswith("actions/cache@")
+    ]
+    assert len(caches) == 1, "the dataset job must restore the archive from a cache"
+    cache = caches[0]["with"]
+
+    assert re.fullmatch(r"uci-heart-disease-[0-9a-f]{64}", cache["key"]), (
+        "the cache key must be the pinned archive hash; a moving key would serve "
+        "an archive the check never reviewed"
+    )
+    assert "restore-keys" not in cache, (
+        "a fallback key could restore a different archive and defeat the check"
+    )
+    assert "uci-heart-disease.zip" in cache["path"]
+
+    # The check must be pointed at that path, or the cache saves bytes the job
+    # never reads.
+    run = _run_text(job)
+    assert f"--archive {cache['path']}" in run
 
 
 def test_job_timeouts_are_bounded(workflow: dict) -> None:

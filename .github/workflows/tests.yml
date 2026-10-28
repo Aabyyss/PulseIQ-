@@ -346,8 +346,21 @@ jobs:
         with:
           python-version: "3.12"
 
+      # A hit means this job touches no network: the archive is read from disk
+      # and its member file is still verified against the pinned SHA-256. The
+      # key is the pin itself, so there is deliberately no `restore-keys` —
+      # restoring an archive from a different source revision would defeat the
+      # check. A miss downloads once; the post-job step saves the archive.
+      - name: Restore the pinned UCI archive
+        uses: actions/cache@v5
+        with:
+          path: ~/.cache/pulseiq/uci-heart-disease.zip
+          key: uci-heart-disease-b17cd273da9ce1caa4710fce80227ea454d4dbf9fcbc8e6a9121672751563adc
+
       - name: Rebuild from UCI and compare with the committed files
-        run: python scripts/import_uci_heart.py --check
+        run: >-
+          python scripts/import_uci_heart.py --check
+          --archive ~/.cache/pulseiq/uci-heart-disease.zip
 
   gate:
     name: Gate
