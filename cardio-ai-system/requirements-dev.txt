@@ -18,3 +18,9 @@
 pytest>=8.3
 httpx>=0.28
 imageio-ffmpeg>=0.5
+
+# `backend/test_ci_workflow.py` parses .github/workflows/tests.yml, so the suite
+# imports `yaml`. It was installed by hand in a developer venv and by nothing in
+# these files, which is why the hosted backend job went red in eleven seconds at
+# collection time, naming no test. Declared here because only the tests need it.
+PyYAML>=6.0

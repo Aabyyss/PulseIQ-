@@ -3,8 +3,12 @@ fastapi>=0.116
 uvicorn[standard]>=0.35
 
 # Data / ML
+# numpy and pydantic are imported directly (site_evaluation, api_server) rather
+# than through pandas/fastapi, so they are named rather than assumed.
+numpy>=2.0
 pandas>=2.2
 scikit-learn>=1.5
+pydantic>=2.7
 
 # Explainability + NLP
 shap>=0.46
