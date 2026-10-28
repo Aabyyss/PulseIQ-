@@ -34,6 +34,17 @@ requires that modifications be indicated:
    clipped or otherwise edited, and no rows were added. This export contains **no
    exact duplicate feature vectors**.
 
+## The second export
+
+`data/heart_sites.csv` is built from the same download and is covered by the same
+licence and citation. It contains every record from all four sites in the
+repository (Cleveland 303, Hungarian 294, Switzerland 123, VA Long Beach 200 =
+920 rows) with a `site` column. Its changes are the same column renames and the
+same `num > 0` binarisation, but **no records are dropped**: values the source
+marks `?` are left as empty cells, so the missingness is visible rather than
+imputed. `chol = 0` is preserved exactly as published, which is a placeholder in
+the Swiss records, not a measurement; the evaluator treats it as missing.
+
 ## Provenance
 
 `data/heart_source.json` records the source URL, retrieval date, licence, the SHA-256 of

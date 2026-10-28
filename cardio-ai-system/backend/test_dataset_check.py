@@ -179,6 +179,45 @@ def test_without_an_archive_path_every_run_downloads(monkeypatch):
     assert len(calls) == 2
 
 
+def test_the_four_site_export_preserves_missing_values():
+    committed = importer.read_committed(importer.SITES_OUTPUT)
+    assert committed[0] == importer.SITE_COLUMNS
+    body = committed[1:]
+    assert len(body) == 920
+
+    counts = {site: sum(1 for row in body if row[0] == site) for site in ("cleveland", "hungarian", "switzerland", "va")}
+    assert counts == {"cleveland": 303, "hungarian": 294, "switzerland": 123, "va": 200}
+
+    # '?' becomes an empty cell, but a value the source wrote is never rewritten:
+    # Switzerland stores an unmeasured cholesterol as 0, so the export keeps the
+    # 0 and `site_evaluation` is what treats it as missing.
+    chol = importer.SITE_COLUMNS.index("chol")
+    swiss = [row for row in body if row[0] == "switzerland"]
+    assert all(row[chol] == "0" for row in swiss)
+
+    ca = importer.SITE_COLUMNS.index("ca")
+    hungarian = [row for row in body if row[0] == "hungarian"]
+    assert sum(1 for row in hungarian if row[ca] == "") == 291
+    assert all(len(row) == len(importer.SITE_COLUMNS) for row in body)
+
+
+def test_sites_provenance_matches_the_export():
+    recorded = json.loads(importer.SITES_PROVENANCE.read_text(encoding="utf-8"))
+    body = importer.read_committed(importer.SITES_OUTPUT)[1:]
+
+    assert recorded["licence"] == "CC BY 4.0"
+    assert recorded["rows"] == len(body) == 920
+    assert set(recorded["sites"]) == {"cleveland", "hungarian", "switzerland", "va"}
+
+    for site, entry in recorded["sites"].items():
+        rows = [row for row in body if row[0] == site]
+        assert entry["rows"] == len(rows)
+        for column in ("ca", "thal"):
+            index = importer.SITE_COLUMNS.index(column)
+            assert entry["missing"][column] == sum(1 for row in rows if row[index] == "")
+        assert entry["disease"] == sum(1 for row in rows if row[-1] == "1")
+
+
 def test_check_flag_dispatches_to_the_comparison(monkeypatch):
     calls = []
     monkeypatch.setattr(importer, "check", lambda path=None: calls.append(path) or 7)

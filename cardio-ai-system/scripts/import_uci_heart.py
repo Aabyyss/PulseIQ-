@@ -234,14 +234,17 @@ def read_committed(path: Path = OUTPUT) -> list[list[str]]:
 
 
 def compare_rows(
-    committed: list[list[str]], rebuilt: list[list[str]], limit: int = 5
+    committed: list[list[str]],
+    rebuilt: list[list[str]],
+    limit: int = 5,
+    columns: list[str] = COLUMNS,
 ) -> list[str]:
     """Every difference between the committed file and a fresh build, named."""
     problems: list[str] = []
     if not committed:
         return ["committed dataset is missing or empty"]
-    if committed[0] != COLUMNS:
-        problems.append(f"header changed: {committed[0]} != {COLUMNS}")
+    if committed[0] != columns:
+        problems.append(f"header changed: {committed[0]} != {columns}")
 
     body = committed[1:]
     if len(body) != len(rebuilt):
@@ -255,13 +258,111 @@ def compare_rows(
             continue
         for column, (before, after) in enumerate(zip(old, new)):
             if before != after:
-                name = COLUMNS[column] if column < len(COLUMNS) else f"column {column}"
+                name = columns[column] if column < len(columns) else f"column {column}"
                 problems.append(
                     f"row {index + 1} ({name}): committed {before!r}, rebuilt {after!r}"
                 )
         if len(problems) >= limit:
             problems.append("... further differences suppressed")
             break
+    return problems
+
+
+# The other three cohorts in the same repository. They are kept in their own
+# file, with missing values preserved, because the model is trained on Cleveland
+# only: the other sites are external validation, not extra training rows.
+SITES = [
+    ("cleveland", "processed.cleveland.data"),
+    ("hungarian", "processed.hungarian.data"),
+    ("switzerland", "processed.switzerland.data"),
+    ("va", "processed.va.data"),
+]
+SITES_OUTPUT = ROOT / "data" / "heart_sites.csv"
+SITES_PROVENANCE = ROOT / "data" / "heart_sites_source.json"
+SITE_COLUMNS = ["site"] + COLUMNS
+
+
+def build_sites(archive: bytes) -> tuple[list[list[str]], dict]:
+    """Every record from all four sites, with missing values left as blanks.
+
+    Nothing is dropped or imputed here. `ca` and `thal` are absent for 291 of
+    294 Hungarian records and 118 of 123 Swiss ones, and Switzerland has no
+    complete record at all — a fact the evaluation has to state, not paper over.
+    """
+    rows: list[list[str]] = []
+    summary: dict[str, dict] = {}
+    with zipfile.ZipFile(io.BytesIO(archive)) as bundle:
+        for site, member in SITES:
+            payload = bundle.read(member)
+            records = [entry for entry in csv.reader(io.StringIO(payload.decode("utf-8"))) if entry]
+            for record in records:
+                if len(record) != 14:
+                    raise SystemExit(f"{member}: expected 14 columns, got {len(record)}")
+                values = [normalise(value) if value != "?" else "" for value in record[:13]]
+                severity = int(float(record[13]))
+                rows.append([site] + values + ["1" if severity > 0 else "0"])
+
+            missing = {
+                column: sum(1 for record in records if record[index] == "?")
+                for index, column in enumerate(COLUMNS[:13])
+            }
+            disease = sum(1 for record in records if int(float(record[13])) > 0)
+            summary[site] = {
+                "source_file": member,
+                "sha256": _sha256(payload),
+                "rows": len(records),
+                "disease": disease,
+                "healthy": len(records) - disease,
+                "complete_rows": sum(1 for record in records if "?" not in record[:13]),
+                "missing": missing,
+            }
+    return rows, summary
+
+
+def write_sites(rows: list[list[str]], summary: dict) -> None:
+    SITES_OUTPUT.parent.mkdir(parents=True, exist_ok=True)
+    buffer = io.StringIO(newline="")
+    writer = csv.writer(buffer)
+    writer.writerow(SITE_COLUMNS)
+    writer.writerows(rows)
+    # newline="" so Windows does not turn the writer's CRLF into CRCRLF.
+    with open(SITES_OUTPUT, "w", newline="", encoding="utf-8") as handle:
+        handle.write(buffer.getvalue())
+
+    provenance = {
+        **SOURCE,
+        "name": "UCI Heart Disease — all four sites (Cleveland, Hungarian, Switzerland, VA Long Beach)",
+        "retrieved": date.today().isoformat(),
+        "archive_sha256": ARCHIVE_SHA256,
+        "member_sha256": MEMBER_SHA256,
+        "output": "data/heart_sites.csv",
+        "columns": SITE_COLUMNS,
+        "target_encoding": "1 = disease (num > 0), 0 = no disease; missing features are empty cells",
+        "rows": len(rows),
+        "sites": summary,
+        "note": (
+            "Missing values are preserved, not imputed. Only Cleveland trains the model; "
+            "the other sites are external validation and cover very different prevalences."
+        ),
+    }
+    SITES_PROVENANCE.write_text(json.dumps(provenance, indent=2) + "\n", encoding="utf-8")
+
+
+def check_sites_provenance(summary: dict, path: Path = SITES_PROVENANCE) -> list[str]:
+    if not path.exists():
+        return [f"provenance file missing: {path.relative_to(ROOT)}"]
+    recorded = json.loads(path.read_text(encoding="utf-8"))
+    problems = []
+    if recorded.get("rows") != sum(site["rows"] for site in summary.values()):
+        problems.append("sites provenance: total row count differs")
+    for site, values in summary.items():
+        entry = recorded.get("sites", {}).get(site)
+        if not entry:
+            problems.append(f"sites provenance: {site} is missing")
+            continue
+        for key in ("rows", "disease", "healthy", "complete_rows", "missing", "sha256"):
+            if entry.get(key) != values[key]:
+                problems.append(f"sites provenance {site}.{key} differs")
     return problems
 
 
@@ -309,10 +410,13 @@ def check(archive_path: Path | None = None) -> int:
     """Rebuild in memory and compare with what is committed. Writes nothing else."""
     archive = load_archive(archive_path)
     rows, summary = convert(extract_member(archive))
+    site_rows, site_summary = build_sites(archive)
     problems = (
         compare_rows(read_committed(), rows)
         + check_attribution()
         + check_provenance(summary)
+        + compare_rows(read_committed(SITES_OUTPUT), site_rows, columns=SITE_COLUMNS)
+        + check_sites_provenance(site_summary)
     )
     if problems:
         print("Dataset provenance check FAILED")
@@ -360,6 +464,12 @@ def main(argv: list[str] | None = None) -> int:
         "attribution; write nothing (except the archive cache) and exit non-zero on drift",
     )
     parser.add_argument(
+        "--sites",
+        action="store_true",
+        help="also write data/heart_sites.csv and its provenance (all four UCI sites, "
+        "missing values preserved) for the per-site evaluation",
+    )
+    parser.add_argument(
         "--archive",
         type=Path,
         default=None,
@@ -373,6 +483,19 @@ def main(argv: list[str] | None = None) -> int:
         return check(args.archive)
 
     archive = load_archive(args.archive)
+
+    if args.sites:
+        site_rows, site_summary = build_sites(archive)
+        write_sites(site_rows, site_summary)
+        print(f"Wrote {SITES_OUTPUT.relative_to(ROOT)}: {len(site_rows)} rows across 4 sites")
+        for site, values in site_summary.items():
+            print(
+                f"  {site:<12} {values['rows']:>4} rows, {values['disease']:>4} disease, "
+                f"{values['complete_rows']:>4} complete"
+            )
+        print(f"Wrote {SITES_PROVENANCE.relative_to(ROOT)}")
+        return 0
+
     payload = extract_member(archive)
     rows, summary = convert(payload)
     write_dataset(rows)
