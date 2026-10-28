@@ -38,11 +38,17 @@ what the docs claim and would not fail for a mechanical reason:
   `always()`; the audit job starts uvicorn on 8000, waits on `/health` and runs
   `--require-sign-in`; the E2E job builds, serves on 4173, names a browser and
   passes `--base-url http://127.0.0.1:4173`; the dataset job runs
-  `import_uci_heart.py --check` with no `pip install` in it; every `run` step's
-  repository path exists; every `npm run` target exists and resolves to a file;
-  runners are pinned and timeouts bounded; actions use pinned major versions.
+  `import_uci_heart.py --check` with no `pip install` in it, restores its archive
+  from a cache keyed on the pinned hash with no fallback key, and passes that
+  path to `--archive`; every `run` step's repository path exists; every `npm run`
+  target exists and resolves to a file; runners are pinned and timeouts bounded;
+  actions use pinned major versions.
 - A negative test was run by hand: removing `--require-sign-in` from the audit
   step turns the suite red with the reason, and restoring it turns it green.
+- The archive cache was proved by hand as well: with a warm cache and the
+  network pointed at a dead proxy, `--check --archive` still passes (exit 0);
+  delete the cached file and the same command fails on the download. That is the
+  property the cache exists for — a publisher outage must not fail the gate.
 - Each job's commands were also run locally in the same order (`make gate`), so
   the failure surface left is the runner environment itself: image, Python/Node
   versions, Chrome availability.

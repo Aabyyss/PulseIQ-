@@ -235,7 +235,8 @@ UI gates; `make check` chains the tests, typecheck, lint and build.
 CI runs six jobs on `ubuntu-24.04` and a `Gate` job that requires all of them
 ([docs/CI.md](cardio-ai-system/docs/CI.md)); require `Gate` in branch protection rather than
 remembering six checks. One of those jobs rebuilds `data/heart.csv` from the licensed UCI source
-and fails if the committed values, provenance record or attribution notice have drifted. [docs/VERIFICATION.md](cardio-ai-system/docs/VERIFICATION.md) states
+and fails if the committed values, provenance record or attribution notice have drifted; it
+restores the pinned archive from cache, so a publisher outage only matters on a cold cache. [docs/VERIFICATION.md](cardio-ai-system/docs/VERIFICATION.md) states
 what each check proves and what still needs a person (hosted CI, real devices, other browsers,
 screen readers). The `ui-audit` job installs the runtime requirements, starts the API on
 the port the built app forwards `/api` to, waits for `/health`, and then sweeps the app **signed

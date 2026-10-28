@@ -22,17 +22,28 @@ succeeds while `frontend` is red means the two have drifted.
 
 ## What the dataset job needs
 
-This is the one job that requires egress, deliberately. `--check` downloads the
-UCI archive, verifies the pinned SHA-256 of the member file, rebuilds the CSV in
-memory and compares it with what is committed — value by value, plus the
-provenance JSON and the attribution text. Nothing is written. It uses the
-standard library only, so the job installs no dependencies and has a 10-minute
-bound; the failure mode it guards against is a hand-edited or silently swapped
-dataset, not a toolchain problem.
+`--check` rebuilds the dataset from the UCI archive, verifies the pinned
+SHA-256 of the member file, and compares the result with what is committed —
+value by value, plus the provenance JSON and the attribution text. It writes
+nothing but the archive cache. Standard library only, so the job installs no
+dependencies and has a 10-minute bound; the failure it guards against is a
+hand-edited or silently swapped dataset, not a toolchain problem.
 
-When UCI is unreachable the job fails, because a gate that quietly skips the
-provenance check would be green about nothing. If that becomes noise, the fix is
-to cache the archive against its pinned hash, not to drop the step.
+**The archive is cached under its own pin.** `actions/cache@v5` restores
+`~/.cache/pulseiq/uci-heart-disease.zip` under a key that *is* the archive's
+SHA-256, and the check is pointed at it with `--archive`. On a hit the job
+touches no network at all: the bytes come from disk, and the member file is
+still verified against its own pinned hash before anything is compared, so a
+tampered cache fails exactly like a tampered download. There are deliberately no
+`restore-keys` — falling back to some other archive would defeat the check. On a
+miss the importer downloads once and writes the archive to that path, and the
+post-job cache save makes the next run a hit.
+
+The pin is what makes caching safe here. GitHub's cache is not a trust boundary,
+but a pinned hash is: a cache hit that does not match the source fails closed.
+If the publisher is unreachable *and* the cache is cold, the job still fails,
+because a gate that quietly skipped the provenance check would be green about
+nothing.
 
 ## What the audit job needs
 
