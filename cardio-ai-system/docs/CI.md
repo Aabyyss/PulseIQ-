@@ -1,23 +1,38 @@
 # Continuous integration
 
 `.github/workflows/tests.yml` runs on every push to `main`, on every pull
-request, and on `workflow_dispatch`. All six jobs are pinned to
+request, and on `workflow_dispatch`. All seven jobs are pinned to
 `ubuntu-24.04` deliberately: `ubuntu-latest` migrates to Ubuntu 26 and the
 toolchain here (Playwright/Chromium, `pip`, the audit's contrast maths) should
 move on purpose, not overnight.
 
 | Job | Proves |
 |---|---|
-| `backend` | The pytest suite (296 cases) and the script checks: clinical direction, the published score tables against their sources, the 36-option medication catalogue and its 53 sourced rules, de-identification, the local stores, the login limiter, the FHIR bundle, the live medication screen, and the CI definition (below). |
+| `backend` | The pytest suite (566 cases) and the script checks: clinical direction, the published score tables against their sources, the 36-option medication catalogue and its 53 sourced rules, de-identification, the local stores, the login limiter, the FHIR bundle, the live medication screen, and the CI definition (below). |
 | `frontend` | `tsc -b`, the vitest suite (82 cases: extraction patterns, session/retry behaviour, PDF layout, microphone thresholds, the theme boot path and browser-chrome colour, navigation and palette ranking, the service worker's caching policy) and the production build. |
 | `ui-audit` | The built app, **signed in**, swept in **both themes**: contrast at 4 viewports × 12 routes × 2 palettes, layout at 11 widths (320–2560 px, both tablet orientations) × 12 routes, and 22 open-state audits (account menu, both consult tabs, More sheet, command palette, theme switch). Also WCAG 1.4.12 text-spacing overrides, 2.4.11 focus-obscured checks, and the manifest/icons/service-worker/offline-shell pass. |
 | `e2e` | The journey a clinician takes — sign in, adaptive navigation (rail, More sheet, Ctrl-K), capture a transcript line, save the visit, download the PDF, land on thank-you, find it in history — against the **built bundle** served by `vite preview` and a live API (ADR-030). |
 | `sources` | Every drug and rule cites a registered source and every registered source is cited (`scripts/verify_sources.py`, no network). |
-| `gate` | Nothing of its own: it is red unless the five jobs above are green. This is the single check to require in branch protection. |
+| `dataset` | The committed `data/heart.csv` is still what the importer builds from the licensed UCI source: every value, the provenance record (licence, counts, pinned hashes) and the CC BY 4.0 attribution notice (`scripts/import_uci_heart.py --check`). |
+| `gate` | Nothing of its own: it is red unless the six jobs above are green. This is the single check to require in branch protection. |
 
 `.github/workflows/deploy-pages.yml` publishes the frontend to GitHub Pages; it
 builds the same bundle the `frontend` job builds, so a Pages deploy that
 succeeds while `frontend` is red means the two have drifted.
+
+## What the dataset job needs
+
+This is the one job that requires egress, deliberately. `--check` downloads the
+UCI archive, verifies the pinned SHA-256 of the member file, rebuilds the CSV in
+memory and compares it with what is committed — value by value, plus the
+provenance JSON and the attribution text. Nothing is written. It uses the
+standard library only, so the job installs no dependencies and has a 10-minute
+bound; the failure mode it guards against is a hand-edited or silently swapped
+dataset, not a toolchain problem.
+
+When UCI is unreachable the job fails, because a gate that quietly skips the
+provenance check would be green about nothing. If that becomes noise, the fix is
+to cache the archive against its pinned hash, not to drop the step.
 
 ## What the audit job needs
 

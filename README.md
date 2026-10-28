@@ -208,7 +208,7 @@ cardio-ai-system/
 
 | Gate | Runs | What it proves |
 |---|---|---|
-| Backend pytest suite | CI · every push | 296 cases: clinical direction (symptom text → expected risk band), the published scores pinned row-by-row against their sources, the 36-option medication catalogue and its 53 interaction rules pinned to 12 citations, de-identification, the local stores, the login limiter, the FHIR bundle, the live medication screen, and the CI definition itself |
+| Backend pytest suite | CI · every push | 566 cases: clinical direction (symptom text → expected risk band), the published scores pinned row-by-row against their sources, the 36-option medication catalogue and its 53 interaction rules pinned to 12 citations, de-identification, the local stores, the login limiter, the FHIR bundle, the live medication screen, and the CI definition itself |
 | Backend script checks | CI · every push | The older password-free runners, including the end-to-end pipeline walk (symptom text → mapped features → prediction) — nonzero exit fails the job |
 | Frontend unit tests | CI · every push | `npm run test` (vitest + jsdom), 82 cases: extraction patterns, session and retry behaviour, page metadata, PDF pagination, theme and browser-chrome colour, navigation and palette ranking, and the service worker's caching policy |
 | Frontend typecheck & build | CI · every push | `tsc -b` plus a production Vite build |
@@ -225,16 +225,17 @@ capture languages, and extending the agent registry.
 Before submitting, run the suites that CI runs:
 
 ```bash
-cd cardio-ai-system && make install-dev && python -m pytest backend -q   # 296 cases
+cd cardio-ai-system && make install-dev && python -m pytest backend -q   # 566 cases
 cd frontend && npm ci && npm run typecheck && npm run test && npm run lint && npm run build
 ```
 
 `npm run e2e` and `npm run ui-audit` (both need the servers up) cover the full journey and the
 UI gates; `make check` chains the tests, typecheck, lint and build.
 
-CI runs five jobs on `ubuntu-24.04` and a `Gate` job that requires all of them
+CI runs six jobs on `ubuntu-24.04` and a `Gate` job that requires all of them
 ([docs/CI.md](cardio-ai-system/docs/CI.md)); require `Gate` in branch protection rather than
-remembering five checks. [docs/VERIFICATION.md](cardio-ai-system/docs/VERIFICATION.md) states
+remembering six checks. One of those jobs rebuilds `data/heart.csv` from the licensed UCI source
+and fails if the committed values, provenance record or attribution notice have drifted. [docs/VERIFICATION.md](cardio-ai-system/docs/VERIFICATION.md) states
 what each check proves and what still needs a person (hosted CI, real devices, other browsers,
 screen readers). The `ui-audit` job installs the runtime requirements, starts the API on
 the port the built app forwards `/api` to, waits for `/health`, and then sweeps the app **signed

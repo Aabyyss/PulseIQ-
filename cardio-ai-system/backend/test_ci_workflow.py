@@ -61,7 +61,15 @@ def _uses(job: dict) -> list[str]:
 
 def test_every_job_exists_and_is_pinned(workflow: dict) -> None:
     jobs = _jobs(workflow)
-    assert set(jobs) == {"backend", "frontend", "ui-audit", "e2e", "sources", "gate"}
+    assert set(jobs) == {
+        "backend",
+        "frontend",
+        "ui-audit",
+        "e2e",
+        "sources",
+        "dataset",
+        "gate",
+    }
     for name, job in jobs.items():
         assert job["runs-on"].startswith("ubuntu-"), f"{name} lost its pinned runner"
         assert not job["runs-on"].endswith("latest"), (
@@ -72,7 +80,14 @@ def test_every_job_exists_and_is_pinned(workflow: dict) -> None:
 
 def test_gate_requires_every_job_and_fails_on_a_skipped_one(workflow: dict) -> None:
     gate = _jobs(workflow)["gate"]
-    assert set(gate["needs"]) == {"backend", "frontend", "ui-audit", "e2e", "sources"}
+    assert set(gate["needs"]) == {
+        "backend",
+        "frontend",
+        "ui-audit",
+        "e2e",
+        "sources",
+        "dataset",
+    }
     assert gate.get("if") == "always()", (
         "without `if: always()` a failed job turns the gate into a skipped job, "
         "which branch protection reads as neutral rather than red"
@@ -80,7 +95,7 @@ def test_gate_requires_every_job_and_fails_on_a_skipped_one(workflow: dict) -> N
     # The gate must name each dependency's result, or a job could be added to
     # `needs` and never consulted.
     script = _run_text(gate)
-    for job in ("backend", "frontend", "ui-audit", "e2e", "sources"):
+    for job in ("backend", "frontend", "ui-audit", "e2e", "sources", "dataset"):
         assert f"needs.{job}.result" in script, f"gate does not inspect {job}"
 
 
@@ -125,10 +140,22 @@ def test_sources_job_verifies_citations_without_needing_egress(workflow: dict) -
     )
 
 
+def test_dataset_job_rebuilds_and_fails_on_drift(workflow: dict) -> None:
+    """The provenance job must rebuild and compare, not merely lint the CSV."""
+    job = _jobs(workflow)["dataset"]
+    run = _run_text(job)
+    assert "python scripts/import_uci_heart.py --check" in run
+    assert "--check" in run, "without --check the importer would rewrite the file instead"
+    # Standard library only: a pip install here would be a dependency the check
+    # does not need, and one more thing that can fail for the wrong reason.
+    assert "pip install" not in run
+    assert not _uses(job) or all("setup-python" in action or "checkout" in action for action in _uses(job))
+
+
 def test_job_timeouts_are_bounded(workflow: dict) -> None:
     # A wedged browser or a server that never binds should not consume the
-    # six-hour default; the two browser jobs started one each on purpose.
-    for name in ("ui-audit", "e2e"):
+    # six-hour default; the jobs that do real I/O started one each on purpose.
+    for name in ("ui-audit", "e2e", "dataset"):
         limit = _jobs(workflow)[name].get("timeout-minutes")
         assert isinstance(limit, int) and 0 < limit <= 40, f"{name} timeout is {limit}"
 

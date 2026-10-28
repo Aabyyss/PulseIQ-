@@ -19,6 +19,9 @@ name: Test suite
 #   save, PDF, thank-you, history — against `vite preview` and a running API,
 #   so a broken save path fails a push instead of waiting for someone to click
 #   through it by hand.
+# - The dataset job is the one job that needs egress on purpose: it rebuilds
+#   data/heart.csv from the licensed UCI source and fails if the committed
+#   bytes, provenance record or attribution notice have drifted.
 # - The ui-audit job sweeps contrast in both themes and opens the screens a
 #   route cannot show on first paint (account menu, both consult tabs).
 # - The spaCy model install is best-effort: when unavailable the symptom
@@ -325,18 +328,39 @@ jobs:
       - name: Every citation resolves to a registered source
         run: python scripts/verify_sources.py
 
+  dataset:
+    name: Dataset provenance
+    runs-on: ubuntu-24.04
+    # Compares the committed dataset with a fresh build from UCI (CC BY 4.0):
+    # every value, the provenance record and the attribution notice. Standard
+    # library only, so it installs nothing — and it fails closed when the
+    # committed file, its hashes or the notice no longer match the source.
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: cardio-ai-system
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Rebuild from UCI and compare with the committed files
+        run: python scripts/import_uci_heart.py --check
+
   gate:
     name: Gate
     # One check to require in branch protection: it is red unless every job
     # above is green. `always()` makes a failed dependency a failure here rather
     # than a skipped job that looks benign in the checks list.
-    needs: [backend, frontend, ui-audit, e2e, sources]
+    needs: [backend, frontend, ui-audit, e2e, sources, dataset]
     if: always()
     runs-on: ubuntu-24.04
     steps:
       - name: Every required job passed
         run: |
-          results="${{ needs.backend.result }} ${{ needs.frontend.result }} ${{ needs.ui-audit.result }} ${{ needs.e2e.result }} ${{ needs.sources.result }}"
+          results="${{ needs.backend.result }} ${{ needs.frontend.result }} ${{ needs.ui-audit.result }} ${{ needs.e2e.result }} ${{ needs.sources.result }} ${{ needs.dataset.result }}"
           echo "job results: $results"
           for result in $results; do
             if [ "$result" != "success" ]; then

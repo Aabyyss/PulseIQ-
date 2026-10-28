@@ -34,12 +34,13 @@ from a laptop. What *can* be verified — and now is — is that the definition 
 what the docs claim and would not fail for a mechanical reason:
 
 - `backend/test_ci_workflow.py` parses `.github/workflows/tests.yml` with PyYAML
-  and asserts: the six jobs exist; `gate` needs all five and uses
+  and asserts: the seven jobs exist; `gate` needs all six and uses
   `always()`; the audit job starts uvicorn on 8000, waits on `/health` and runs
   `--require-sign-in`; the E2E job builds, serves on 4173, names a browser and
-  passes `--base-url http://127.0.0.1:4173`; every `run` step's repository path
-  exists; every `npm run` target exists and resolves to a file; runners are
-  pinned and timeouts bounded; actions use pinned major versions.
+  passes `--base-url http://127.0.0.1:4173`; the dataset job runs
+  `import_uci_heart.py --check` with no `pip install` in it; every `run` step's
+  repository path exists; every `npm run` target exists and resolves to a file;
+  runners are pinned and timeouts bounded; actions use pinned major versions.
 - A negative test was run by hand: removing `--require-sign-in` from the audit
   step turns the suite red with the reason, and restoring it turns it green.
 - Each job's commands were also run locally in the same order (`make gate`), so

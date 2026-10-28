@@ -31,6 +31,7 @@ nobody reviewed.
 
 from __future__ import annotations
 
+import argparse
 import csv
 import hashlib
 import io
@@ -184,9 +185,118 @@ def summarise(records: list[list[str]], incomplete: list[list[str]], rows: list[
 def write_dataset(rows: list[list[str]]) -> None:
     OUTPUT.parent.mkdir(parents=True, exist_ok=True)
     with open(OUTPUT, "w", newline="", encoding="utf-8") as handle:
-        writer = csv.writer(handle)
-        writer.writerow(COLUMNS)
-        writer.writerows(rows)
+        handle.write(serialise(rows))
+
+
+def serialise(rows: list[list[str]]) -> str:
+    buffer = io.StringIO(newline="")
+    writer = csv.writer(buffer)
+    writer.writerow(COLUMNS)
+    writer.writerows(rows)
+    return buffer.getvalue()
+
+
+def read_committed(path: Path = OUTPUT) -> list[list[str]]:
+    """The CSV as checked in, parsed so line endings cannot masquerade as drift."""
+    if not path.exists():
+        return []
+    with open(path, newline="", encoding="utf-8") as handle:
+        return list(csv.reader(handle))
+
+
+def compare_rows(
+    committed: list[list[str]], rebuilt: list[list[str]], limit: int = 5
+) -> list[str]:
+    """Every difference between the committed file and a fresh build, named."""
+    problems: list[str] = []
+    if not committed:
+        return ["committed dataset is missing or empty"]
+    if committed[0] != COLUMNS:
+        problems.append(f"header changed: {committed[0]} != {COLUMNS}")
+
+    body = committed[1:]
+    if len(body) != len(rebuilt):
+        problems.append(f"row count changed: {len(body)} committed, {len(rebuilt)} rebuilt")
+
+    for index, (old, new) in enumerate(zip(body, rebuilt)):
+        if old == new:
+            continue
+        if len(old) != len(new):
+            problems.append(f"row {index + 1}: {len(old)} columns committed, {len(new)} rebuilt")
+            continue
+        for column, (before, after) in enumerate(zip(old, new)):
+            if before != after:
+                name = COLUMNS[column] if column < len(COLUMNS) else f"column {column}"
+                problems.append(
+                    f"row {index + 1} ({name}): committed {before!r}, rebuilt {after!r}"
+                )
+        if len(problems) >= limit:
+            problems.append("... further differences suppressed")
+            break
+    return problems
+
+
+ATTRIBUTION_PATH = ROOT / "data" / "ATTRIBUTION.md"
+
+
+def check_attribution(path: Path = ATTRIBUTION_PATH) -> list[str]:
+    """CC BY 4.0 requires attribution; the notice is part of the dataset."""
+    if not path.exists():
+        return [f"attribution file missing: {path.relative_to(ROOT)}"]
+    text = path.read_text(encoding="utf-8")
+    required = [
+        "CC BY 4.0",
+        "creativecommons.org/licenses/by/4.0",
+        SOURCE["doi"],
+        "UCI",
+        "Detrano",
+    ]
+    return [f"attribution does not mention {value!r}" for value in required if value not in text]
+
+
+def check_provenance(summary: dict, path: Path = PROVENANCE) -> list[str]:
+    """The shipped provenance record must describe the file being compared."""
+    if not path.exists():
+        return [f"provenance file missing: {path.relative_to(ROOT)}"]
+    recorded = json.loads(path.read_text(encoding="utf-8"))
+    expected = {
+        "licence": SOURCE["licence"],
+        "member_sha256": MEMBER_SHA256,
+        "columns": COLUMNS,
+        "rows": summary["rows"],
+        "unique_rows": summary["unique_rows"],
+        "disease": summary["disease"],
+        "healthy": summary["healthy"],
+        "dropped_incomplete_rows": summary["dropped_incomplete_rows"],
+    }
+    problems = []
+    for key, value in expected.items():
+        if recorded.get(key) != value:
+            problems.append(f"provenance {key}: recorded {recorded.get(key)!r}, expected {value!r}")
+    return problems
+
+
+def check() -> int:
+    """Rebuild in memory and compare with what is committed. Writes nothing."""
+    archive = fetch_archive()
+    rows, summary = convert(extract_member(archive))
+    problems = (
+        compare_rows(read_committed(), rows)
+        + check_attribution()
+        + check_provenance(summary)
+    )
+    if problems:
+        print("Dataset provenance check FAILED")
+        for problem in problems:
+            print(f"  - {problem}")
+        print("Rebuild and commit the dataset (python scripts/import_uci_heart.py) if the change is intended.")
+        return 1
+    print(
+        f"Dataset matches the importer: {summary['rows']} rows, "
+        f"{summary['disease']} disease / {summary['healthy']} healthy, "
+        f"licence {SOURCE['licence']}, attribution present"
+    )
+    return 0
 
 
 def write_provenance(summary: dict) -> None:
@@ -212,7 +322,19 @@ def write_provenance(summary: dict) -> None:
     PROVENANCE.write_text(json.dumps(provenance, indent=2) + "\n", encoding="utf-8")
 
 
-def main() -> None:
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser.add_argument(
+        "--check",
+        action="store_true",
+        help="rebuild in memory and compare with data/heart.csv, its provenance and its "
+        "attribution; write nothing and exit non-zero on drift",
+    )
+    args = parser.parse_args(argv)
+
+    if args.check:
+        return check()
+
     archive = fetch_archive()
     payload = extract_member(archive)
     rows, summary = convert(payload)
@@ -225,6 +347,7 @@ def main() -> None:
         f"{summary['unique_rows']} distinct · {summary['dropped_incomplete_rows']} incomplete dropped"
     )
     print(f"Wrote {PROVENANCE.relative_to(ROOT)} (CC BY 4.0 attribution + hashes)")
+    return 0
 
 
 if __name__ == "__main__":
